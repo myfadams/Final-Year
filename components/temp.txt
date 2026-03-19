@@ -1,0 +1,17 @@
+<View style={styles.imageView}>
+          <Image
+            source={Logo}
+            style={styles.image}
+            cachePolicy="memory-disk"
+            // contentFit=""
+          />
+          <Text
+            style={{
+              fontFamily: typography.bold,
+              color: Colors.light.text,
+              fontSize: 30,
+            }}
+          >
+            ResQ
+          </Text>
+        </View>
