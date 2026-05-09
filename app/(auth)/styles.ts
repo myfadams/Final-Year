@@ -29,4 +29,17 @@ export const styles = StyleSheet.create({
     alignSelf: "flex-end",
     color: Colors.light.accent,
   },
+  verifyStyle: {
+    // backgroundColor: "#ff0000",
+    flexGrow: 1,
+    padding: 10,
+    gap: 16,
+  },
+  verifyLocationStyle: {
+    borderColor: Colors.light.accent,
+    borderWidth: 2,
+    borderRadius: 8,
+    padding: 16,
+    gap: 16,
+  },
 });

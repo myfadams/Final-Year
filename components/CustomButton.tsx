@@ -7,12 +7,14 @@ interface CustomButtonProps {
   onPress: () => void;
   isLoading?: boolean;
   disabled?: boolean;
+  Icon?: React.ReactNode;
 }
 const CustomButton: React.FC<CustomButtonProps> = ({
   text,
   onPress,
   isLoading,
   disabled,
+  Icon,
 }) => {
   return (
     <View style={{ flexDirection: "row", height: 50 }}>
@@ -29,20 +31,25 @@ const CustomButton: React.FC<CustomButtonProps> = ({
           borderRadius: "7%",
 
           borderColor: Colors.light.accent,
+          flexDirection: "row",
+          gap: 4,
         }}
       >
         {isLoading ? (
           <ActivityIndicator size="small" color="#fff" />
         ) : (
-          <Text
-            style={{
-              fontFamily: typography.medium,
-              fontSize: 15,
-              color: Colors.light.textInverse,
-            }}
-          >
-            {text}
-          </Text>
+          <>
+            {Icon && <View style={{}}>{Icon}</View>}
+            <Text
+              style={{
+                fontFamily: typography.medium,
+                fontSize: 15,
+                color: Colors.light.textInverse,
+              }}
+            >
+              {text}
+            </Text>
+          </>
         )}
       </TouchableOpacity>
     </View>

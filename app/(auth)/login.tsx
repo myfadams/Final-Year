@@ -66,13 +66,15 @@ export default function login() {
           {activePage === "login" ? (
             <View style={styles.inputView}>
               <CustomInput
-                placeholder="Email"
+                placeholder="Enter your Email"
                 Icon={<Mail size={19} color={"#000"} strokeWidth={1.5} />}
+                label="Email"
               />
               <CustomInput
-                placeholder="Password"
+                placeholder="Enter your Password"
                 Icon={<KeyRound size={19} color={"#000"} strokeWidth={1.5} />}
                 PasswordIcon={true}
+                label="Password"
               />
 
               <View>

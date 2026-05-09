@@ -14,20 +14,24 @@ export default function SignUp() {
   return (
     <View style={styles.inputView}>
       <CustomInput
-        placeholder="Name"
+        placeholder="Enter your full name..."
+        label="Full Name"
         Icon={<User size={19} color={"#000"} strokeWidth={1.5} />}
       />
       <CustomInput
-        placeholder="Email"
+        placeholder="Enter your email..."
+        label="Email"
         Icon={<Mail size={19} color={"#000"} strokeWidth={1.5} />}
       />
       <CustomInput
-        placeholder="Password"
+        placeholder="Enter password..."
+        label="Password"
         Icon={<KeyRound size={19} color={"#000"} strokeWidth={1.5} />}
         PasswordIcon={true}
       />
       <CustomInput
-        placeholder="Confirm password"
+        placeholder="Confirm your password..."
+        label="Confirm password"
         Icon={<KeyRound size={19} color={"#000"} strokeWidth={1.5} />}
         PasswordIcon={true}
       />
@@ -38,7 +42,8 @@ export default function SignUp() {
           setIsLoading(true);
           setTimeout(() => {
             //temp
-            router.navigate("/(resident)/home");
+            // router.navigate("/(resident)/home");
+            router.navigate("/(auth)/verify");
             setIsLoading(false);
           }, 3000);
         }}
