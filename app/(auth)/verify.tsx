@@ -1,16 +1,13 @@
 import CustomButton from "@/components/CustomButton";
 import CustomInput from "@/components/CustomInput";
 import DropdownMenu from "@/components/DropdownMenu";
+
+import { ImagePickerButton } from "@/components/ImagePickerButton";
+import ImageUpload from "@/components/ImageUpload";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
-import {
-  IdCard,
-  LocateFixed,
-  MapPin,
-  Phone,
-  Upload,
-} from "lucide-react-native";
+import { IdCard, LocateFixed, MapPin, Phone } from "lucide-react-native";
 import React, { useState } from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -58,6 +55,8 @@ const OPTIONS = [
 const Verify = () => {
   const [cuisine, setCuisine] = useState<string | null>(null);
   const router = useRouter();
+  const [imageUri, setImageUri] = useState<string | null>(null);
+  const [uploadDone, setUploadDone] = useState(false);
   return (
     <SafeAreaView style={styles.verifyStyle}>
       <ScrollView>
@@ -87,11 +86,10 @@ const Verify = () => {
             keyboardType={true}
             label="Student Reference number"
           />
-          <CustomButton
-            text={"Upload ID"}
-            onPress={() => {}}
-            Icon={<Upload color={"#fff"} size={19} />}
-          />
+          {imageUri && (
+            <ImageUpload imageUri={imageUri} setDone={setUploadDone} />
+          )}
+          <ImagePickerButton setImage={setImageUri} disable={uploadDone} />
           {/* <CustomInput
             placeholder="Program of Study"
             Icon={<GraduationCap size={19} color={"#000"} strokeWidth={1.5} />}
