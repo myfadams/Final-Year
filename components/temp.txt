@@ -15,3 +15,5 @@
             ResQ
           </Text>
         </View>
+        
+        the name of the name of the name of the the QUICK BROWN FOX JUMPED OVER THE LAZY  dog because why nopt

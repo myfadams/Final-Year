@@ -1,0 +1,24 @@
+ <Marker coordinate={location} anchor={{ x: 0.5, y: 0.5 }}>
+        <View style={mapStyles.responderWrapper}>
+          <PulseRing color="#4ECDC4" />
+          <View style={mapStyles.responderCore}>
+            <Text style={{ fontSize: 18 }}>🚑</Text>
+          </View>
+        </View>
+      </Marker>
+
+
+
+ <Marker coordinate={victimLocation} anchor={{ x: 0.5, y: 0.5 }}>
+          <View style={mapStyles.responderWrapper}>
+            <PulseRing color={selectedPerson.avatarColor} />
+            <View
+              style={[
+                mapStyles.victimCore,
+                { backgroundColor: selectedPerson.avatarColor },
+              ]}
+            >
+              <Text style={{ fontSize: 18 }}>🆘</Text>
+            </View>
+          </View>
+        </Marker>
