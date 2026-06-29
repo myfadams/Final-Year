@@ -1,9 +1,26 @@
 import Colors, { ResQColors } from "@/constants/Colors";
+import { caseProp } from "@/constants/interfaces";
+import { formatTime, formatTimeAgo } from "@/externalFunctions/functions";
 import { Check, Dot, Minus } from "lucide-react-native";
 import React from "react";
 import { Text, View } from "react-native";
 
-const ResolvedCaseComponent = () => {
+const ResolvedCaseComponent: React.FC<caseProp> = ({
+  id,
+  title,
+  description,
+  location,
+  distance,
+  time,
+  severity,
+  isResolved,
+  // color,
+  action,
+  responders,
+  creatorID,
+  falseAlarm,
+  responseTime,
+}) => {
   return (
     <View
       style={{
@@ -43,13 +60,15 @@ const ResolvedCaseComponent = () => {
             }}
           >
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <Text style={{ fontWeight: "500", fontSize: 15 }}>
-                Fire alarm
-              </Text>
-              <Minus />
-              <Text style={{ fontWeight: "500", fontSize: 15 }}>
-                false alarm
-              </Text>
+              <Text style={{ fontWeight: "500", fontSize: 15 }}>{title}</Text>
+              {falseAlarm && (
+                <>
+                  <Minus />
+                  <Text style={{ fontWeight: "500", fontSize: 15 }}>
+                    false alarm
+                  </Text>
+                </>
+              )}
             </View>
           </View>
           <View style={{ justifyContent: "center" }}>
@@ -78,15 +97,15 @@ const ResolvedCaseComponent = () => {
 
         <View style={{ flexDirection: "row", alignItems: "center" }}>
           <Text style={{ fontSize: 13, color: Colors.light.textMuted }}>
-            Admin block
+            {location}
           </Text>
           <Dot color={Colors.light.textMuted} />
           <Text style={{ fontSize: 13, color: Colors.light.textMuted }}>
-            Resolved {"1hr ago"}
+            Resolved {formatTimeAgo(time)}
           </Text>
           <Dot color={Colors.light.textMuted} />
           <Text style={{ fontSize: 13, color: Colors.light.textMuted }}>
-            {"4min response"}
+            {formatTime(responseTime)} response
           </Text>
         </View>
       </View>

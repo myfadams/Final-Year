@@ -1,22 +1,43 @@
 import Colors, { ResQColors } from "@/constants/Colors";
+import { caseProp } from "@/constants/interfaces";
 import {
-  Ambulance,
+  formatDistance,
+  formatTimeAgo,
+  getSeverityColors,
+} from "@/externalFunctions/functions";
+import {
+  AlertCircle,
   Clock,
   Dot,
   MapPin,
   Phone,
+  ShieldAlert,
   Siren,
+  TriangleAlert
 } from "lucide-react-native";
 import React from "react";
 import { Text, View } from "react-native";
 import CustomButton from "./CustomButton";
 
-const CaseComponent = () => {
+const CaseComponent: React.FC<caseProp> = ({
+  id,
+  title,
+  description,
+  location,
+  distance,
+  time,
+  severity,
+  isResolved,
+  // color,
+  action,
+  responders,
+}) => {
+  const txtColor = getSeverityColors(severity);
   return (
     <View
       style={{
         backgroundColor: ResQColors.pageBg,
-        borderTopColor: Colors.URGENCY_COLORS.critical,
+        borderTopColor: txtColor[0],
         borderTopWidth: 10,
         borderWidth: 1,
         borderColor: ResQColors.border,
@@ -30,14 +51,22 @@ const CaseComponent = () => {
         <View style={{ flexDirection: "row", gap: 8 }}>
           <View
             style={{
-              backgroundColor: Colors.URGENCY_BACKGROUND.critical,
+              backgroundColor: txtColor[1],
               padding: 8,
               borderRadius: 12,
               borderWidth: 1,
               borderColor: ResQColors.border,
             }}
           >
-            <Ambulance size={28} color={Colors.URGENCY_COLORS.critical} />
+            {severity.toLocaleLowerCase() == "critical" && (
+              <TriangleAlert size={28} color={txtColor[0]} />
+            )}
+            {severity.toLocaleLowerCase() == "moderate" && (
+              <ShieldAlert size={28} color={txtColor[0]} />
+            )}
+            {severity.toLocaleLowerCase() == "low" && (
+              <AlertCircle size={28} color={txtColor[0]} />
+            )}
           </View>
           <View
             style={{
@@ -55,21 +84,21 @@ const CaseComponent = () => {
                   fontWeight: "500",
                 }}
               >
-                Medical emergency
+                {title}
               </Text>
               <View
                 style={{ flexDirection: "row", gap: 2, alignItems: "center" }}
               >
                 <Clock size={12} color={Colors.light.textMuted} />
                 <Text style={{ fontSize: 12, color: Colors.light.textMuted }}>
-                  {"5 min ago"}
+                  {formatTimeAgo(time)}
                 </Text>
               </View>
             </View>
             <View>
               <View
                 style={{
-                  backgroundColor: Colors.URGENCY_BACKGROUND.critical,
+                  backgroundColor: txtColor[1],
                   // flexGrow: 0,
                   // flexDirection:
                   justifyContent: "center",
@@ -82,12 +111,12 @@ const CaseComponent = () => {
               >
                 <Text
                   style={{
-                    color: Colors.URGENCY_COLORS.critical,
+                    color: txtColor[0],
                     fontWeight: "500",
                     fontSize: 13,
                   }}
                 >
-                  Critical
+                  {severity}
                 </Text>
               </View>
             </View>
@@ -108,24 +137,25 @@ const CaseComponent = () => {
           <MapPin color={Colors.light.primary} size={16} />
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={{ fontSize: 15, color: Colors.light.textMuted }}>
-              {"Science block"}
+              {location}
             </Text>
             <Dot color={Colors.light.textMuted} />
             <Text style={{ fontSize: 15, color: Colors.light.textMuted }}>
-              {200}
-              {"m away"}
+              {formatDistance(distance)}
             </Text>
           </View>
         </View>
         <View>
           <View style={{ flexDirection: "row", alignItems: "center" }}>
             <Text style={{ fontSize: 15, color: Colors.light.textMuted }}>
-              {2} {"responding"}
+              {responders} {"responding"}
             </Text>
             <Dot color={Colors.light.textMuted} />
-            <Text style={{ fontSize: 15, color: Colors.light.textMuted }}>
-              {"ambulance en route"}
-            </Text>
+            {responders && (
+              <Text style={{ fontSize: 15, color: Colors.light.textMuted }}>
+                {"ambulance en route"}
+              </Text>
+            )}
           </View>
         </View>
         <View

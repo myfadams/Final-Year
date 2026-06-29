@@ -4,12 +4,31 @@ import HomeTabBar from "@/components/HomeTabBar";
 import ResolvedCaseComponent from "@/components/ResolvedCaseComponent";
 import ScrollViewButton from "@/components/ScrollViewButton";
 import Colors, { ResQColors } from "@/constants/Colors";
-import React, { useState } from "react";
+import { caseProp } from "@/constants/interfaces";
+import { emergencyAlerts } from "@/constants/tempData";
+import filterByProperty from "@/externalFunctions/functions";
+import React, { useEffect, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function alerts() {
   const [isActive, setActive] = useState("all");
+  const [all, setAll] = useState<caseProp[]>([]);
+  const [resolved, setResolved] = useState<caseProp[]>([]);
+  const [critical, setCritical] = useState<caseProp[]>([]);
+  const [moderate, setModerate] = useState<caseProp[]>([]);
+  const [activeCases, setActiveCases] = useState<caseProp[]>([]);
+  const [low, setLow] = useState<caseProp[]>([]);
+  // const []
+
+  useEffect(() => {
+    setAll(emergencyAlerts);
+    setResolved(filterByProperty(emergencyAlerts, "isResolved", true));
+    setCritical(filterByProperty(emergencyAlerts, "severity", "Critical"));
+    setModerate(filterByProperty(emergencyAlerts, "severity", "Moderate"));
+    setLow(filterByProperty(emergencyAlerts, "severity", "Low"));
+    setActiveCases(filterByProperty(emergencyAlerts, "isResolved", false));
+  }, []);
   return (
     <SafeAreaView>
       <HomeTabBar pageTitle="Alerts" />
@@ -37,17 +56,17 @@ export default function alerts() {
             }}
           >
             <AlertCasesComponent
-              caseNumber={2}
+              caseNumber={critical.length}
               text={"Critical"}
               color={Colors.URGENCY_COLORS.critical}
             />
             <AlertCasesComponent
-              caseNumber={1}
+              caseNumber={moderate.length}
               text={"Moderate"}
               color={Colors.URGENCY_COLORS.high}
             />
             <AlertCasesComponent
-              caseNumber={2}
+              caseNumber={resolved.length}
               text={"Resolved today"}
               color={Colors.light.success}
             />
@@ -68,7 +87,7 @@ export default function alerts() {
               text="All"
               setIsActive={setActive}
               isActive={isActive}
-              numberOfCases={3}
+              numberOfCases={all.length}
             />
             <ScrollViewButton
               pageName="critical"
@@ -120,13 +139,45 @@ export default function alerts() {
             </View>
             <View>
               <Text style={{ color: Colors.light.textMuted }}>
-                {3} incidents
+                {activeCases.length} incident{activeCases.length > 0 ? "s" : ""}
               </Text>
             </View>
           </View>
           <View>
-            <CaseComponent />
-            <CaseComponent />
+            {activeCases.map(
+              ({
+                id,
+                title,
+                description,
+                location,
+                distance,
+                time,
+                severity,
+                isResolved,
+                // color,
+                action,
+                responders,
+                creatorID,
+                falseAlarm,
+              }) => (
+                <CaseComponent
+                  id={id}
+                  title={title}
+                  description={description}
+                  location={location}
+                  distance={distance}
+                  time={time}
+                  severity={severity}
+                  action={action}
+                  isResolved={isResolved}
+                  key={id}
+                  responders={responders}
+                  creatorID={creatorID}
+                  falseAlarm={falseAlarm}
+                  responseTime={0}
+                />
+              ),
+            )}
           </View>
         </View>
 
@@ -153,12 +204,47 @@ export default function alerts() {
             </Text>
           </View>
           <View>
-            <Text style={{ color: Colors.light.textMuted }}>{18} closed</Text>
+            <Text style={{ color: Colors.light.textMuted }}>
+              {resolved.length} closed
+            </Text>
           </View>
         </View>
         <View>
-          <ResolvedCaseComponent />
-          <ResolvedCaseComponent />
+          {resolved.map(
+            ({
+              id,
+              title,
+              description,
+              location,
+              distance,
+              time,
+              severity,
+              isResolved,
+              // color,
+              action,
+              responders,
+              creatorID,
+              falseAlarm,
+              responseTime,
+            }) => (
+              <ResolvedCaseComponent
+                id={id}
+                title={title}
+                description={description}
+                location={location}
+                distance={distance}
+                time={time}
+                severity={severity}
+                action={action}
+                isResolved={isResolved}
+                key={id}
+                responders={responders}
+                creatorID={creatorID}
+                falseAlarm={falseAlarm}
+                responseTime={responseTime}
+              />
+            ),
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

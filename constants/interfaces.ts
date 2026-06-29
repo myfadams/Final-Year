@@ -18,14 +18,18 @@ export interface HomeButton {
 }
 
 export interface caseProp {
-  id: string;
+  id: string | number;
   title: string;
   description: string;
   location: string;
-  distance: string;
-  time: string;
+  distance: number;
+  time: number;
   severity: "Critical" | "Moderate" | "Low" | "Resolved";
   isResolved: boolean;
-  color: string;
+  // color: string;
+  responders: number;
   action: "Respond" | "Details" | "View" | "Help" | "";
+  creatorID: string;
+  falseAlarm: boolean;
+  responseTime: number;
 }

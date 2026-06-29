@@ -47,7 +47,7 @@ const ScrollViewButton: React.FC<ScrollBtnProp> = ({
       >
         {text}
       </Text>
-      {numberOfCases && (
+      {numberOfCases !== undefined && (
         <View
           style={{
             padding: 3,
