@@ -8,6 +8,8 @@ interface CustomButtonProps {
   isLoading?: boolean;
   disabled?: boolean;
   Icon?: React.ReactNode;
+  color?: string;
+  textColor?: string;
 }
 const CustomButton: React.FC<CustomButtonProps> = ({
   text,
@@ -15,6 +17,8 @@ const CustomButton: React.FC<CustomButtonProps> = ({
   isLoading,
   disabled,
   Icon,
+  color,
+  textColor,
 }) => {
   return (
     <View style={{ flexDirection: "row", height: 50 }}>
@@ -26,9 +30,10 @@ const CustomButton: React.FC<CustomButtonProps> = ({
           alignItems: "center",
           // width: "100%",
           flexGrow: 1,
-          backgroundColor: Colors.light.accent,
+          backgroundColor: !color ? Colors.light.accent : color,
           padding: 12,
-          borderRadius: "7%",
+          // borderRadius: "7%",
+          borderRadius: 30,
 
           borderColor: Colors.light.accent,
           flexDirection: "row",
@@ -44,7 +49,7 @@ const CustomButton: React.FC<CustomButtonProps> = ({
               style={{
                 fontFamily: typography.medium,
                 fontSize: 15,
-                color: Colors.light.textInverse,
+                color: !textColor ? Colors.light.textInverse : textColor,
               }}
             >
               {text}

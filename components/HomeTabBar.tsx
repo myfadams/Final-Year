@@ -8,8 +8,13 @@ import { Text, TouchableOpacity, View } from "react-native";
 interface HomeTabBarProp {
   activePage?: string;
   userInfo?: {};
+  pageTitle: string;
 }
-const HomeTabBar: React.FC<HomeTabBarProp> = ({ activePage, userInfo }) => {
+const HomeTabBar: React.FC<HomeTabBarProp> = ({
+  activePage,
+  userInfo,
+  pageTitle,
+}) => {
   return (
     <View
       style={{
@@ -28,7 +33,7 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({ activePage, userInfo }) => {
             fontFamily: typography.bold,
           }}
         >
-          ResQ
+          {pageTitle}
         </Text>
       </View>
       <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>

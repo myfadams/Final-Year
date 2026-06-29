@@ -34,6 +34,11 @@ export default {
     high: "#FF9500",
     medium: "#34C759",
   },
+  URGENCY_BACKGROUND: {
+    critical: "#DECACA",
+    high: "#FAEEDA",
+    medium: "#E1F5EE",
+  },
   dark: {
     /* ───────────── Backgrounds & Surfaces ───────────── */
     background: "#030712", // deep blue-black
@@ -67,3 +72,58 @@ export default {
     tabIconSelected: tintColorDark,
   },
 };
+export const ResQColors = {
+  // Surfaces
+  pageBg: "#F5F5F3",
+  cardSurface: "#FFFFFF",
+  inputSurface: "#F5F5F3",
+  border: "#E8E6E0",
+  borderStrong: "#D3D1C7",
+
+  // Text
+  textPrimary: "#1A1A1A",
+  textSecondary: "#5F5E5A",
+  textMuted: "#888780",
+  textFaint: "#B4B2A9",
+
+  // Brand
+  teal: "#1D9E75",
+  tealDark: "#0F6E56",
+  tealDeep: "#085041",
+  tealLight: "#E1F5EE",
+
+  // Critical / danger
+  red: "#E24B4A",
+  redDark: "#A32D2D",
+  redDeeper: "#791F1F",
+  redLight: "#FCEBEB",
+  redBorder: "#F09595",
+
+  // Moderate / warning
+  amber: "#EF9F27",
+  amberDark: "#854F0B",
+  amberDeeper: "#633806",
+  amberLight: "#FAEEDA",
+  amberBorder: "#FAC775",
+
+  // Low / resolved
+  green: "#639922",
+  greenDark: "#3B6D11",
+  greenDeeper: "#27500A",
+  greenLight: "#EAF3DE",
+  greenBorder: "#C0DD97",
+
+  // Avatar tints
+  avatarTeal: "#E1F5EE",
+  avatarBlue: "#E6F1FB",
+  avatarAmber: "#FAEEDA",
+  avatarGray: "#F1EFE8",
+
+  // Avatar text (on their tints)
+  avatarTealText: "#085041",
+  avatarBlueText: "#0C447C",
+  avatarAmberText: "#633806",
+  avatarGrayText: "#444441",
+} as const;
+
+export type ResQColor = (typeof ResQColors)[keyof typeof ResQColors];
