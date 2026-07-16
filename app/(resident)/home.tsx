@@ -38,7 +38,7 @@ const tempUserData = [
 ];
 const home = () => {
   return (
-    <SafeAreaView>
+    <SafeAreaView style={{ marginBottom: 20 }}>
       <HomeTabBar pageTitle="ResQ" />
       <View
         style={{

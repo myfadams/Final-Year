@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import MapViewComponent from "@/components/MapViewComponent";
 import Colors from "@/constants/Colors";
@@ -39,6 +40,7 @@ const URGENCY_LABELS = {
 // =====================================================
 
 export default function LocationScreen() {
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<Tab>("My Contacts");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(
     PEOPLE[0],
@@ -63,7 +65,13 @@ export default function LocationScreen() {
       <StatusBar barStyle="light-content" />
 
       {/* FULL SCREEN MAP */}
-      <MapViewComponent selectedPerson={selectedPerson} />
+      <MapViewComponent
+        selectedPerson={selectedPerson}
+        onRouteCalculated={(dist, dur) => {
+          setDistance(dist);
+          setDuration(dur);
+        }}
+      />
 
       {/* TOP GRADIENT OVERLAY */}
       <View style={styles.topOverlay} pointerEvents="none" />
@@ -121,7 +129,7 @@ export default function LocationScreen() {
       )}
 
       {/* FLOATING TAB BUTTONS */}
-      <View style={styles.tabRow}>
+      <View style={[styles.tabRow, { bottom: 84 + insets.bottom }]}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab && modalVisible;
           const count = TABS_DATA[tab].length;

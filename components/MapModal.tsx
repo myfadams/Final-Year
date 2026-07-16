@@ -162,7 +162,7 @@ const BottomSheetModal: React.FC<{
       <ScrollView
         style={sheetStyles.list}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 40 }}
+        contentContainerStyle={{ paddingBottom: 110 }}
       >
         {people.map((person) => (
           <PersonCard
