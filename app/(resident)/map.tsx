@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import {
-  Dimensions,
   Platform,
   StatusBar,
   StyleSheet,
@@ -8,25 +7,33 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BottomSheetModal from "@/components/MapModal";
 import MapViewComponent from "@/components/MapViewComponent";
-import Colors from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
 import { PEOPLE } from "@/constants/tempData";
-import BottomSheetModal from "../../components/MapModal";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 
-const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get("window");
-
-const MODAL_PEEK = 0;
-const MODAL_OPEN = SCREEN_HEIGHT * 0.55;
-
+// =====================================================
+// TYPES
+// =====================================================
 type Tab = "My Contacts" | "University" | "Family";
+
+// =====================================================
+// MOCK DATA
+// =====================================================
 
 const TABS_DATA: Record<Tab, Person[]> = {
   "My Contacts": PEOPLE,
-  University: [PEOPLE[1], PEOPLE[2]],
-  Family: [PEOPLE[0]],
+  University: [PEOPLE[1], PEOPLE[2], PEOPLE[3]],
+  Family: [PEOPLE[0], PEOPLE[4]],
+};
+
+const URGENCY_COLORS = {
+  critical: "#FF3B3B",
+  high: "#FF9500",
+  medium: "#34C759",
 };
 
 const URGENCY_LABELS = {
@@ -38,18 +45,67 @@ const URGENCY_LABELS = {
 // =====================================================
 // MAIN SCREEN
 // =====================================================
-
 export default function LocationScreen() {
-  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<Tab>("My Contacts");
-  const [selectedPerson, setSelectedPerson] = useState<Person | null>(
-    PEOPLE[0],
-  );
+  const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
+  const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
+  const [recenterNonce, setRecenterNonce] = useState<string>("");
 
   const tabs: Tab[] = ["My Contacts", "University", "Family"];
+  const params = useLocalSearchParams<{
+    personId?: string;
+    action?: string;
+    recenter?: string;
+  }>();
+
+  // Handle tab bar double-press recenter
+  React.useEffect(() => {
+    if (params.recenter) {
+      setSelectedPerson(null);
+      setModalVisible(false);
+      globalState.activeEmergencyId = null;
+      setActiveEmergency(null);
+      setRecenterNonce(params.recenter);
+      // Clear the param so it doesn't re-trigger
+      router.setParams({ recenter: undefined });
+    }
+  }, [params.recenter]);
+
+  // Sync active emergency and handle incoming query parameters when focused
+  useFocusEffect(
+    React.useCallback(() => {
+      // 1. Sync active emergency from globalState
+      const globalActiveId = globalState.activeEmergencyId;
+      if (globalActiveId) {
+        const found = PEOPLE.find((p) => p.id === globalActiveId);
+        if (found) {
+          setActiveEmergency(found);
+        }
+      } else {
+        setActiveEmergency(null);
+      }
+
+      // 2. Handle deep link / parameter changes
+      const { personId, action } = params;
+      if (personId) {
+        const person = PEOPLE.find((p) => p.id === personId);
+        if (person) {
+          setSelectedPerson(person);
+          setModalVisible(true);
+
+          if (action === "respond") {
+            globalState.activeEmergencyId = personId;
+            setActiveEmergency(person);
+          }
+        }
+        // Clear params so it doesn't re-trigger on subsequent tab focus
+        router.setParams({ personId: undefined, action: undefined });
+      }
+    }, [params]),
+  );
 
   const handleTabPress = (tab: Tab) => {
     if (activeTab === tab && modalVisible) {
@@ -67,6 +123,12 @@ export default function LocationScreen() {
       {/* FULL SCREEN MAP */}
       <MapViewComponent
         selectedPerson={selectedPerson}
+        activeEmergency={activeEmergency}
+        recenterNonce={recenterNonce}
+        onSelectPerson={(p) => {
+          setSelectedPerson(p);
+          setModalVisible(true);
+        }}
         onRouteCalculated={(dist, dur) => {
           setDistance(dist);
           setDuration(dur);
@@ -107,19 +169,13 @@ export default function LocationScreen() {
             <View
               style={[
                 styles.urgencyDot2,
-                {
-                  backgroundColor:
-                    Colors.URGENCY_COLORS[selectedPerson.urgency],
-                },
+                { backgroundColor: URGENCY_COLORS[selectedPerson.urgency] },
               ]}
             />
             <Text
               style={[
                 styles.routeValue,
-                {
-                  fontSize: 11,
-                  color: Colors.URGENCY_COLORS[selectedPerson.urgency],
-                },
+                { fontSize: 11, color: URGENCY_COLORS[selectedPerson.urgency] },
               ]}
             >
               {URGENCY_LABELS[selectedPerson.urgency]}
@@ -129,7 +185,7 @@ export default function LocationScreen() {
       )}
 
       {/* FLOATING TAB BUTTONS */}
-      <View style={[styles.tabRow, { bottom: 84 + insets.bottom }]}>
+      <View style={styles.tabRow}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab && modalVisible;
           const count = TABS_DATA[tab].length;
@@ -170,7 +226,15 @@ export default function LocationScreen() {
         selectedPerson={selectedPerson}
         onSelectPerson={(p) => {
           setSelectedPerson(p);
-          setModalVisible(false);
+        }}
+        activeEmergency={activeEmergency}
+        onAcceptEmergency={(p) => {
+          globalState.activeEmergencyId = p.id;
+          setActiveEmergency(p);
+        }}
+        onCancelEmergency={() => {
+          globalState.activeEmergencyId = null;
+          setActiveEmergency(null);
         }}
         distance={distance}
         duration={duration}
@@ -182,7 +246,6 @@ export default function LocationScreen() {
 // =====================================================
 // STYLES
 // =====================================================
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -333,33 +396,5 @@ const styles = StyleSheet.create({
   },
   tabCountTextActive: {
     color: "#0a0f1e",
-  },
-});
-
-const mapStyles = StyleSheet.create({
-  responderWrapper: {
-    width: 50,
-    height: 50,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  responderCore: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#4ECDC4",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#0a0f1e",
-  },
-  victimCore: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#0a0f1e",
   },
 });

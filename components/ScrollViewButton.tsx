@@ -57,7 +57,7 @@ const ScrollViewButton: React.FC<ScrollBtnProp> = ({
                 : ResQColors.borderStrong,
             width: 18,
             height: 18,
-            borderRadius: "100%",
+            borderRadius: 9,
             justifyContent: "center",
             alignItems: "center",
           }}

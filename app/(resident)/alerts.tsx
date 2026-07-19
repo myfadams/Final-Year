@@ -4,10 +4,12 @@ import HomeTabBar from "@/components/HomeTabBar";
 import ResolvedCaseComponent from "@/components/ResolvedCaseComponent";
 import ScrollViewButton from "@/components/ScrollViewButton";
 import Colors, { ResQColors } from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import { caseProp } from "@/constants/interfaces";
 import { emergencyAlerts } from "@/constants/tempData";
 import filterByProperty from "@/externalFunctions/functions";
-import React, { useEffect, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -19,20 +21,25 @@ export default function alerts() {
   const [moderate, setModerate] = useState<caseProp[]>([]);
   const [activeCases, setActiveCases] = useState<caseProp[]>([]);
   const [low, setLow] = useState<caseProp[]>([]);
-  // const []
+  const [activeEmergencyId, setActiveEmergencyId] = useState<string | null>(
+    null,
+  );
 
-  useEffect(() => {
-    setAll(emergencyAlerts);
-    setResolved(filterByProperty(emergencyAlerts, "isResolved", true));
-    setCritical(filterByProperty(emergencyAlerts, "severity", "Critical"));
-    setModerate(filterByProperty(emergencyAlerts, "severity", "Moderate"));
-    setLow(filterByProperty(emergencyAlerts, "severity", "Low"));
-    setActiveCases(filterByProperty(emergencyAlerts, "isResolved", false));
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      setAll(emergencyAlerts);
+      setResolved(filterByProperty(emergencyAlerts, "isResolved", true));
+      setCritical(filterByProperty(emergencyAlerts, "severity", "Critical"));
+      setModerate(filterByProperty(emergencyAlerts, "severity", "Moderate"));
+      setLow(filterByProperty(emergencyAlerts, "severity", "Low"));
+      setActiveCases(filterByProperty(emergencyAlerts, "isResolved", false));
+      setActiveEmergencyId(globalState.activeEmergencyId);
+    }, []),
+  );
   return (
-    <SafeAreaView>
+    <SafeAreaView style={{ flex: 1, backgroundColor: ResQColors.pageBg }}>
       <HomeTabBar pageTitle="Alerts" />
-      <ScrollView>
+      <ScrollView contentContainerStyle={{ paddingBottom: 110 }}>
         <View>
           <View
             style={{
@@ -144,40 +151,33 @@ export default function alerts() {
             </View>
           </View>
           <View>
-            {activeCases.map(
-              ({
-                id,
-                title,
-                description,
-                location,
-                distance,
-                time,
-                severity,
-                isResolved,
-                // color,
-                action,
-                responders,
-                creatorID,
-                falseAlarm,
-              }) => (
-                <CaseComponent
-                  id={id}
-                  title={title}
-                  description={description}
-                  location={location}
-                  distance={distance}
-                  time={time}
-                  severity={severity}
-                  action={action}
-                  isResolved={isResolved}
-                  key={id}
-                  responders={responders}
-                  creatorID={creatorID}
-                  falseAlarm={falseAlarm}
-                  responseTime={0}
-                />
-              ),
-            )}
+            {activeCases.map((item) => (
+              <CaseComponent
+                {...item}
+                key={item.id}
+                isActiveResponse={activeEmergencyId === item.id.toString()}
+                onMapPress={() => {
+                  router.push({
+                    pathname: "/(resident)/map",
+                    params: { personId: item.id.toString(), action: "preview" },
+                  });
+                }}
+                onRespondPress={() => {
+                  const idStr = item.id.toString();
+                  if (activeEmergencyId === idStr) {
+                    globalState.activeEmergencyId = null;
+                    setActiveEmergencyId(null);
+                  } else {
+                    globalState.activeEmergencyId = idStr;
+                    setActiveEmergencyId(idStr);
+                    router.push({
+                      pathname: "/(resident)/map",
+                      params: { personId: idStr, action: "respond" },
+                    });
+                  }
+                }}
+              />
+            ))}
           </View>
         </View>
 

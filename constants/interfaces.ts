@@ -7,6 +7,10 @@ export interface Person {
   latitude: number;
   longitude: number;
   urgency: "critical" | "high" | "medium";
+  description?: string;
+  images?: string[];
+  requesterDesc?: string;
+  knownHealthProblems?: string[];
 }
 export interface HomeButton {
   Icon: React.ReactNode;
@@ -15,6 +19,7 @@ export interface HomeButton {
   buttonColor: string;
   subText: string;
   iconColor: string;
+  onPress?: () => void;
 }
 
 export interface caseProp {

@@ -193,6 +193,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: any) {
     );
   };
 
+  const lastMapPress = useRef<number>(0);
   const mapRoute = state.routes.find((r: any) => r.name === "map");
   const isMapFocused = mapRoute
     ? state.index === state.routes.indexOf(mapRoute)
@@ -200,14 +201,23 @@ export default function CustomTabBar({ state, descriptors, navigation }: any) {
 
   const handleMapPress = () => {
     if (mapRoute) {
+      const now = Date.now();
+      const doublePress = now - lastMapPress.current < 400;
+      lastMapPress.current = now;
+
       const event = navigation.emit({
         type: "tabPress",
         target: mapRoute.key,
         canPreventDefault: true,
       });
 
-      if (!isMapFocused && !event.defaultPrevented) {
-        navigation.navigate(mapRoute.name);
+      if (!event.defaultPrevented) {
+        if (doublePress) {
+          // Double press detected - force recenter
+          navigation.navigate(mapRoute.name, { recenter: now.toString() });
+        } else if (!isMapFocused) {
+          navigation.navigate(mapRoute.name);
+        }
       }
     }
   };

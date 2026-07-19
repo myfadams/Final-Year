@@ -4,12 +4,13 @@ import React from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 interface CustomButtonProps {
   text: String;
-  onPress: () => void;
+  onPress?: () => void;
   isLoading?: boolean;
   disabled?: boolean;
   Icon?: React.ReactNode;
   color?: string;
   textColor?: string;
+  borderColor?: string;
 }
 const CustomButton: React.FC<CustomButtonProps> = ({
   text,
@@ -19,6 +20,7 @@ const CustomButton: React.FC<CustomButtonProps> = ({
   Icon,
   color,
   textColor,
+  borderColor,
 }) => {
   return (
     <View style={{ flexDirection: "row", height: 50 }}>
@@ -35,7 +37,13 @@ const CustomButton: React.FC<CustomButtonProps> = ({
           // borderRadius: "7%",
           borderRadius: 30,
 
-          borderColor: Colors.light.accent,
+          borderWidth:
+            borderColor || color === "#fff" || color === "transparent" ? 1 : 0,
+          borderColor: borderColor
+            ? borderColor
+            : color === "#fff"
+              ? "#E3E2DA"
+              : Colors.light.accent,
           flexDirection: "row",
           gap: 4,
         }}
@@ -46,9 +54,12 @@ const CustomButton: React.FC<CustomButtonProps> = ({
           <>
             {Icon && <View style={{}}>{Icon}</View>}
             <Text
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               style={{
                 fontFamily: typography.medium,
-                fontSize: 15,
+                fontSize: 14,
                 color: !textColor ? Colors.light.textInverse : textColor,
               }}
             >
