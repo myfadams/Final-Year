@@ -1,10 +1,11 @@
-import Colors, { ResQColors } from "@/constants/Colors";
+import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { caseProp } from "@/constants/interfaces";
 import {
   formatDistance,
   formatTimeAgo,
   getSeverityColors,
 } from "@/externalFunctions/functions";
+import { useRouter } from "expo-router";
 import {
   AlertCircle,
   Clock,
@@ -16,7 +17,7 @@ import {
   TriangleAlert,
 } from "lucide-react-native";
 import React from "react";
-import { Text, View } from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
 import CustomButton from "./CustomButton";
 
 interface CaseComponentProps extends caseProp {
@@ -44,14 +45,31 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   const txtColor = getSeverityColors(severity);
   const displayLocation =
     location.length > 20 ? location.substring(0, 17) + "..." : location;
+  const router = useRouter();
   return (
-    <View
+    <TouchableOpacity
+      onPress={() => {
+        router.push({
+          pathname: "/IncidentDetails",
+          params: {
+            id: id.toString(),
+            title: title,
+            description: description,
+            location: location,
+            distance: distance.toString(),
+            time: time.toString(),
+            severity: severity,
+            isResolved: isResolved ? "true" : "false",
+            fromCasesScreen: "true",
+          },
+        });
+      }}
       style={{
         backgroundColor: ResQColors.cardSurface,
         borderTopColor: txtColor[0],
         borderTopWidth: 5,
         borderWidth: 1,
-        borderColor: "rgba(0,0,0,0.05)",
+        borderColor: ResQColors.border,
         borderRadius: 16,
         paddingHorizontal: 8,
         marginHorizontal: 16,
@@ -65,24 +83,26 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
     >
       <View style={{ margin: 16 }}>
         <View style={{ flexDirection: "row", gap: 8 }}>
-          <View
-            style={{
-              backgroundColor: txtColor[1],
-              padding: 8,
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: ResQColors.border,
-            }}
-          >
-            {severity.toLocaleLowerCase() == "critical" && (
-              <TriangleAlert size={28} color={txtColor[0]} />
-            )}
-            {severity.toLocaleLowerCase() == "moderate" && (
-              <ShieldAlert size={28} color={txtColor[0]} />
-            )}
-            {severity.toLocaleLowerCase() == "low" && (
-              <AlertCircle size={28} color={txtColor[0]} />
-            )}
+          <View>
+            <View
+              style={{
+                backgroundColor: txtColor[1],
+                padding: 8,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: ResQColors.border,
+              }}
+            >
+              {severity.toLocaleLowerCase() == "critical" && (
+                <TriangleAlert size={28} color={txtColor[0]} />
+              )}
+              {severity.toLocaleLowerCase() == "moderate" && (
+                <ShieldAlert size={28} color={txtColor[0]} />
+              )}
+              {severity.toLocaleLowerCase() == "low" && (
+                <AlertCircle size={28} color={txtColor[0]} />
+              )}
+            </View>
           </View>
           <View
             style={{
@@ -217,21 +237,21 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
           <View style={{ flex: 1 }}>
             <CustomButton
               onPress={onMapPress}
-              Icon={<MapPin color="#018790" size={19} />}
+              Icon={<MapPin color={Colors.light.primary} size={19} />}
               text={"Map"}
-              color="rgba(1, 135, 144, 0.05)"
-              textColor="#018790"
-              borderColor="rgba(1, 135, 144, 0.15)"
+              color={DESIGN_COLORS.inversePrimary}
+              textColor={Colors.light.primary}
+              borderColor={ResQColors.border}
             />
           </View>
           <View style={{ flex: 1 }}>
             <CustomButton
               onPress={() => {}}
-              Icon={<Phone color="#018790" size={19} />}
+              Icon={<Phone color={Colors.light.primary} size={19} />}
               text={"Call"}
-              color="rgba(1, 135, 144, 0.05)"
-              textColor="#018790"
-              borderColor="rgba(1, 135, 144, 0.15)"
+              color={DESIGN_COLORS.inversePrimary}
+              textColor={Colors.light.primary}
+              borderColor={ResQColors.border}
             />
           </View>
           <View style={{ flex: 1 }}>
@@ -262,7 +282,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                   ? "#F1F1F0"
                   : isActiveResponse
                     ? "rgba(255, 59, 59, 0.08)"
-                    : "#018790"
+                    : Colors.light.primary
               }
               textColor={
                 distance > 800 && !isActiveResponse
@@ -276,13 +296,13 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                   ? "#E2E2DF"
                   : isActiveResponse
                     ? "rgba(255, 59, 59, 0.2)"
-                    : "#018790"
+                    : ResQColors.border
               }
             />
           </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 

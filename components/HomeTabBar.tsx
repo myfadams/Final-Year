@@ -47,7 +47,7 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
         </TouchableOpacity>
 
         <TouchableOpacity
-          onPress={() => router.push("/(resident)/profile")}
+          onPress={() => router.push("/profile")}
           style={styles.avatarButton}
           activeOpacity={0.8}
         >

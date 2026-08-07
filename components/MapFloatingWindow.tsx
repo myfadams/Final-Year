@@ -1,0 +1,288 @@
+import Colors from "@/constants/Colors";
+import { Person } from "@/constants/interfaces";
+import { typography } from "@/constants/typograyph";
+import { Clock, MapPin, MoreHorizontal, Siren, X } from "lucide-react-native";
+import React from "react";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+
+const URGENCY_LABELS = {
+  critical: "CRITICAL",
+  high: "HIGH",
+  medium: "MEDIUM",
+};
+
+interface MapFloatingWindowProps {
+  selectedPerson: Person;
+  activeEmergency: Person | null;
+  distance: string;
+  duration: string;
+  onClose: () => void;
+  onRespondToggle: () => void;
+  onOpenDetails: () => void;
+}
+
+export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
+  selectedPerson,
+  activeEmergency,
+  distance,
+  duration,
+  onClose,
+  onRespondToggle,
+  onOpenDetails,
+}) => {
+  const isResponding = activeEmergency?.id === selectedPerson.id;
+  const parsedDuration = parseInt(duration.replace(/[^0-9]/g, ""), 10);
+  const isResponseRestricted =
+    selectedPerson.urgency === "critical" &&
+    !isNaN(parsedDuration) &&
+    parsedDuration > 5;
+
+  return (
+    <View
+      style={[
+        styles.floatingDetailCard,
+        {
+          borderTopColor: Colors.URGENCY_COLORS[selectedPerson.urgency],
+          borderTopWidth: 5,
+        },
+      ]}
+    >
+      <View style={styles.cardContentWrapper}>
+        {/* Meta Row */}
+        <View style={styles.cardMetaRow}>
+          <View style={styles.metaBadgesWrapper}>
+            <View
+              style={[
+                styles.urgencyBadge,
+                {
+                  backgroundColor:
+                    Colors.URGENCY_BACKGROUND[selectedPerson.urgency],
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.urgencyBadgeText,
+                  { color: Colors.URGENCY_COLORS[selectedPerson.urgency] },
+                ]}
+              >
+                {URGENCY_LABELS[selectedPerson.urgency]}
+              </Text>
+            </View>
+
+            {/* Distance and ETA calculations with Lucide icons */}
+            <View style={styles.metaInfoRow}>
+              <MapPin size={12.5} color="#64748B" style={{ marginRight: 3 }} />
+              <Text style={styles.distanceMetaText}>{distance}</Text>
+
+              <View style={styles.metaInfoDotSeparator} />
+
+              <Clock size={12.5} color="#64748B" style={{ marginRight: 3 }} />
+              <Text style={styles.distanceMetaText}>{duration}</Text>
+            </View>
+          </View>
+
+          {/* Close Button */}
+          <TouchableOpacity style={styles.cardCloseButton} onPress={onClose}>
+            <X size={16} color="#64748B" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Title / Description */}
+        <Text style={styles.cardIncidentTitle} numberOfLines={1}>
+          {selectedPerson.name}
+        </Text>
+        <Text style={styles.cardIncidentDescription} numberOfLines={2}>
+          {selectedPerson.requesterDesc || selectedPerson.description}
+        </Text>
+
+        {/* Actions Row */}
+        <View style={styles.cardActionRow}>
+          {/* Check if critical emergency response is restricted */}
+          {isResponseRestricted ? (
+            // Disabled status indicator instead of respond button
+            <View style={styles.disabledRespondBadge}>
+              <X size={15} color="#94A3B8" style={{ marginRight: 5 }} />
+              <Text style={styles.disabledRespondBadgeText}>
+                {parsedDuration > 8
+                  ? "Too Late to Respond"
+                  : "Too Far Out to Respond"}
+              </Text>
+            </View>
+          ) : (
+            // Normal Primary Respond Button
+            <TouchableOpacity
+              style={[
+                styles.respondCTAButton,
+                isResponding
+                  ? styles.respondCTAActive
+                  : {
+                      backgroundColor:
+                        Colors.URGENCY_COLORS[selectedPerson.urgency],
+                    },
+              ]}
+              onPress={onRespondToggle}
+              activeOpacity={0.85}
+            >
+              <Siren
+                size={16}
+                color={
+                  isResponding ? Colors.URGENCY_COLORS.critical : "#FFFFFF"
+                }
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.respondCTAText,
+                  isResponding
+                    ? { color: Colors.URGENCY_COLORS.critical }
+                    : { color: "#FFFFFF" },
+                ]}
+              >
+                {isResponding ? "Cancel Response" : "Respond Now"}
+              </Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Details Icon Button */}
+          <TouchableOpacity
+            style={styles.detailsOutlineButton}
+            onPress={onOpenDetails}
+            activeOpacity={0.85}
+          >
+            <MoreHorizontal size={18} color="#0F172A" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  floatingDetailCard: {
+    position: "absolute",
+    bottom: Platform.OS === "ios" ? 120 : 86,
+    left: 16,
+    right: 16,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    elevation: 4,
+    zIndex: 5,
+  },
+  cardContentWrapper: {
+    flex: 1,
+    padding: 18,
+  },
+  cardMetaRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  metaBadgesWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  urgencyBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3.5,
+    borderRadius: 6,
+  },
+  urgencyBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.bold,
+  },
+  distanceMetaText: {
+    fontSize: 12,
+    fontFamily: typography.semibold,
+    color: "#64748B",
+  },
+  metaInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  metaInfoDotSeparator: {
+    width: 3.5,
+    height: 3.5,
+    borderRadius: 2,
+    backgroundColor: "#94A3B8",
+    marginHorizontal: 8,
+  },
+  cardCloseButton: {
+    padding: 4,
+  },
+  cardIncidentTitle: {
+    fontSize: 17,
+    fontFamily: typography.semibold,
+    color: "#0F172A",
+    marginBottom: 4,
+  },
+  cardIncidentDescription: {
+    fontSize: 13.5,
+    fontFamily: typography.regular,
+    color: "#475569",
+    lineHeight: 19,
+    marginBottom: 14,
+  },
+  cardActionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  disabledRespondBadge: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    height: 40,
+    borderRadius: 10,
+  },
+  disabledRespondBadgeText: {
+    color: "#94A3B8",
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+  },
+  respondCTAButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 40,
+    borderRadius: 10,
+  },
+  respondCTAActive: {
+    backgroundColor: "rgba(239, 68, 68, 0.08)",
+    borderWidth: 1.5,
+    borderColor: "#EF4444",
+  },
+  respondCTAText: {
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+  },
+  detailsOutlineButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

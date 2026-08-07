@@ -10,6 +10,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TextStyle,
   TouchableOpacity,
   View,
@@ -22,7 +23,7 @@ export interface DropdownOption {
   label: string;
   value: string | number;
   description?: string;
-  icon?: string; // emoji or single char
+  icon?: string | React.ReactNode; // emoji, single char, or custom element
   disabled?: boolean;
 }
 
@@ -34,6 +35,7 @@ export interface DropdownMenuProps {
   label?: string;
   disabled?: boolean;
   style?: ViewStyle;
+  search?: boolean;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -125,7 +127,11 @@ const DropdownItem: React.FC<{
 
         {option.icon ? (
           <View style={styles.itemIconWrap}>
-            <Text style={styles.itemIcon}>{option.icon}</Text>
+            {typeof option.icon === "string" ? (
+              <Text style={styles.itemIcon}>{option.icon}</Text>
+            ) : (
+              option.icon
+            )}
           </View>
         ) : (
           <View style={styles.itemDot}>
@@ -168,8 +174,10 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   label,
   disabled = false,
   style,
+  search = false,
 }) => {
   const [open, setOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
   const [anchorY, setAnchorY] = useState(0);
   const [anchorX, setAnchorX] = useState(0);
   const [anchorW, setAnchorW] = useState(SCREEN_W - 48);
@@ -179,6 +187,14 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const selected = options.find((o) => o.value === value) ?? null;
+
+  const filteredOptions = search
+    ? options.filter(
+        (o) =>
+          o.label.toLowerCase().includes(searchText.toLowerCase()) ||
+          o.description?.toLowerCase().includes(searchText.toLowerCase()),
+      )
+    : options;
 
   const measureAndOpen = useCallback(() => {
     if (disabled) return;
@@ -218,7 +234,10 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
         duration: 140,
         useNativeDriver: true,
       }),
-    ]).start(() => setOpen(false));
+    ]).start(() => {
+      setOpen(false);
+      setSearchText("");
+    });
   }, [openAnim, fadeAnim]);
 
   const handleSelect = (option: DropdownOption) => {
@@ -258,7 +277,11 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
 
         <View style={styles.triggerContent}>
           {selected?.icon ? (
-            <Text style={styles.triggerIcon}>{selected.icon}</Text>
+            typeof selected.icon === "string" ? (
+              <Text style={styles.triggerIcon}>{selected.icon}</Text>
+            ) : (
+              <View style={styles.triggerIconWrap}>{selected.icon}</View>
+            )
           ) : null}
           <Text
             style={[styles.triggerText, !selected && styles.triggerPlaceholder]}
@@ -300,12 +323,30 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
         >
           <View style={styles.panelHeader}>
             <View style={styles.panelRule} />
-            <Text style={styles.panelCount}>{options.length} options</Text>
+            <Text style={styles.panelCount}>
+              {filteredOptions.length}{" "}
+              {filteredOptions.length === 1 ? "option" : "options"}
+            </Text>
             <View style={styles.panelRule} />
           </View>
 
+          {search && (
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search..."
+                placeholderTextColor="#A8A29C"
+                value={searchText}
+                onChangeText={setSearchText}
+                autoCapitalize="none"
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+              />
+            </View>
+          )}
+
           <FlatList
-            data={options}
+            data={filteredOptions}
             keyExtractor={(item) => String(item.value)}
             renderItem={({ item, index }) => (
               <DropdownItem
@@ -617,6 +658,28 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 1,
     // backgroundColor: COLORS.line,
+  } as ViewStyle,
+
+  searchContainer: {
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  } as ViewStyle,
+
+  searchInput: {
+    height: 40,
+    backgroundColor: "rgba(0,0,0,0.03)",
+    borderColor: Colors.light.accent,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 14,
+    color: Colors.light.text,
+    fontFamily: typography.regular,
+  } as TextStyle,
+
+  triggerIconWrap: {
+    justifyContent: "center",
+    alignItems: "center",
   } as ViewStyle,
 });
 

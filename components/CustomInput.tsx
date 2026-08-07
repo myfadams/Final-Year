@@ -9,6 +9,9 @@ interface CustomInputData {
   PasswordIcon?: boolean;
   keyboardType?: boolean;
   label?: string;
+  value?: string;
+  onChangeText?: (text: string) => void;
+  showError?: string;
 }
 
 const CustomInput: React.FC<CustomInputData> = ({
@@ -17,6 +20,9 @@ const CustomInput: React.FC<CustomInputData> = ({
   PasswordIcon,
   keyboardType,
   label,
+  value,
+  onChangeText,
+  showError,
 }) => {
   const [showPassword, setShowPassword] = useState(false);
   return (
@@ -58,6 +64,8 @@ const CustomInput: React.FC<CustomInputData> = ({
           }}
           placeholderTextColor={Colors.light.textMuted}
           keyboardType={keyboardType ? "phone-pad" : "default"}
+          value={value}
+          onChangeText={onChangeText}
         />
         {PasswordIcon && (
           <TouchableOpacity
@@ -74,6 +82,19 @@ const CustomInput: React.FC<CustomInputData> = ({
           </TouchableOpacity>
         )}
       </View>
+      {showError && (
+        <View style={{ alignItems: "center" }}>
+          <Text
+            style={{
+              fontSize: 14,
+              color: Colors.light.text,
+              fontFamily: typography.regular,
+            }}
+          >
+            {showError}
+          </Text>
+        </View>
+      )}
     </View>
   );
 };

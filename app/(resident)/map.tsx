@@ -1,78 +1,60 @@
+import { MapFloatingWindow } from "@/components/MapFloatingWindow";
+import MapViewComponent from "@/components/MapViewComponent";
+import Colors from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
+import { Person } from "@/constants/interfaces";
+import { PEOPLE } from "@/constants/tempData";
+import { typography } from "@/constants/typograyph";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import {
+  BriefcaseMedical,
+  Car,
+  Compass,
+  Flame,
+  Footprints,
+  Search,
+  Shield,
+  SlidersHorizontal,
+  Zap,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import {
+  Alert,
   Platform,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
 
-import BottomSheetModal from "@/components/MapModal";
-import MapViewComponent from "@/components/MapViewComponent";
-import { globalState } from "@/constants/globalState";
-import { Person } from "@/constants/interfaces";
-import { PEOPLE } from "@/constants/tempData";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+type CategoryFilter = "All" | "Medical" | "Fire" | "Security";
 
-// =====================================================
-// TYPES
-// =====================================================
-type Tab = "My Contacts" | "University" | "Family";
-
-// =====================================================
-// MOCK DATA
-// =====================================================
-
-const TABS_DATA: Record<Tab, Person[]> = {
-  "My Contacts": PEOPLE,
-  University: [PEOPLE[1], PEOPLE[2], PEOPLE[3]],
-  Family: [PEOPLE[0], PEOPLE[4]],
-};
-
-const URGENCY_COLORS = {
-  critical: "#FF3B3B",
-  high: "#FF9500",
-  medium: "#34C759",
-};
-
-const URGENCY_LABELS = {
-  critical: "CRITICAL",
-  high: "HIGH",
-  medium: "MEDIUM",
-};
-
-// =====================================================
-// MAIN SCREEN
-// =====================================================
 export default function LocationScreen() {
-  const [activeTab, setActiveTab] = useState<Tab>("My Contacts");
+  const router = useRouter();
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
   const [recenterNonce, setRecenterNonce] = useState<string>("");
+  const [travelMode, setTravelMode] = useState<
+    "driving" | "running" | "walking"
+  >("running");
 
-  const tabs: Tab[] = ["My Contacts", "University", "Family"];
   const params = useLocalSearchParams<{
     personId?: string;
     action?: string;
     recenter?: string;
   }>();
 
-  // Handle tab bar double-press recenter
-  React.useEffect(() => {
-    if (params.recenter) {
-      setSelectedPerson(null);
-      setModalVisible(false);
-      globalState.activeEmergencyId = null;
-      setActiveEmergency(null);
-      setRecenterNonce(params.recenter);
-      // Clear the param so it doesn't re-trigger
-      router.setParams({ recenter: undefined });
-    }
-  }, [params.recenter]);
+  // Recenter trigger
+  const handleRecenter = () => {
+    setRecenterNonce(Math.random().toString());
+  };
 
   // Sync active emergency and handle incoming query parameters when focused
   useFocusEffect(
@@ -89,45 +71,110 @@ export default function LocationScreen() {
       }
 
       // 2. Handle deep link / parameter changes
-      const { personId, action } = params;
-      if (personId) {
+      const { personId, action, recenter } = params;
+
+      if (recenter) {
+        setSelectedPerson(null);
+        globalState.activeEmergencyId = null;
+        setActiveEmergency(null);
+        setRecenterNonce(recenter);
+        router.setParams({ recenter: undefined });
+      } else if (personId) {
         const person = PEOPLE.find((p) => p.id === personId);
         if (person) {
           setSelectedPerson(person);
-          setModalVisible(true);
-
           if (action === "respond") {
             globalState.activeEmergencyId = personId;
             setActiveEmergency(person);
           }
         }
-        // Clear params so it doesn't re-trigger on subsequent tab focus
         router.setParams({ personId: undefined, action: undefined });
       }
     }, [params]),
   );
 
-  const handleTabPress = (tab: Tab) => {
-    if (activeTab === tab && modalVisible) {
-      setModalVisible(false);
-    } else {
-      setActiveTab(tab);
-      setModalVisible(true);
+  const handleRespondToggle = () => {
+    if (!selectedPerson) return;
+    const idStr = selectedPerson.id;
+
+    if (activeEmergency?.id === idStr) {
+      globalState.activeEmergencyId = null;
+      setActiveEmergency(null);
+      Alert.alert(
+        "Response Cancelled",
+        "You are no longer assigned as a responder to this incident.",
+      );
+      return;
     }
+
+    // CRITICAL RESPONSE PERMISSION CHECK:
+    // If it's a critical emergency and the calculated ETA is greater than 5 minutes, block response assignment
+    if (selectedPerson.urgency === "critical") {
+      const parsedDuration = parseInt(duration.replace(/[^0-9]/g, ""), 10);
+      if (!isNaN(parsedDuration) && parsedDuration > 5) {
+        Alert.alert(
+          "Too Far to Respond",
+          `This critical emergency is too far out for you to respond safely (ETA: ${duration}). Professional emergency services have been dispatched.`,
+        );
+        return;
+      }
+    }
+
+    globalState.activeEmergencyId = idStr;
+    setActiveEmergency(selectedPerson);
+    Alert.alert(
+      "Response Assigned",
+      "You are now responding to this incident. Follow the active navigation line on the map.",
+      [{ text: "OK" }],
+    );
+  };
+
+  const handleOpenDetails = () => {
+    if (!selectedPerson) return;
+
+    // Determine severity mapping for detail view standard structure
+    const severityMap =
+      selectedPerson.urgency === "critical"
+        ? "Critical"
+        : selectedPerson.urgency === "high"
+          ? "Moderate"
+          : "Low";
+
+    router.push({
+      pathname: "/IncidentDetails",
+      params: {
+        id: selectedPerson.id,
+        title: selectedPerson.name,
+        description: selectedPerson.description || "",
+        location: selectedPerson.address,
+        distance: distance.replace(/\s+/g, ""),
+        time: duration.replace(/\s+/g, ""),
+        severity: severityMap,
+        isResolved: "false",
+        photos: JSON.stringify(selectedPerson.images || []),
+        travelMode: travelMode, // Keep the active mode of transport selected on the map!
+      },
+    });
   };
 
   return (
     <View style={styles.screen}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar
+        barStyle="dark-content"
+        translucent={true}
+        backgroundColor="transparent"
+      />
 
       {/* FULL SCREEN MAP */}
       <MapViewComponent
         selectedPerson={selectedPerson}
         activeEmergency={activeEmergency}
         recenterNonce={recenterNonce}
+        categoryFilter={categoryFilter}
+        searchQuery={searchQuery}
+        travelMode={travelMode}
         onSelectPerson={(p) => {
           setSelectedPerson(p);
-          setModalVisible(true);
         }}
         onRouteCalculated={(dist, dur) => {
           setDistance(dist);
@@ -135,266 +182,332 @@ export default function LocationScreen() {
         }}
       />
 
-      {/* TOP GRADIENT OVERLAY */}
-      <View style={styles.topOverlay} pointerEvents="none" />
+      {/* FLOATING SEARCH & FILTER ROW */}
+      <View style={styles.searchAndFiltersContainer} pointerEvents="box-none">
+        {/* Search Bar */}
+        <View style={styles.searchBarWrapper}>
+          <Search size={20} color="#64748B" style={{ marginRight: 8 }} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search location..."
+            placeholderTextColor="#64748B"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() =>
+              Alert.alert(
+                "Filter Settings",
+                "Configure your alert monitoring range and notifications.",
+              )
+            }
+          >
+            <SlidersHorizontal size={18} color="#B91C1C" />
+          </TouchableOpacity>
+        </View>
 
-      {/* HEADER */}
-      <View style={styles.header} pointerEvents="box-none">
-        <View>
-          <Text style={styles.headerEyebrow}>EMERGENCY</Text>
-          <Text style={styles.headerTitle}>Navigation</Text>
-        </View>
-        <View style={styles.headerRight}>
-          <View style={styles.liveIndicator}>
-            <View style={styles.liveDot} />
-            <Text style={styles.liveText}>LIVE</Text>
-          </View>
-        </View>
+        {/* Filter Pills */}
+        <ScrollView
+          horizontal={true}
+          showsHorizontalScrollIndicator={false}
+          style={styles.pillsScrollView}
+          contentContainerStyle={styles.pillsScrollContainer}
+        >
+          {(["All", "Medical", "Fire", "Security"] as CategoryFilter[]).map(
+            (tab) => {
+              const isActive = categoryFilter === tab;
+
+              // Get category icons dynamically
+              const renderIcon = () => {
+                const iconSize = 15;
+                const iconColor = isActive ? "#FFFFFF" : "#475569";
+                if (tab === "Medical")
+                  return (
+                    <BriefcaseMedical
+                      size={iconSize}
+                      color={iconColor}
+                      style={{ marginRight: 5 }}
+                    />
+                  );
+                if (tab === "Fire")
+                  return (
+                    <Flame
+                      size={iconSize}
+                      color={iconColor}
+                      style={{ marginRight: 5 }}
+                    />
+                  );
+                if (tab === "Security")
+                  return (
+                    <Shield
+                      size={iconSize}
+                      color={iconColor}
+                      style={{ marginRight: 5 }}
+                    />
+                  );
+                return null;
+              };
+
+              return (
+                <TouchableOpacity
+                  key={tab}
+                  style={[styles.pillBtn, isActive && styles.pillBtnActive]}
+                  onPress={() => {
+                    setCategoryFilter(tab);
+                    setSelectedPerson(null); // Clear selected case on filter switch
+                  }}
+                  activeOpacity={0.85}
+                >
+                  {renderIcon()}
+                  <Text
+                    style={[
+                      styles.pillBtnText,
+                      isActive && styles.pillBtnTextActive,
+                    ]}
+                  >
+                    {tab}
+                  </Text>
+                </TouchableOpacity>
+              );
+            },
+          )}
+        </ScrollView>
       </View>
 
-      {/* ROUTE CARD (floating) */}
-      {selectedPerson && (
-        <View style={styles.routeCard}>
-          <View style={styles.routeLeft}>
-            <Text style={styles.routeLabel}>DISTANCE</Text>
-            <Text style={styles.routeValue}>{distance}</Text>
-          </View>
-          <View style={styles.routeDivider} />
-          <View style={styles.routeLeft}>
-            <Text style={styles.routeLabel}>ETA</Text>
-            <Text style={styles.routeValue}>{duration}</Text>
-          </View>
-          <View style={styles.routeDivider} />
-          <View style={styles.routeLeft}>
-            <View
-              style={[
-                styles.urgencyDot2,
-                { backgroundColor: URGENCY_COLORS[selectedPerson.urgency] },
-              ]}
-            />
-            <Text
-              style={[
-                styles.routeValue,
-                { fontSize: 11, color: URGENCY_COLORS[selectedPerson.urgency] },
-              ]}
-            >
-              {URGENCY_LABELS[selectedPerson.urgency]}
-            </Text>
-          </View>
-        </View>
-      )}
+      {/* TRAVEL MODE FLOATING BUTTONS STACK */}
+      <View
+        style={[
+          styles.travelModeContainer,
+          {
+            bottom: selectedPerson
+              ? Platform.OS === "ios"
+                ? 355
+                : 320
+              : Platform.OS === "ios"
+                ? 180
+                : 146,
+          },
+        ]}
+      >
+        {(["driving", "running", "walking"] as const).map((mode) => {
+          const isActive = travelMode === mode;
+          const renderModeIcon = () => {
+            const size = 18;
+            const color = isActive ? "#FFFFFF" : "#475569";
+            if (mode === "driving") return <Car size={size} color={color} />;
+            if (mode === "running") return <Zap size={size} color={color} />;
+            return <Footprints size={size} color={color} />;
+          };
 
-      {/* FLOATING TAB BUTTONS */}
-      <View style={styles.tabRow}>
-        {tabs.map((tab) => {
-          const isActive = activeTab === tab && modalVisible;
-          const count = TABS_DATA[tab].length;
           return (
             <TouchableOpacity
-              key={tab}
-              style={[styles.tabBtn, isActive && styles.tabBtnActive]}
-              onPress={() => handleTabPress(tab)}
-              activeOpacity={0.8}
+              key={mode}
+              style={[
+                styles.travelModeButton,
+                isActive && styles.travelModeButtonActive,
+              ]}
+              onPress={() => setTravelMode(mode)}
+              activeOpacity={0.85}
             >
-              <Text
-                style={[styles.tabBtnText, isActive && styles.tabBtnTextActive]}
-              >
-                {tab}
-              </Text>
-              <View
-                style={[styles.tabCount, isActive && styles.tabCountActive]}
-              >
-                <Text
-                  style={[
-                    styles.tabCountText,
-                    isActive && styles.tabCountTextActive,
-                  ]}
-                >
-                  {count}
-                </Text>
-              </View>
+              {renderModeIcon()}
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* BOTTOM SHEET MODAL */}
-      <BottomSheetModal
-        visible={modalVisible}
-        onClose={() => setModalVisible(false)}
-        activeTab={activeTab}
-        selectedPerson={selectedPerson}
-        onSelectPerson={(p) => {
-          setSelectedPerson(p);
-        }}
-        activeEmergency={activeEmergency}
-        onAcceptEmergency={(p) => {
-          globalState.activeEmergencyId = p.id;
-          setActiveEmergency(p);
-        }}
-        onCancelEmergency={() => {
-          globalState.activeEmergencyId = null;
-          setActiveEmergency(null);
-        }}
-        distance={distance}
-        duration={duration}
-      />
+      <TouchableOpacity
+        style={[
+          styles.recenterFloatButton,
+          {
+            bottom: selectedPerson
+              ? Platform.OS === "ios"
+                ? 295
+                : 260
+              : Platform.OS === "ios"
+                ? 120
+                : 86,
+          },
+        ]}
+        onPress={handleRecenter}
+        activeOpacity={0.85}
+      >
+        <Compass size={22} color={Colors.light.accent} />
+      </TouchableOpacity>
+
+      {/* FLOATING CARD OVERLAY (MapFloatingWindow Component) */}
+      {selectedPerson && (
+        <MapFloatingWindow
+          selectedPerson={selectedPerson}
+          activeEmergency={activeEmergency}
+          distance={distance}
+          duration={duration}
+          onClose={() => setSelectedPerson(null)}
+          onRespondToggle={handleRespondToggle}
+          onOpenDetails={handleOpenDetails}
+          travelMode={travelMode}
+        />
+      )}
     </View>
   );
 }
 
-// =====================================================
-// STYLES
-// =====================================================
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#0a0f1e",
+    backgroundColor: "#F8FAFC",
   },
-  topOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
+  headerSafeArea: {
+    backgroundColor: "#FFFFFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    zIndex: 10,
   },
-  header: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 58 : 32,
-    left: 20,
-    right: 20,
+  headerNavbar: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  headerEyebrow: {
-    color: "#4ECDC4",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 3,
-    marginBottom: 2,
+  headerIconButton: {
+    padding: 6,
   },
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 32,
-    fontWeight: "800",
+  headerTitleText: {
+    fontSize: 20,
+    fontFamily: typography.bold,
+    color: "#0F172A",
     letterSpacing: -0.5,
   },
-  headerRight: {
-    alignItems: "flex-end",
-    marginTop: 6,
+  notificationBellWrapper: {
+    padding: 6,
+    position: "relative",
   },
-  liveIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FF3B3B22",
-    borderWidth: 1,
-    borderColor: "#FF3B3B55",
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    gap: 5,
-  },
-  liveDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#FF3B3B",
-  },
-  liveText: {
-    color: "#FF3B3B",
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 2,
-  },
-  routeCard: {
+  bellRedDot: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 148 : 120,
-    left: 20,
-    right: 20,
-    backgroundColor: "rgba(10,15,30,0.75)",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-  },
-  routeLeft: {
-    flex: 1,
-    alignItems: "center",
-    gap: 4,
-  },
-  routeLabel: {
-    color: "#4a5568",
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 2,
-  },
-  routeValue: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  routeDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  urgencyDot2: {
+    top: 6,
+    right: 6,
     width: 8,
     height: 8,
     borderRadius: 4,
+    backgroundColor: "#EF4444",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
   },
-  tabRow: {
+  searchAndFiltersContainer: {
     position: "absolute",
-    bottom: 36,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    gap: 8,
+    top: Platform.OS === "ios" ? 54 : 36,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 16,
+    zIndex: 5,
   },
-  tabBtn: {
-    flex: 1,
+  searchBarWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "rgba(10,15,30,0.8)",
+    backgroundColor: "#FFFFFF",
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
-    paddingVertical: 12,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 12,
+    height: 48,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+    marginBottom: 8,
   },
-  tabBtnActive: {
-    backgroundColor: "#4ECDC4",
-    borderColor: "#4ECDC4",
+  searchInput: {
+    flex: 1,
+    fontSize: 14.5,
+    fontFamily: typography.regular,
+    color: "#0F172A",
+    height: "100%",
   },
-  tabBtnText: {
-    color: "rgba(255,255,255,0.7)",
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.3,
+  filterButton: {
+    paddingLeft: 8,
+    borderLeftWidth: 1,
+    borderLeftColor: "#E2E8F0",
+    justifyContent: "center",
+    height: 24,
   },
-  tabBtnTextActive: {
-    color: "#0a0f1e",
+  pillsScrollView: {
+    width: "100%",
   },
-  tabCount: {
-    backgroundColor: "rgba(255,255,255,0.1)",
-    borderRadius: 8,
-    paddingHorizontal: 5,
-    paddingVertical: 2,
+  pillsScrollContainer: {
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 4,
   },
-  tabCountActive: {
-    backgroundColor: "rgba(10,15,30,0.2)",
+  pillBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  tabCountText: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 9,
-    fontWeight: "800",
+  pillBtnActive: {
+    backgroundColor: "#af101a",
+    borderColor: "#af101a",
   },
-  tabCountTextActive: {
-    color: "#0a0f1e",
+  pillBtnText: {
+    fontSize: 13,
+    fontFamily: typography.semibold,
+    color: "#475569",
+  },
+  pillBtnTextActive: {
+    color: "#FFFFFF",
+  },
+  travelModeContainer: {
+    position: "absolute",
+    right: 16,
+    gap: 8,
+    zIndex: 4,
+  },
+  travelModeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  travelModeButtonActive: {
+    backgroundColor: "#af101a",
+    borderColor: "#af101a",
+  },
+  recenterFloatButton: {
+    position: "absolute",
+    right: 16,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    zIndex: 4,
   },
 });

@@ -2,8 +2,9 @@ import HomeButtonEmerg from "@/components/HomeButton";
 import HomeTabBar from "@/components/HomeTabBar";
 import ProfileComponent from "@/components/ProfileComponent";
 import PulsatingButton from "@/components/PulsatingButton";
-import Colors from "@/constants/Colors";
+import Colors, { DESIGN_COLORS } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
+import { useRouter } from "expo-router";
 import {
   MapPin,
   PhoneCall,
@@ -37,6 +38,7 @@ const tempUserData = [
   },
 ];
 const home = () => {
+  const router = useRouter();
   return (
     <SafeAreaView style={{ marginBottom: 20 }}>
       <HomeTabBar pageTitle="ResQ" />
@@ -112,14 +114,14 @@ const home = () => {
       <View style={{ margin: 16 }}>
         <View style={{ flexDirection: "row", gap: 8, marginVertical: 8 }}>
           <HomeButtonEmerg
-            buttonColor={"#00A8B3"}
+            buttonColor={DESIGN_COLORS.primary}
             subText="with contacts"
             text="Share location"
             Icon={<MapPin color={"green"} size={20} />}
             iconColor="#E1F5EE"
           />
           <HomeButtonEmerg
-            buttonColor={"#00A8B3"}
+            buttonColor={DESIGN_COLORS.primary}
             subText="Campus Security"
             text="Call security"
             Icon={<PhoneCall color={"#A32D2D"} size={20} />}
@@ -128,14 +130,18 @@ const home = () => {
         </View>
         <View style={{ flexDirection: "row", gap: 8 }}>
           <HomeButtonEmerg
-            buttonColor={"#00A8B3"}
+            buttonColor={DESIGN_COLORS.primary}
             subText="Non-urgent"
             text="Report incident"
             Icon={<TriangleAlert color={"#A2763E"} size={20} />}
             iconColor="#FAEEDA"
+            onPress={() => {
+              router.push("/report");
+              console.log("helloe");
+            }}
           />
           <HomeButtonEmerg
-            buttonColor={"#00A8B3"}
+            buttonColor={DESIGN_COLORS.primary}
             subText="Invite to network"
             text="Add responder"
             Icon={<UserRoundPlus color={"#185FA5"} size={20} />}

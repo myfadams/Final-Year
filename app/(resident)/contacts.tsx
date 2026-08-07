@@ -1,14 +1,15 @@
+import Contacts from "@/components/Contacts";
 import HomeTabBar from "@/components/HomeTabBar";
-import Colors, { ResQColors } from "@/constants/Colors";
+import Colors, {
+  randomColors,
+  ResQColors,
+  statusColors,
+} from "@/constants/Colors";
+import { ContactsProp } from "@/constants/interfaces";
+import { contactsData } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
-import {
-  MessageCircle,
-  Phone,
-  UserCheck,
-  UserPlus,
-  X,
-} from "lucide-react-native";
+import { Info, UserPlus, X } from "lucide-react-native";
 import React, { useState } from "react";
 import {
   Alert,
@@ -20,66 +21,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-
-// Contact interface
-interface Contact {
-  id: string;
-  initials: string;
-  name: string;
-  relationship: string;
-  status: "Available" | "Away" | "Offline";
-  statusColor: string;
-  avatarColor: string;
-  avatarTextColor: string;
-}
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 export default function ContactsScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
-  // Initial list of trusted contacts
-  const [contacts, setContacts] = useState<Contact[]>([
-    {
-      id: "1",
-      initials: "KC",
-      name: "Karen Castillo",
-      relationship: "Roommate",
-      status: "Available",
-      statusColor: "#22C55E",
-      avatarColor: "#FF6B6B",
-      avatarTextColor: "#FFFFFF",
-    },
-    {
-      id: "2",
-      initials: "AT",
-      name: "Alex Tan",
-      relationship: "RA (Republic Hall)",
-      status: "Away",
-      statusColor: "#F59E0B",
-      avatarColor: "#4ECDC4",
-      avatarTextColor: "#0F766E",
-    },
-    {
-      id: "3",
-      initials: "CS",
-      name: "Campus Security",
-      relationship: "Official Safety Dispatch",
-      status: "Available",
-      statusColor: "#22C55E",
-      avatarColor: "#3B7597",
-      avatarTextColor: "#FFFFFF",
-    },
-    {
-      id: "4",
-      initials: "MS",
-      name: "Maria Santos",
-      relationship: "Academic Advisor",
-      status: "Offline",
-      statusColor: "#9CA3AF",
-      avatarColor: "#A78BFA",
-      avatarTextColor: "#FFFFFF",
-    },
-  ]);
+  // Initial list of trusted contacts matching the mockup design
+  const [contacts, setContacts] = useState<ContactsProp[]>(contactsData);
 
   // Modal and form states
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -88,6 +40,9 @@ export default function ContactsScreen() {
   const [newStatus, setNewStatus] = useState<"Available" | "Away" | "Offline">(
     "Available",
   );
+  const [newCategory, setNewCategory] = useState<
+    "Family & Friends" | "Campus & Professional"
+  >("Family & Friends");
 
   const handleCallPress = (name: string) => {
     Alert.alert(
@@ -117,24 +72,10 @@ export default function ContactsScreen() {
       return;
     }
 
-    const randomColors = [
-      { bg: "#F87171", text: "#FFFFFF" },
-      { bg: "#60A5FA", text: "#FFFFFF" },
-      { bg: "#34D399", text: "#111827" },
-      { bg: "#FBBF24", text: "#78350F" },
-      { bg: "#C084FC", text: "#FFFFFF" },
-      { bg: "#F472B6", text: "#FFFFFF" },
-    ];
     const colorPair =
       randomColors[Math.floor(Math.random() * randomColors.length)];
 
-    const statusColors = {
-      Available: "#22C55E",
-      Away: "#F59E0B",
-      Offline: "#9CA3AF",
-    };
-
-    const newContact: Contact = {
+    const newContact: ContactsProp = {
       id: Date.now().toString(),
       initials: getInitials(newName),
       name: newName,
@@ -143,12 +84,17 @@ export default function ContactsScreen() {
       statusColor: statusColors[newStatus],
       avatarColor: colorPair.bg,
       avatarTextColor: colorPair.text,
+      category: newCategory,
+      verified: newCategory === "Campus & Professional", // default to verified if campus/pro
+      hasMessage: true,
+      hasLeftAccent: false,
     };
 
     setContacts((prev) => [...prev, newContact]);
     setNewName("");
     setNewRelationship("");
     setNewStatus("Available");
+    setNewCategory("Family & Friends");
     setAddModalVisible(false);
     Alert.alert(
       "Success",
@@ -156,7 +102,7 @@ export default function ContactsScreen() {
     );
   };
 
-  const handleDeleteContact = (id: string, name: string) => {
+  const handleDeleteContact = (id: string | number, name: string) => {
     Alert.alert(
       "Remove Contact",
       `Are you sure you want to remove ${name} from your trusted emergency contacts?`,
@@ -173,108 +119,100 @@ export default function ContactsScreen() {
     );
   };
 
+  const familyContacts = contacts.filter(
+    (c) => !c.category || c.category === "Family & Friends",
+  );
+  const professionalContacts = contacts.filter(
+    (c) => c.category === "Campus & Professional",
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Top Header Navigation */}
-      <HomeTabBar pageTitle="Contacts" />
-
+      <HomeTabBar pageTitle="Contacts" activePage="Contacts" />
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 150 + insets.bottom },
+        ]}
       >
+        {/* Info Banner */}
         <View style={styles.infoBanner}>
-          <UserCheck size={18} color="#1E40AF" />
+          <View style={styles.infoIconCircle}>
+            <Info size={13} color="#FFFFFF" strokeWidth={3} />
+          </View>
           <Text style={styles.infoText}>
             These contacts will be notified instantly if you trigger Emergency
             Mode / SOS broadcast.
           </Text>
         </View>
 
-        {/* Contacts List Card */}
-        <View style={styles.contactsCard}>
-          {contacts.map((contact, idx) => (
-            <View key={contact.id}>
-              <View style={styles.contactRowItem}>
-                {/* Avatar Wrapper */}
-                <View style={styles.avatarWrapper}>
-                  <View
-                    style={[
-                      styles.avatarBox,
-                      { backgroundColor: contact.avatarColor },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.avatarText,
-                        { color: contact.avatarTextColor },
-                      ]}
-                    >
-                      {contact.initials}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.statusIndicator,
-                      { backgroundColor: contact.statusColor },
-                    ]}
-                  />
-                </View>
+        {/* Family & Friends Section */}
+        {familyContacts.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionHeader}>Family & Friends</Text>
+            {familyContacts.map((contact, idx) => (
+              <Contacts
+                id={contact.id}
+                avatarColor={contact.avatarColor}
+                idx={idx}
+                name={contact.name}
+                initials={contact.initials}
+                status={contact.status}
+                avatarTextColor={contact.avatarTextColor}
+                relationship={contact.relationship}
+                statusColor={contact.statusColor}
+                category={contact.category}
+                verified={contact.verified}
+                hasLeftAccent={contact.hasLeftAccent}
+                hasMessage={contact.hasMessage}
+                handleCallPress={handleCallPress}
+                handleChatPress={handleChatPress}
+                handleDeleteContact={handleDeleteContact}
+                key={contact.id}
+              />
+            ))}
+          </View>
+        )}
 
-                {/* Info Wrapper */}
-                <View style={styles.contactInfo}>
-                  <Text style={styles.contactName}>{contact.name}</Text>
-                  <Text style={styles.contactRelationship}>
-                    {contact.relationship}
-                  </Text>
-                  <Text
-                    style={[styles.statusText, { color: contact.statusColor }]}
-                  >
-                    {contact.status}
-                  </Text>
-                </View>
-
-                {/* Actions */}
-                <View style={styles.actionRow}>
-                  <TouchableOpacity
-                    onPress={() => handleChatPress(contact.name)}
-                    style={styles.actionCircleButton}
-                  >
-                    <MessageCircle size={18} color={ResQColors.teal} />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => handleCallPress(contact.name)}
-                    style={styles.actionCircleButton}
-                  >
-                    <Phone size={18} color="#2563EB" />
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() =>
-                      handleDeleteContact(contact.id, contact.name)
-                    }
-                    style={[
-                      styles.actionCircleButton,
-                      styles.deleteActionButton,
-                    ]}
-                  >
-                    <X size={16} color={ResQColors.red} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-              {idx < contacts.length - 1 && <View style={styles.divider} />}
-            </View>
-          ))}
-        </View>
-
-        {/* Add Contact Trigger Button */}
-        <TouchableOpacity
-          onPress={() => setAddModalVisible(true)}
-          style={styles.primaryAddButton}
-          activeOpacity={0.8}
-        >
-          <UserPlus size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-          <Text style={styles.primaryAddButtonText}>Add Emergency Contact</Text>
-        </TouchableOpacity>
+        {/* Campus & Professional Section */}
+        {professionalContacts.length > 0 && (
+          <View style={[styles.sectionContainer, { marginTop: 12 }]}>
+            <Text style={styles.sectionHeader}>Campus & Professional</Text>
+            {professionalContacts.map((contact, idx) => (
+              <Contacts
+                id={contact.id}
+                avatarColor={contact.avatarColor}
+                idx={idx}
+                name={contact.name}
+                initials={contact.initials}
+                status={contact.status}
+                avatarTextColor={contact.avatarTextColor}
+                relationship={contact.relationship}
+                statusColor={contact.statusColor}
+                category={contact.category}
+                verified={contact.verified}
+                hasLeftAccent={contact.hasLeftAccent}
+                hasMessage={contact.hasMessage}
+                handleCallPress={handleCallPress}
+                handleChatPress={handleChatPress}
+                handleDeleteContact={handleDeleteContact}
+                key={contact.id}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
+
+      {/* Floating Add Contact Button (Circular FAB with only UserPlus icon) */}
+      <TouchableOpacity
+        onPress={() => setAddModalVisible(true)}
+        style={[styles.floatingAddButton, { bottom: 72 + insets.bottom + 20 }]}
+        activeOpacity={0.8}
+      >
+        <UserPlus size={24} color="#FFFFFF" />
+      </TouchableOpacity>
 
       {/* Add Contact Modal Form */}
       <Modal
@@ -310,6 +248,33 @@ export default function ContactsScreen() {
                 style={styles.input}
                 placeholderTextColor="#9CA3AF"
               />
+
+              <Text style={styles.inputLabel}>Category</Text>
+              <View style={styles.statusOptions}>
+                {(["Family & Friends", "Campus & Professional"] as const).map(
+                  (cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[
+                        styles.statusOptionButton,
+                        newCategory === cat &&
+                          styles.statusOptionButtonSelected,
+                      ]}
+                      onPress={() => setNewCategory(cat)}
+                    >
+                      <Text
+                        style={[
+                          styles.statusOptionText,
+                          newCategory === cat &&
+                            styles.statusOptionTextSelected,
+                        ]}
+                      >
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ),
+                )}
+              </View>
 
               <Text style={styles.inputLabel}>Initial Availability Status</Text>
               <View style={styles.statusOptions}>
@@ -352,156 +317,104 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginBottom: 20,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.light.background,
   },
-  header: {
+  customHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderColor: "#E5E7EB",
+    backgroundColor: Colors.light.background,
   },
-  backButton: {
-    padding: 4,
+  headerButton: {
+    padding: 6,
+    position: "relative",
   },
-  addButton: {
-    padding: 4,
+  headerBellBadge: {
+    position: "absolute",
+    top: 5,
+    right: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.light.accent,
+    borderWidth: 1.5,
+    borderColor: Colors.light.background,
   },
-  headerTitle: {
-    fontSize: 18,
+  headerTitleContainer: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+  },
+  headerTitleText: {
+    fontSize: 24,
     fontFamily: typography.bold,
-    color: Colors.light.text,
+    color: "#000000",
+  },
+  headerTitleDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.light.accent,
+    marginLeft: 2,
+    marginBottom: 6,
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 110, //note
+    paddingVertical: 10,
+    paddingBottom: 170,
   },
   infoBanner: {
     flexDirection: "row",
-    backgroundColor: "#EFF6FF",
-    borderWidth: 1,
-    borderColor: "#BFDBFE",
-    borderRadius: 12,
-    padding: 12,
-    alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
-  },
-  infoText: {
-    fontSize: 12.5,
-    fontFamily: typography.medium,
-    color: "#1E40AF",
-    flex: 1,
-    lineHeight: 16,
-  },
-  contactsCard: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: "#EEF1FC",
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  contactRowItem: {
-    flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 6,
+    gap: 12,
+    marginBottom: 20,
   },
-  avatarWrapper: {
-    position: "relative",
-  },
-  avatarBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    fontSize: 16,
-    fontFamily: typography.bold,
-  },
-  statusIndicator: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
-  },
-  contactInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  contactName: {
-    fontSize: 14.5,
-    fontFamily: typography.bold,
-    color: Colors.light.text,
-  },
-  contactRelationship: {
-    fontSize: 12,
-    fontFamily: typography.regular,
-    color: Colors.light.textMuted,
-    marginTop: 1,
-  },
-  statusText: {
-    fontSize: 10.5,
-    fontFamily: typography.bold,
-    marginTop: 2,
-  },
-  actionRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  actionCircleButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FFFFFF",
-  },
-  deleteActionButton: {
-    borderColor: "#FEE2E2",
-    backgroundColor: "#FEF2F2",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#F3F4F6",
-    marginVertical: 12,
-  },
-  primaryAddButton: {
-    flexDirection: "row",
+  infoIconCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: Colors.light.accent,
-    borderRadius: 12,
-    paddingVertical: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  infoText: {
+    fontSize: 13,
+    fontFamily: typography.medium,
+    color: "#4B5563",
+    flex: 1,
+    lineHeight: 18,
+  },
+  sectionContainer: {
+    marginBottom: 16,
+  },
+  sectionHeader: {
+    fontSize: 12.5,
+    fontFamily: typography.bold,
+    color: "#78716C",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+    marginBottom: 12,
+    marginLeft: 4,
+  },
+  floatingAddButton: {
+    position: "absolute",
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.light.accent,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 24,
     shadowColor: Colors.light.accent,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  primaryAddButtonText: {
-    fontSize: 15,
-    fontFamily: typography.semibold,
-    color: "#FFFFFF",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    elevation: 6,
+    zIndex: 10,
   },
   modalOverlay: {
     flex: 1,
@@ -510,12 +423,12 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 32,
-    maxHeight: "80%",
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: "85%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -526,43 +439,43 @@ const styles = StyleSheet.create({
     borderColor: "#F3F4F6",
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: typography.bold,
     color: Colors.light.text,
   },
   modalForm: {
-    paddingTop: 16,
+    paddingTop: 20,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 13.5,
     fontFamily: typography.semibold,
     color: Colors.light.text,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 14.5,
     fontFamily: typography.regular,
     color: Colors.light.text,
-    marginBottom: 16,
+    marginBottom: 20,
     backgroundColor: "#F9FAFB",
   },
   statusOptions: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 24,
+    marginBottom: 20,
     gap: 8,
   },
   statusOptionButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
-    borderRadius: 10,
-    paddingVertical: 10,
+    borderColor: "#E5E7EB",
+    borderRadius: 12,
+    paddingVertical: 12,
     alignItems: "center",
     backgroundColor: "#FFFFFF",
   },
@@ -581,10 +494,16 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: Colors.light.accent,
-    borderRadius: 12,
+    borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 10,
+    shadowColor: Colors.light.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 3,
   },
   saveButtonText: {
     fontSize: 15,

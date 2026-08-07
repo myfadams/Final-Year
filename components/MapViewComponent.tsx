@@ -2,9 +2,50 @@ import { Person } from "@/constants/interfaces";
 import { PEOPLE } from "@/constants/tempData";
 import axios from "axios";
 import * as Location from "expo-location";
+import { BriefcaseMedical, Flame, Shield } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
+
+// Helper to resolve incident category type
+const getIncidentType = (person: Person): "medical" | "fire" | "security" => {
+  const desc = (person.description || "").toLowerCase();
+  const name = (person.name || "").toLowerCase();
+  if (
+    desc.includes("fire") ||
+    desc.includes("smoke") ||
+    desc.includes("spark") ||
+    desc.includes("electric") ||
+    name.includes("fire")
+  ) {
+    return "fire";
+  }
+  if (
+    desc.includes("suspicious") ||
+    desc.includes("security") ||
+    desc.includes("theft") ||
+    desc.includes("loiter") ||
+    name.includes("security") ||
+    name.includes("loiter")
+  ) {
+    return "security";
+  }
+  return "medical";
+};
+
+// Helper to resolve icon and color
+const getIncidentIconInfo = (person: Person) => {
+  const type = getIncidentType(person);
+  switch (type) {
+    case "fire":
+      return { Icon: Flame, color: "#F59E0B" };
+    case "security":
+      return { Icon: Shield, color: "#1976D2" };
+    case "medical":
+    default:
+      return { Icon: BriefcaseMedical, color: "#FF3B30" };
+  }
+};
 
 // =====================================================
 // CONFIG
@@ -130,6 +171,9 @@ interface MapViewComponentProps {
   onSelectPerson: (p: Person) => void;
   onRouteCalculated?: (distance: string, duration: string) => void;
   recenterNonce?: string;
+  categoryFilter?: string; // category filter state passed from parent
+  searchQuery?: string; // search query string passed from parent
+  travelMode?: "driving" | "running" | "walking"; // travel mode passed from parent
 }
 
 const MapViewComponent: React.FC<MapViewComponentProps> = ({
@@ -138,6 +182,9 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   onSelectPerson,
   onRouteCalculated,
   recenterNonce,
+  categoryFilter,
+  searchQuery,
+  travelMode = "running",
 }) => {
   const [location, setLocation] = useState<any>(null);
   const [victimLocation, setVictimLocation] = useState<any>(null);
@@ -257,7 +304,16 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
       const summary = feature.properties.summary;
       const distanceVal = `${(summary.distance / 1000).toFixed(1)} km`;
-      const durationVal = `${Math.ceil(summary.duration / 60)} min`;
+
+      // Calculate duration dynamically based on travel mode
+      let durationFactor = 1.0;
+      if (travelMode === "driving")
+        durationFactor = 0.5; // driving is faster than standard ORS
+      else if (travelMode === "running") durationFactor = 1.6;
+      else if (travelMode === "walking") durationFactor = 4.0;
+
+      const durationVal = `${Math.ceil((summary.duration * durationFactor) / 60)} min`;
+
       setDistance(distanceVal);
       setDuration(durationVal);
       onRouteCalculated?.(distanceVal, durationVal);
@@ -276,7 +332,14 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           ? `${Math.round(roadDistance)} m`
           : `${(roadDistance / 1000).toFixed(1)} km`;
 
-      const seconds = roadDistance / 5.0; // speed: 5 m/s (~18 km/h)
+      let speed = 4.5; // default for running speed
+      if (travelMode === "driving")
+        speed = 12.0; // driving ~43 km/h
+      else if (travelMode === "running")
+        speed = 4.5; // running ~16 km/h
+      else if (travelMode === "walking") speed = 1.4; // walking ~5 km/h
+
+      const seconds = roadDistance / speed;
       const durationVal = `${Math.max(1, Math.ceil(seconds / 60))} min`;
 
       setDistance(distanceVal);
@@ -289,7 +352,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     }
   };
 
-  // Recalculate route whenever user location, activeEmergency or selectedPerson changes
+  // Recalculate route whenever user location, activeEmergency, selectedPerson or travelMode changes
   useEffect(() => {
     if (!location) return;
 
@@ -306,7 +369,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       latitude: target.latitude,
       longitude: target.longitude,
     });
-  }, [location, adjustedActiveEmergency, adjustedSelectedPerson]);
+  }, [location, adjustedActiveEmergency, adjustedSelectedPerson, travelMode]);
 
   // Handle active emergency victim position updates and jitter simulation
   useEffect(() => {
@@ -435,12 +498,27 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         latitudeDelta: 0.025,
         longitudeDelta: 0.025,
       }}
-      customMapStyle={darkMapStyle}
+      customMapStyle={silverMapStyle}
       showsUserLocation={false}
     >
       {/* All Emergency Markers (Filtered to within 800m / near you) */}
       {adjustedPeople
         .filter((p) => {
+          // Filter by category filter pill if set
+          if (categoryFilter && categoryFilter !== "All") {
+            const resolvedType = getIncidentType(p);
+            if (resolvedType !== categoryFilter.toLowerCase()) return false;
+          }
+          // Filter by search query if set
+          if (searchQuery) {
+            const query = searchQuery.toLowerCase();
+            const nameMatch = p.name.toLowerCase().includes(query);
+            const addrMatch = p.address.toLowerCase().includes(query);
+            const descMatch = (p.description || "")
+              .toLowerCase()
+              .includes(query);
+            if (!nameMatch && !addrMatch && !descMatch) return false;
+          }
           if (!location) return true;
           const dist = getDistanceInMeters(
             location.latitude,
@@ -456,7 +534,15 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         })
         .map((p) => {
           const isActive = adjustedActiveEmergency?.id === p.id;
+          const isSelected = adjustedSelectedPerson?.id === p.id;
           const currentLoc = isActive && victimLocation ? victimLocation : p;
+
+          const iconInfo = getIncidentIconInfo(p);
+          const ActiveIcon = iconInfo.Icon;
+
+          // Format label text (shorten it slightly for neat visualization)
+          const shortLabel =
+            p.name.length > 22 ? p.name.substring(0, 19) + "..." : p.name;
 
           return (
             <Marker
@@ -468,20 +554,38 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
               anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => onSelectPerson(p)}
             >
-              <View style={mapStyles.responderWrapper}>
-                {isActive && <PulseRing color={p.avatarColor} />}
+              <View style={mapStyles.victimWrapper}>
+                {/* Custom Pulse Ring for active response alerts */}
+                {isActive && <PulseRing color={iconInfo.color} />}
+
+                {/* Circular Badge Marker matching high-fidelity mockup */}
                 <View
                   style={[
-                    mapStyles.victimCore,
+                    mapStyles.customMarkerCircle,
                     {
-                      backgroundColor: p.avatarColor,
-                      transform: [{ scale: isActive ? 1.1 : 0.9 }],
-                      borderWidth: isActive ? 3 : 2,
-                      borderColor: isActive ? "#ffffff" : "#0a0f1e",
+                      backgroundColor: iconInfo.color,
+                      transform: [
+                        { scale: isActive || isSelected ? 1.15 : 0.95 },
+                      ],
+                      borderColor:
+                        isActive || isSelected
+                          ? "#FFFFFF"
+                          : "rgba(255, 255, 255, 0.8)",
+                      borderWidth: isActive || isSelected ? 2.5 : 1.5,
                     },
                   ]}
                 >
-                  <Text style={{ fontSize: isActive ? 18 : 14 }}>🆘</Text>
+                  <ActiveIcon
+                    size={isActive || isSelected ? 16 : 13}
+                    color="#FFFFFF"
+                  />
+                </View>
+
+                {/* Text Label below Marker matching mockup */}
+                <View style={mapStyles.markerLabelContainer}>
+                  <Text style={mapStyles.markerLabelText} numberOfLines={1}>
+                    {shortLabel}
+                  </Text>
                 </View>
               </View>
             </Marker>
@@ -505,13 +609,13 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         <>
           <Polyline
             coordinates={routeCoords}
-            strokeWidth={12}
-            strokeColor="rgba(78,205,196,0.15)"
+            strokeWidth={10}
+            strokeColor="rgba(175, 16, 26, 0.12)"
           />
           <Polyline
             coordinates={routeCoords}
             strokeWidth={4}
-            strokeColor="#4ECDC4"
+            strokeColor="#af101a"
           />
         </>
       )}
@@ -522,51 +626,46 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 export default MapViewComponent;
 
 // =====================================================
-// DARK MAP STYLE
+// SILVER MAP STYLE (Light Theme)
 // =====================================================
-const darkMapStyle = [
-  { elementType: "geometry", stylers: [{ color: "#0a0f1e" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#4a5568" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0a0f1e" }] },
+const silverMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#E2E8F0" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#F8FAFC" }] },
   {
     featureType: "road",
     elementType: "geometry",
-    stylers: [{ color: "#1a2035" }],
+    stylers: [{ color: "#FFFFFF" }],
   },
   {
-    featureType: "road.arterial",
+    featureType: "road.local",
     elementType: "geometry",
-    stylers: [{ color: "#1e2a42" }],
+    stylers: [{ color: "#FFFFFF" }],
   },
   {
     featureType: "road.highway",
     elementType: "geometry",
-    stylers: [{ color: "#243050" }],
-  },
-  {
-    featureType: "road.highway",
-    elementType: "geometry.stroke",
-    stylers: [{ color: "#2d3a5c" }],
+    stylers: [{ color: "#CBD5E1" }],
   },
   {
     featureType: "water",
     elementType: "geometry",
-    stylers: [{ color: "#0d1a2e" }],
-  },
+    stylers: [{ color: "#93C5FD" }],
+  }, // soft light blue
   {
     featureType: "poi",
     elementType: "geometry",
-    stylers: [{ color: "#0e1525" }],
+    stylers: [{ color: "#E2E8F0" }],
   },
   {
     featureType: "transit",
     elementType: "geometry",
-    stylers: [{ color: "#12192e" }],
+    stylers: [{ color: "#E2E8F0" }],
   },
   {
     featureType: "landscape",
     elementType: "geometry",
-    stylers: [{ color: "#0c1220" }],
+    stylers: [{ color: "#F1F5F9" }],
   },
 ];
 
@@ -581,19 +680,50 @@ const mapStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#4ECDC4",
+    backgroundColor: "#af101a", // change to brand ResQ Red!
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,
-    borderColor: "#0a0f1e",
+    borderColor: "#FFFFFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
   },
-  victimCore: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  victimWrapper: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customMarkerCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 3,
-    borderColor: "#0a0f1e",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  markerLabelContainer: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 1.5,
+    elevation: 1,
+  },
+  markerLabelText: {
+    fontSize: 9,
+    fontFamily: "Inter_600SemiBold",
+    color: "#0F172A",
   },
 });

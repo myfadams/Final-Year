@@ -1,4 +1,4 @@
-import Colors, { ResQColors } from "@/constants/Colors";
+import { ResQColors } from "@/constants/Colors";
 import React from "react";
 import { Text, View } from "react-native";
 interface AlertProp {
@@ -19,16 +19,16 @@ const AlertCasesComponent: React.FC<AlertProp> = ({
         paddingVertical: 12,
         justifyContent: "center",
         alignItems: "center",
-        borderWidth: 1,
-        borderColor: ResQColors.border,
-        borderRadius: 8,
+        borderWidth: 3,
+        // borderColor: ResQColors.border,
+        borderColor: color,
+        borderRadius: 10,
         flex: 1,
+        boxSizing: "border-box",
       }}
     >
       <Text style={{ color: color, fontSize: 24 }}>{caseNumber}</Text>
-      <Text style={{ color: Colors.light.textMuted, fontSize: 13 }}>
-        {text}
-      </Text>
+      <Text style={{ color: color, fontSize: 13 }}>{text}</Text>
     </View>
   );
 };

@@ -33,6 +33,9 @@ export default function RootLayout() {
       <Stack.Screen name="(resident)" />
       <Stack.Screen name="(admin)" />
       <Stack.Screen name="settingsPage" />
+      <Stack.Screen name="profile" />
+      <Stack.Screen name="report" />
+      <Stack.Screen name="incidentsDetails" />
     </Stack>
   );
 }

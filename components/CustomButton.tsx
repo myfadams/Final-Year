@@ -1,10 +1,15 @@
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import React from "react";
-import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
+import {
+  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+  View
+} from "react-native";
 interface CustomButtonProps {
   text: String;
-  onPress?: () => void;
+  onPress?: (...args: any[]) => void;
   isLoading?: boolean;
   disabled?: boolean;
   Icon?: React.ReactNode;

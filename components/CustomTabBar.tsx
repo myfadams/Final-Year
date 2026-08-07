@@ -1,7 +1,12 @@
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
-import { Image } from "expo-image";
-import { House, MapPin, Megaphone, Users } from "lucide-react-native";
+import {
+  House,
+  MapPin,
+  Megaphone,
+  Newspaper,
+  Users,
+} from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -77,7 +82,7 @@ const TabButton: React.FC<TabButtonProps> = ({
           styles.tabLabel,
           {
             color: tintColor,
-            fontFamily: isFocused ? typography.bold : typography.medium,
+            fontFamily: isFocused ? typography.semibold : typography.medium,
             fontSize: isFocused ? 10.5 : 10,
           },
         ]}
@@ -156,27 +161,16 @@ export default function CustomTabBar({ state, descriptors, navigation }: any) {
           );
         case "contacts":
           return <Users size={size} color={color} strokeWidth={strokeWidth} />;
-        case "profile":
+        case "news":
           return (
-            <View
-              style={[
-                styles.avatarWrapper,
-                focused && styles.activeAvatarWrapper,
-              ]}
-            >
-              <Image
-                source={require("../designs/profile.png")}
-                style={styles.avatarImage}
-                contentFit="cover"
-              />
-            </View>
+            <Newspaper size={size} color={color} strokeWidth={strokeWidth} />
           );
         default:
           return <House size={size} color={color} strokeWidth={strokeWidth} />;
       }
     };
 
-    const activeColor = Colors.light.accent; // #00B7B5 (vibrant teal)
+    const activeColor = Colors.light.primary; // #af101a (primary branding red)
     const inactiveColor = "#8A9A9D";
     const tintColor = isFocused ? activeColor : inactiveColor;
 
@@ -266,8 +260,8 @@ export default function CustomTabBar({ state, descriptors, navigation }: any) {
               x2="100%"
               y2="100%"
             >
-              <Stop offset="0%" stopColor="#00E5E1" />
-              <Stop offset="100%" stopColor="#009F9C" />
+              <Stop offset="0%" stopColor="#FF8E8E" />
+              <Stop offset="100%" stopColor="#af101a" />
             </LinearGradient>
           </Defs>
           <Circle
@@ -292,7 +286,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: any) {
         <View style={styles.centerSpacer} />
 
         {renderTab("contacts", "Contacts", 3)}
-        {renderTab("profile", "Profile", 4)}
+        {renderTab("news", "News", 4)}
       </View>
     </View>
   );
@@ -400,7 +394,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   activeAvatarWrapper: {
-    borderColor: "#00B7B5",
+    borderColor: Colors.light.primary,
     borderWidth: 1.5,
   },
   avatarImage: {

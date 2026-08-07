@@ -12,6 +12,20 @@ export interface Person {
   requesterDesc?: string;
   knownHealthProblems?: string[];
 }
+export interface ContactsProp {
+  id: string | number;
+  initials: string;
+  name: string;
+  relationship: string;
+  status: string;
+  statusColor: string;
+  avatarColor: string;
+  avatarTextColor: string;
+  category?: string;
+  verified?: boolean;
+  hasLeftAccent?: boolean;
+  hasMessage?: boolean;
+}
 export interface HomeButton {
   Icon: React.ReactNode;
   text: string;
@@ -21,7 +35,11 @@ export interface HomeButton {
   iconColor: string;
   onPress?: () => void;
 }
-
+export const URGENCY_LABELS = {
+  critical: "CRITICAL",
+  high: "HIGH",
+  medium: "MEDIUM",
+};
 export interface caseProp {
   id: string | number;
   title: string;
@@ -37,4 +55,18 @@ export interface caseProp {
   creatorID: string;
   falseAlarm: boolean;
   responseTime: number;
+}
+
+export interface Article {
+  id: string;
+  title: string;
+  category: "ADVISORY" | "OFFICIAL" | "COMMUNITY";
+  categoryColor: string;
+  categoryBg: string;
+  publisher: string;
+  time: string;
+  image: string;
+  leftAccent?: string;
+  isFeatured?: boolean;
+  content: string;
 }

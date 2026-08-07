@@ -1,129 +1,201 @@
-const tintColorLight = "#1E40AF";
-const tintColorDark = "#4F7DF3";
+//
+
+const tintColorLight = "#af101a"; // Primary Brand color (Emergency Red style)
+const tintColorDark = "#ffb3ac"; // Inverse Primary Brand color
+
+export const DESIGN_COLORS = {
+  surface: "#f9f9ff",
+  surfaceDim: "#cfdaf2",
+  surfaceBright: "#f9f9ff",
+  surfaceContainerLowest: "#ffffff",
+  surfaceContainerLow: "#f0f3ff",
+  surfaceContainer: "#e7eeff",
+  surfaceContainerHigh: "#dee8ff",
+  surfaceContainerHighest: "#d8e3fb",
+  onSurface: "#111c2d",
+  onSurfaceVariant: "#5b403d",
+  inverseSurface: "#263143",
+  inverseOnSurface: "#ecf1ff",
+  outline: "#8f6f6c",
+  outlineVariant: "#e4beba",
+  surfaceTint: "#ba1a20",
+  primary: "#af101a",
+  onPrimary: "#ffffff",
+  primaryContainer: "#d32f2f",
+  onPrimaryContainer: "#fff2f0",
+  inversePrimary: "rgba(175, 16, 26, 0.05)",
+  secondary: "#964900",
+  onSecondary: "#ffffff",
+  secondaryContainer: "#fc820c",
+  onSecondaryContainer: "#5e2c00",
+  tertiary: "#0058a2",
+  onTertiary: "#ffffff",
+  tertiaryContainer: "#0770cc",
+  onTertiaryContainer: "#f0f4ff",
+  error: "#ba1a1a",
+  onError: "#ffffff",
+  errorContainer: "#ffdad6",
+  onErrorContainer: "#93000a",
+  primaryFixed: "#ffdad6",
+  primaryFixedDim: "#ffb3ac",
+  onPrimaryFixed: "#410003",
+  onPrimaryFixedVariant: "#930010",
+  secondaryFixed: "#ffdcc6",
+  secondaryFixedDim: "#ffb786",
+  onSecondaryFixed: "#311300",
+  onSecondaryFixedVariant: "#723600",
+  tertiaryFixed: "#d4e3ff",
+  tertiaryFixedDim: "#a5c8ff",
+  onTertiaryFixed: "#001c3a",
+  onTertiaryFixedVariant: "#004786",
+  background: "#f9f9ff",
+  onBackground: "#111c2d",
+  surfaceVariant: "#d8e3fb",
+  emergencyRed: "#D32F2F",
+  warningAmber: "#F57C00",
+  safetyBlue: "#1976D2",
+  slate900: "#0F172A",
+  slate50: "#F8FAFC",
+  successGreen: "#2E7D32",
+} as const;
 
 export default {
   light: {
     // Backgrounds
-    background: "#F4F4F4",
-    card: "#FFFFFF",
-    surface: "#EDEDED",
-    border: "#D1D5DB",
+    background: DESIGN_COLORS.background,
+    card: DESIGN_COLORS.surfaceContainerLowest,
+    surface: DESIGN_COLORS.surface,
+    border: DESIGN_COLORS.outlineVariant,
 
     // Brand
-    primary: "#018790", // main action color
-    primaryDark: "#005461", // headers, emphasis
-    accent: "#00B7B5", // highlights / FAB
+    primary: DESIGN_COLORS.primary,
+    primaryDark: DESIGN_COLORS.surfaceTint,
+    accent: DESIGN_COLORS.emergencyRed,
 
     // Text
-    text: "#005461",
-    textMuted: "#6B7280",
-    textInverse: "#FFFFFF",
+    text: DESIGN_COLORS.onSurface,
+    textMuted: DESIGN_COLORS.outline,
+    textInverse: DESIGN_COLORS.onPrimary,
 
-    // Status (balanced to fit teal palette)
-    success: "#1BAA83",
-    warning: "#F59E0B",
-    error: "#DC2626",
-    info: "#00B7B5",
+    // Status
+    success: DESIGN_COLORS.successGreen,
+    warning: DESIGN_COLORS.warningAmber,
+    error: DESIGN_COLORS.error,
+    info: DESIGN_COLORS.safetyBlue,
 
     // Tabs / Icons
-    tabIconDefault: "#9CA3AF",
-    tabIconSelected: "#018790",
+    tabIconDefault: DESIGN_COLORS.outline,
+    tabIconSelected: DESIGN_COLORS.primary,
   },
   URGENCY_COLORS: {
-    critical: "#FF3B3B",
-    high: "#FF9500",
-    medium: "#34C759",
+    critical: DESIGN_COLORS.emergencyRed,
+    high: DESIGN_COLORS.warningAmber,
+    medium: DESIGN_COLORS.safetyBlue,
   },
   URGENCY_BACKGROUND: {
-    critical: "#DECACA",
-    high: "#FAEEDA",
-    medium: "#E1F5EE",
+    critical: DESIGN_COLORS.errorContainer,
+    high: DESIGN_COLORS.secondaryFixed,
+    medium: DESIGN_COLORS.tertiaryFixed,
   },
   dark: {
     /* ───────────── Backgrounds & Surfaces ───────────── */
-    background: "#030712", // deep blue-black
-    card: "#0B1220",
-    surface: "#111827",
-    border: "#1F2937",
+    background: DESIGN_COLORS.slate900,
+    card: DESIGN_COLORS.inverseSurface,
+    surface: DESIGN_COLORS.inverseSurface,
+    border: DESIGN_COLORS.outline,
 
     /* ───────────── Brand / Primary ───────────── */
-    primary: "#4F7DF3", // soft electric blue
-    primarySoft: "#1E3A8A",
+    primary: DESIGN_COLORS.inversePrimary,
+    primarySoft: DESIGN_COLORS.onPrimaryFixedVariant,
     tint: tintColorDark,
 
     /* ───────────── Secondary / Positive ───────────── */
-    secondary: "#22C55E",
-    secondarySoft: "#14532D",
+    secondary: DESIGN_COLORS.secondaryFixedDim,
+    secondarySoft: DESIGN_COLORS.onSecondaryFixedVariant,
 
     /* ───────────── Text ───────────── */
-    text: "#F9FAFB",
-    textMuted: "#9CA3AF",
-    textSubtle: "#6B7280",
-    textInverse: "#030712",
+    text: DESIGN_COLORS.surfaceBright,
+    textMuted: DESIGN_COLORS.surfaceDim,
+    textSubtle: DESIGN_COLORS.outline,
+    textInverse: DESIGN_COLORS.onSurface,
 
     /* ───────────── Status / Alerts ───────────── */
-    success: "#22C55E",
-    warning: "#F59E0B",
-    error: "#F87171",
-    info: "#38BDF8",
+    success: DESIGN_COLORS.successGreen,
+    warning: DESIGN_COLORS.warningAmber,
+    error: DESIGN_COLORS.error,
+    info: DESIGN_COLORS.safetyBlue,
 
     /* ───────────── Tabs / Icons ───────────── */
-    tabIconDefault: "#6B7280",
+    tabIconDefault: DESIGN_COLORS.surfaceDim,
     tabIconSelected: tintColorDark,
   },
 };
+
 export const ResQColors = {
   // Surfaces
-  pageBg: "#F5F5F3",
-  cardSurface: "#FFFFFF",
-  inputSurface: "#F5F5F3",
-  border: "#E8E6E0",
-  borderStrong: "#D3D1C7",
+  pageBg: DESIGN_COLORS.background,
+  cardSurface: DESIGN_COLORS.surfaceContainerLowest,
+  inputSurface: DESIGN_COLORS.surfaceContainerLow,
+  border: DESIGN_COLORS.outlineVariant,
+  borderStrong: DESIGN_COLORS.outline,
 
   // Text
-  textPrimary: "#1A1A1A",
-  textSecondary: "#5F5E5A",
-  textMuted: "#888780",
-  textFaint: "#B4B2A9",
+  textPrimary: DESIGN_COLORS.onSurface,
+  textSecondary: DESIGN_COLORS.onSurfaceVariant,
+  textMuted: DESIGN_COLORS.outline,
+  textFaint: DESIGN_COLORS.outlineVariant,
 
-  // Brand
-  teal: "#1D9E75",
-  tealDark: "#0F6E56",
-  tealDeep: "#085041",
-  tealLight: "#E1F5EE",
+  // Brand (Mapped from teal to Primary Red Incidents Theme)
+  teal: DESIGN_COLORS.primary,
+  tealDark: DESIGN_COLORS.surfaceTint,
+  tealDeep: DESIGN_COLORS.onPrimaryFixed,
+  tealLight: DESIGN_COLORS.primaryFixed,
 
   // Critical / danger
-  red: "#E24B4A",
-  redDark: "#A32D2D",
-  redDeeper: "#791F1F",
-  redLight: "#FCEBEB",
-  redBorder: "#F09595",
+  red: DESIGN_COLORS.emergencyRed,
+  redDark: DESIGN_COLORS.onPrimaryFixedVariant,
+  redDeeper: DESIGN_COLORS.onPrimaryFixed,
+  redLight: DESIGN_COLORS.errorContainer,
+  redBorder: DESIGN_COLORS.outlineVariant,
 
   // Moderate / warning
-  amber: "#EF9F27",
-  amberDark: "#854F0B",
-  amberDeeper: "#633806",
-  amberLight: "#FAEEDA",
-  amberBorder: "#FAC775",
+  amber: DESIGN_COLORS.warningAmber,
+  amberDark: DESIGN_COLORS.onSecondaryFixedVariant,
+  amberDeeper: DESIGN_COLORS.onSecondaryFixed,
+  amberLight: DESIGN_COLORS.secondaryFixed,
+  amberBorder: DESIGN_COLORS.secondaryFixedDim,
 
   // Low / resolved
-  green: "#639922",
-  greenDark: "#3B6D11",
-  greenDeeper: "#27500A",
-  greenLight: "#EAF3DE",
-  greenBorder: "#C0DD97",
+  green: DESIGN_COLORS.successGreen,
+  greenDark: DESIGN_COLORS.onTertiaryFixedVariant,
+  greenDeeper: DESIGN_COLORS.onTertiaryFixed,
+  greenLight: DESIGN_COLORS.tertiaryFixed,
+  greenBorder: DESIGN_COLORS.outlineVariant,
 
   // Avatar tints
-  avatarTeal: "#E1F5EE",
-  avatarBlue: "#E6F1FB",
-  avatarAmber: "#FAEEDA",
-  avatarGray: "#F1EFE8",
+  avatarTeal: DESIGN_COLORS.primaryFixed,
+  avatarBlue: DESIGN_COLORS.tertiaryFixed,
+  avatarAmber: DESIGN_COLORS.secondaryFixed,
+  avatarGray: DESIGN_COLORS.surfaceDim,
 
   // Avatar text (on their tints)
-  avatarTealText: "#085041",
-  avatarBlueText: "#0C447C",
-  avatarAmberText: "#633806",
-  avatarGrayText: "#444441",
+  avatarTealText: DESIGN_COLORS.onPrimaryFixed,
+  avatarBlueText: DESIGN_COLORS.onTertiaryFixed,
+  avatarAmberText: DESIGN_COLORS.onSecondaryFixed,
+  avatarGrayText: DESIGN_COLORS.onSurface,
 } as const;
+export const statusColors = {
+  Available: "#22C55E",
+  Away: "#F59E0B",
+  Offline: "#9CA3AF",
+};
 
+export const randomColors = [
+  { bg: "#F87171", text: "#FFFFFF" },
+  { bg: "#60A5FA", text: "#FFFFFF" },
+  { bg: "#34D399", text: "#111827" },
+  { bg: "#FBBF24", text: "#78350F" },
+  { bg: "#C084FC", text: "#FFFFFF" },
+  { bg: "#F472B6", text: "#FFFFFF" },
+];
 export type ResQColor = (typeof ResQColors)[keyof typeof ResQColors];

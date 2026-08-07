@@ -1,6 +1,5 @@
 import CustomTabBar from "@/components/CustomTabBar";
 import { Tabs } from "expo-router";
-// import CustomTabBar from "@/components/CustomTabBar";
 
 export default function ResidentLayout() {
   return (
@@ -39,9 +38,9 @@ export default function ResidentLayout() {
       />
 
       <Tabs.Screen
-        name="profile"
+        name="news"
         options={{
-          title: "Profile",
+          title: "News",
         }}
       />
     </Tabs>

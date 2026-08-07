@@ -9,9 +9,11 @@ const HomeButtonEmerg: React.FC<HomeButton> = ({
   buttonColor,
   subText,
   iconColor,
+  onPress,
 }) => {
   return (
     <TouchableOpacity
+      onPress={onPress}
       style={{
         backgroundColor: buttonColor,
         flexDirection: "row",
