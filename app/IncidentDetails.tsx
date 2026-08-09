@@ -13,6 +13,7 @@ import {
   Check,
   Clock,
   Flame,
+  Footprints,
   Info,
   MapPin,
   MessageSquare,
@@ -587,14 +588,7 @@ export default function IncidentDetailScreen() {
                         </View>
                       ) : resp.status === "2 mins away" ? (
                         <View style={styles.statusLabelContainer}>
-                          <Text
-                            style={[
-                              styles.runningIconText,
-                              { color: resp.statusColor },
-                            ]}
-                          >
-                            🏃
-                          </Text>
+                          <Footprints size={14} color={resp.statusColor} />
                           <Text
                             style={[
                               styles.statusLabelText,
@@ -606,14 +600,7 @@ export default function IncidentDetailScreen() {
                         </View>
                       ) : (
                         <View style={styles.statusLabelContainer}>
-                          <Text
-                            style={[
-                              styles.carIconText,
-                              { color: resp.statusColor },
-                            ]}
-                          >
-                            🚙
-                          </Text>
+                          <Car size={14} color={resp.statusColor} />
                           <Text
                             style={[
                               styles.statusLabelText,
@@ -1186,12 +1173,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#2E7D32",
     justifyContent: "center",
     alignItems: "center",
-  },
-  runningIconText: {
-    fontSize: 11,
-  },
-  carIconText: {
-    fontSize: 11.5,
   },
   statusLabelText: {
     fontSize: 13,
