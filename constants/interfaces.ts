@@ -28,6 +28,7 @@ export interface ContactsProp {
   phone?: string;
   avatarUrl?: string;
   badgeType?: string;
+  isTrustedNetwork?: boolean;
 }
 export interface HomeButton {
   Icon: React.ReactNode;

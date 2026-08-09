@@ -1,23 +1,40 @@
-import Colors from "@/constants/Colors";
+import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, TouchableOpacity } from "react-native";
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-const PulsatingButton = () => {
+interface PulsatingButtonProps {
+  onPress?: () => void;
+  onLongPress?: () => void;
+  onPressIn?: () => void;
+  onPressOut?: () => void;
+}
+
+const PulsatingButton: React.FC<PulsatingButtonProps> = ({
+  onPress,
+  onLongPress,
+  onPressIn,
+  onPressOut,
+}) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Starts an infinite looping animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.1, // Scale up to 110%
-          duration: 800,
+          toValue: 1.08,
+          duration: 1000,
           useNativeDriver: true,
         }),
         Animated.timing(pulseAnim, {
-          toValue: 1, // Scale back to 100%
-          duration: 800,
+          toValue: 1,
+          duration: 1000,
           useNativeDriver: true,
         }),
       ]),
@@ -28,17 +45,25 @@ const PulsatingButton = () => {
     <Animated.View
       style={{
         transform: [{ scale: pulseAnim }],
-        borderRadius: "100%",
-        width: 150,
-        height: 150,
-        borderColor: Colors.light.accent,
-        borderWidth: 20,
+        borderRadius: 90,
+        width: 160,
+        height: 160,
+        backgroundColor: ResQColors.primaryRedLight,
         justifyContent: "center",
         alignItems: "center",
       }}
     >
-      <TouchableOpacity style={styles.button}>
-        <Text style={styles.text}>SOS</Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={onPress}
+        onLongPress={onLongPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        activeOpacity={0.85}
+      >
+        <View style={styles.innerRing}>
+          <Text style={styles.text}>SOS</Text>
+        </View>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -46,20 +71,32 @@ const PulsatingButton = () => {
 
 const styles = StyleSheet.create({
   button: {
-    backgroundColor: Colors.light.accent,
-    // paddingVertical: 15,
-    // paddingHorizontal: 30,
-    margin: 10,
-    borderRadius: "100%",
-    width: "95%",
-    height: "95%",
+    backgroundColor: Colors.light.primary,
+    borderRadius: 70,
+    width: 140,
+    height: 140,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: Colors.light.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  innerRing: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 3,
+    borderColor: Colors.light.textInverse,
     justifyContent: "center",
     alignItems: "center",
   },
   text: {
-    fontSize: 30,
-    color: "white",
+    fontSize: 28,
+    color: Colors.light.textInverse,
     fontFamily: typography.semibold,
+    letterSpacing: 1.5,
   },
 });
 

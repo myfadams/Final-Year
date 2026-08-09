@@ -911,6 +911,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarColor: "#FCE7F3",
     avatarTextColor: "#BE123C",
     category: "Family & Friends",
+    isTrustedNetwork: true,
   },
   {
     id: "2",
@@ -926,6 +927,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarColor: "#FFEDD5",
     avatarTextColor: "#C2410C",
     category: "Campus & Professional",
+    isTrustedNetwork: false,
   },
   {
     id: "3",
@@ -941,6 +943,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarColor: "#DCFCE7",
     avatarTextColor: "#15803D",
     category: "Family & Friends",
+    isTrustedNetwork: false,
   },
   {
     id: "4",
@@ -956,6 +959,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarColor: "#EC4899",
     avatarTextColor: "#FFFFFF",
     category: "Family & Friends",
+    isTrustedNetwork: true,
   },
   {
     id: "5",
@@ -970,6 +974,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarTextColor: "#FFFFFF",
     category: "Campus & Professional",
     verified: true,
+    isTrustedNetwork: true,
   },
   {
     id: "6",
@@ -985,6 +990,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarColor: "#FCA5A5",
     avatarTextColor: "#991B1B",
     category: "Family & Friends",
+    isTrustedNetwork: true,
   },
   {
     id: "7",
@@ -1001,6 +1007,7 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     avatarTextColor: "#C2410C",
     category: "Campus & Professional",
     verified: true,
+    isTrustedNetwork: false,
   },
 ];
 
