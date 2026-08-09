@@ -1,4 +1,4 @@
-import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
+import Colors, { ResQColors } from "@/constants/Colors";
 import { caseProp } from "@/constants/interfaces";
 import {
   formatDistance,
@@ -239,7 +239,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
               onPress={onMapPress}
               Icon={<MapPin color={Colors.light.primary} size={19} />}
               text={"Map"}
-              color={DESIGN_COLORS.inversePrimary}
+              color={ResQColors.cardSurface}
               textColor={Colors.light.primary}
               borderColor={ResQColors.border}
             />
@@ -249,7 +249,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
               onPress={() => {}}
               Icon={<Phone color={Colors.light.primary} size={19} />}
               text={"Call"}
-              color={DESIGN_COLORS.inversePrimary}
+              color={ResQColors.cardSurface}
               textColor={Colors.light.primary}
               borderColor={ResQColors.border}
             />

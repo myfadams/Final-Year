@@ -109,6 +109,25 @@ export default function ContactsScreen() {
     ]);
   };
 
+  // Derive category specific lists dynamically from contacts state
+  const familyContacts = contacts.filter(
+    (c) =>
+      (c.badgeType && c.badgeType.toLowerCase() === "family") ||
+      (c.relationship && c.relationship.toLowerCase().includes("family")),
+  );
+
+  const officeContacts = contacts.filter(
+    (c) =>
+      (c.badgeType &&
+        (c.badgeType.toLowerCase() === "office" ||
+          c.badgeType.toLowerCase() === "work")) ||
+      (c.relationship &&
+        (c.relationship.toLowerCase().includes("office") ||
+          c.relationship.toLowerCase().includes("work") ||
+          c.relationship.toLowerCase().includes("academic") ||
+          c.relationship.toLowerCase().includes("ra"))),
+  );
+
   // Filter contacts by selected category and search query
   const filteredContacts = contacts.filter((c) => {
     const matchesSearch =
@@ -125,6 +144,62 @@ export default function ContactsScreen() {
 
     return matchesSearch && matchesCategory;
   });
+
+  // Helper to render dynamic mini avatar stack for a community section
+  const renderAvatarStack = (categoryContacts: ContactsProp[]) => {
+    const totalCount = categoryContacts.length;
+    const maxVisible = 2;
+    const visibleContacts = categoryContacts.slice(0, maxVisible);
+    const overflowCount = totalCount > maxVisible ? totalCount - maxVisible : 0;
+
+    if (totalCount === 0) {
+      return (
+        <View style={styles.avatarStackRow}>
+          <View style={styles.miniAvatarBadge}>
+            <Text style={styles.miniBadgeText}>0</Text>
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.avatarStackRow}>
+        {visibleContacts.map((contact, i) => (
+          <React.Fragment key={contact.id}>
+            {contact.avatarUrl ? (
+              <Image
+                source={{ uri: contact.avatarUrl }}
+                style={[styles.miniAvatarImage, i > 0 && { marginLeft: -8 }]}
+              />
+            ) : (
+              <View
+                style={[
+                  styles.miniAvatarBox,
+                  { backgroundColor: contact.avatarColor || ResQColors.pinkBg },
+                  i > 0 && { marginLeft: -8 },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.miniAvatarText,
+                    { color: contact.avatarTextColor || ResQColors.pinkText },
+                  ]}
+                >
+                  {contact.initials}
+                </Text>
+              </View>
+            )}
+          </React.Fragment>
+        ))}
+
+        {overflowCount > 0 && (
+          <View style={[styles.miniAvatarBadge, { marginLeft: -8 }]}>
+            <Text style={styles.miniBadgeText}>+{overflowCount}</Text>
+          </View>
+        )}
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -211,7 +286,11 @@ export default function ContactsScreen() {
               selectedCategory === "Family" && styles.communityCardActive,
             ]}
             activeOpacity={0.8}
-            onPress={() => setSelectedCategory("Family")}
+            onPress={() =>
+              setSelectedCategory((prev) =>
+                prev === "Family" ? "All" : "Family",
+              )
+            }
           >
             <View
               style={[
@@ -222,24 +301,13 @@ export default function ContactsScreen() {
               <Users size={22} color={ResQColors.pinkText} />
             </View>
             <Text style={styles.communityCardTitle}>Family</Text>
+            <Text style={styles.communityCountSubtext}>
+              {familyContacts.length}{" "}
+              {familyContacts.length === 1 ? "contact" : "contacts"}
+            </Text>
 
-            {/* Avatar Stack */}
-            <View style={styles.avatarStackRow}>
-              <View
-                style={[styles.miniAvatarBox, { backgroundColor: "#FCA5A5" }]}
-              >
-                <Text style={styles.miniAvatarText}>HK</Text>
-              </View>
-              <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop",
-                }}
-                style={[styles.miniAvatarImage, { marginLeft: -8 }]}
-              />
-              <View style={[styles.miniAvatarBadge, { marginLeft: -8 }]}>
-                <Text style={styles.miniBadgeText}>+5</Text>
-              </View>
-            </View>
+            {/* Dynamic Avatar Stack */}
+            {renderAvatarStack(familyContacts)}
           </TouchableOpacity>
 
           {/* Office Staff Card */}
@@ -255,7 +323,11 @@ export default function ContactsScreen() {
               selectedCategory === "Office" && styles.communityCardActive,
             ]}
             activeOpacity={0.8}
-            onPress={() => setSelectedCategory("Office")}
+            onPress={() =>
+              setSelectedCategory((prev) =>
+                prev === "Office" ? "All" : "Office",
+              )
+            }
           >
             <View
               style={[
@@ -266,25 +338,13 @@ export default function ContactsScreen() {
               <Building2 size={22} color={ResQColors.orangeText} />
             </View>
             <Text style={styles.communityCardTitle}>Office Staff</Text>
+            <Text style={styles.communityCountSubtext}>
+              {officeContacts.length}{" "}
+              {officeContacts.length === 1 ? "contact" : "contacts"}
+            </Text>
 
-            {/* Avatar Stack */}
-            <View style={styles.avatarStackRow}>
-              <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
-                }}
-                style={styles.miniAvatarImage}
-              />
-              <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop",
-                }}
-                style={[styles.miniAvatarImage, { marginLeft: -8 }]}
-              />
-              <View style={[styles.miniAvatarBadge, { marginLeft: -8 }]}>
-                <Text style={styles.miniBadgeText}>+21</Text>
-              </View>
-            </View>
+            {/* Dynamic Avatar Stack */}
+            {renderAvatarStack(officeContacts)}
           </TouchableOpacity>
         </View>
 
@@ -549,7 +609,13 @@ const styles = StyleSheet.create({
     fontSize: 16.5,
     fontFamily: typography.bold,
     color: ResQColors.textPrimary,
-    marginBottom: 14,
+    marginBottom: 4,
+  },
+  communityCountSubtext: {
+    fontSize: 12.5,
+    fontFamily: typography.medium,
+    color: ResQColors.textMuted,
+    marginBottom: 12,
   },
   avatarStackRow: {
     flexDirection: "row",

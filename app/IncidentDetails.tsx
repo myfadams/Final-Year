@@ -3,6 +3,7 @@ import Colors from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { emergencyAlerts, PEOPLE } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
+import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -15,6 +16,8 @@ import {
   Info,
   MapPin,
   MessageSquare,
+  Mic,
+  Pause,
   Phone,
   Play,
   RotateCw,
@@ -41,7 +44,7 @@ export default function IncidentDetailScreen() {
   const params = useLocalSearchParams<any>();
   // console.log(resolvedFromParams);
   // console.log(incident);
-  console.log(params);
+  // console.log(params);
 
   // Resolve the incident details from params first (for robust direct state pass),
   // falling back to lookup in emergencyAlerts if incomplete.
@@ -91,7 +94,7 @@ export default function IncidentDetailScreen() {
         };
     }
   };
-  console.log(incident.severity);
+  // console.log(incident.severity);
   const severityColors = getSeverityColors(incident.severity);
 
   // State for fullscreen photo/video viewer lightbox
@@ -153,6 +156,171 @@ export default function IncidentDetailScreen() {
           type: "image" as const,
         }))
       : []);
+
+  // Retrieve attached voice notes (from params, report submit, or mock data)
+  const voiceNotesList: { id: string; uri: string; duration: number }[] =
+    params.voiceNotes
+      ? JSON.parse(params.voiceNotes)
+      : (incident as any).voiceNotes || [
+          {
+            id: "vn_1",
+            uri: "file:///c:/Users/adams/Documents/gravity-project/Final-Year/audio/Recording.m4a",
+            duration: 14,
+          },
+        ];
+
+  // Audio Playback state for voice notes
+  const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
+  const [noteDurations, setNoteDurations] = useState<Record<string, number>>(
+    {},
+  );
+  const soundRef = React.useRef<Audio.Sound | null>(null);
+
+  // Fetch actual audio duration directly from audio file metadata on screen mount
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const fetchDurations = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+        });
+
+        for (const note of voiceNotesList) {
+          try {
+            let localSource: any = null;
+            try {
+              localSource = require("../audio/Recording.m4a");
+            } catch (e) {
+              localSource = { uri: note.uri };
+            }
+
+            const { sound, status } = await Audio.Sound.createAsync(
+              localSource,
+              { shouldPlay: false },
+            );
+            if (status.isLoaded && status.durationMillis) {
+              const exactSeconds = Math.round(status.durationMillis / 1000);
+              if (isMounted && exactSeconds > 0) {
+                setNoteDurations((prev) => ({
+                  ...prev,
+                  [note.id]: exactSeconds,
+                }));
+              }
+            }
+            await sound.unloadAsync().catch(() => {});
+          } catch (e) {
+            // Handled gracefully
+          }
+        }
+      } catch (e) {
+        // Ignored
+      }
+    };
+
+    fetchDurations();
+
+    return () => {
+      isMounted = false;
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+      }
+    };
+  }, [voiceNotesList]);
+
+  const handlePlayVoiceNote = async (note: { id: string; uri: string }) => {
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
+
+    if (playingNoteId === note.id) {
+      setPlayingNoteId(null);
+      return;
+    }
+
+    try {
+      setPlayingNoteId(note.id);
+
+      // Configure iOS & Android audio mode so audio plays at loud volume through device speakers even in silent mode!
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+      });
+
+      let soundObj: Audio.Sound | null = null;
+
+      const updateStatus = (status: any) => {
+        if (status.isLoaded) {
+          if (status.durationMillis) {
+            const exactSecs = Math.round(status.durationMillis / 1000);
+            if (exactSecs > 0) {
+              setNoteDurations((prev) => ({ ...prev, [note.id]: exactSecs }));
+            }
+          }
+          if (!status.isPlaying && status.didJustFinish) {
+            setPlayingNoteId(null);
+          }
+        }
+      };
+
+      // 1. Try bundled local audio file via require
+      try {
+        const localAudioAsset = require("../audio/Recording.m4a");
+        const { sound } = await Audio.Sound.createAsync(
+          localAudioAsset,
+          { shouldPlay: true, volume: 1.0 },
+          updateStatus,
+        );
+        soundObj = sound;
+        await soundObj.setVolumeAsync(1.0);
+        await soundObj.playAsync();
+      } catch (e1) {
+        console.log("Local require failed, attempting URI:", e1);
+        // 2. Try URI directly (for user recordings created on device)
+        try {
+          const { sound } = await Audio.Sound.createAsync(
+            { uri: note.uri },
+            { shouldPlay: true, volume: 1.0 },
+            updateStatus,
+          );
+          soundObj = sound;
+          await soundObj.setVolumeAsync(1.0);
+          await soundObj.playAsync();
+        } catch (e2) {
+          console.log("URI play failed, attempting web fallback:", e2);
+          // 3. Fallback online sound
+          try {
+            const { sound } = await Audio.Sound.createAsync(
+              {
+                uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+              },
+              { shouldPlay: true, volume: 1.0 },
+              updateStatus,
+            );
+            soundObj = sound;
+            await soundObj.setVolumeAsync(1.0);
+            await soundObj.playAsync();
+          } catch (e3) {
+            console.error("All audio sources failed", e1, e2, e3);
+            Alert.alert("Audio Error", "Could not play audio file.");
+          }
+        }
+      }
+
+      soundRef.current = soundObj;
+      if (!soundObj) {
+        setPlayingNoteId(null);
+      }
+    } catch (err) {
+      console.error("Failed to play audio", err);
+      setPlayingNoteId(null);
+    }
+  };
 
   // Hardcoded coordinates for nearby responders relative to center
   const respondersData = [
@@ -466,12 +634,7 @@ export default function IncidentDetailScreen() {
 
         {/* Incident Description Card */}
         <View style={styles.section}>
-          <View
-            style={[
-              styles.descriptionCard,
-              { borderLeftColor: severityColors.color },
-            ]}
-          >
+          <View style={styles.descriptionCard}>
             <View style={styles.descriptionHeader}>
               <Info
                 size={18}
@@ -485,6 +648,110 @@ export default function IncidentDetailScreen() {
             <Text style={styles.descriptionBody}>{incident.description}</Text>
           </View>
         </View>
+
+        {/* Voice Notes Section */}
+        {voiceNotesList.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Voice Notes ({voiceNotesList.length})
+            </Text>
+            {voiceNotesList.map((note) => {
+              const isPlaying = playingNoteId === note.id;
+              const formatSeconds = (sec: number) => {
+                const mins = Math.floor(sec / 60);
+                const secs = sec % 60;
+                return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
+              };
+
+              return (
+                <View key={note.id} style={styles.voiceNoteCard}>
+                  <View style={styles.voiceNoteHeader}>
+                    <View
+                      style={[
+                        styles.micIconCircle,
+                        { backgroundColor: severityColors.bg },
+                      ]}
+                    >
+                      <Mic size={18} color={severityColors.color} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.voiceNoteTitle}>
+                        Voice Note Attachment
+                      </Text>
+                      <Text style={styles.voiceNoteSubtitle}>
+                        Audio message from reporter
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.durationBadge,
+                        { backgroundColor: severityColors.bg },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.durationBadgeText,
+                          { color: severityColors.color },
+                        ]}
+                      >
+                        {formatSeconds(note.duration)}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Visualizer Waveform Bar */}
+                  <View style={styles.waveformContainer}>
+                    {[
+                      12, 22, 16, 30, 24, 14, 28, 34, 20, 15, 26, 18, 10, 22,
+                      29, 16, 24, 12,
+                    ].map((h, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.waveformBar,
+                          {
+                            height: h,
+                            backgroundColor: isPlaying
+                              ? severityColors.color
+                              : "#CBD5E1",
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Controls Row */}
+                  <View style={styles.voiceControlsRow}>
+                    <TouchableOpacity
+                      onPress={() => handlePlayVoiceNote(note)}
+                      style={[
+                        styles.voicePlayBtn,
+                        { backgroundColor: severityColors.color },
+                      ]}
+                      activeOpacity={0.85}
+                    >
+                      {isPlaying ? (
+                        <Pause size={16} color="#FFFFFF" fill="#FFFFFF" />
+                      ) : (
+                        <Play
+                          size={16}
+                          color="#FFFFFF"
+                          fill="#FFFFFF"
+                          style={{ marginLeft: 2 }}
+                        />
+                      )}
+                    </TouchableOpacity>
+                    <Text style={styles.voiceStatusText}>
+                      {isPlaying
+                        ? "Playing audio recording..."
+                        : "Tap to listen to audio report"}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        )}
 
         {/* Media Attachments Section */}
         {mediaList.length > 0 && (
@@ -935,7 +1202,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: "#E2E8F0",
-    borderLeftWidth: 5.5,
     padding: 16,
     ...Platform.select({
       ios: {
@@ -964,6 +1230,92 @@ const styles = StyleSheet.create({
     fontFamily: typography.regular,
     color: "#475569",
     lineHeight: 22,
+  },
+  voiceNoteCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    padding: 16,
+    gap: 14,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0F172A",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.02,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  voiceNoteHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  micIconCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  voiceNoteTitle: {
+    fontSize: 14.5,
+    fontFamily: typography.semibold,
+    color: "#0F172A",
+  },
+  voiceNoteSubtitle: {
+    fontSize: 12,
+    fontFamily: typography.regular,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  durationBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  durationBadgeText: {
+    fontSize: 12,
+    fontFamily: typography.bold,
+  },
+  waveformContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 4,
+    height: 36,
+    paddingHorizontal: 4,
+  },
+  waveformBar: {
+    flex: 1,
+    borderRadius: 2,
+  },
+  voiceControlsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 2,
+  },
+  voicePlayBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  voiceStatusText: {
+    fontSize: 13,
+    fontFamily: typography.medium,
+    color: "#475569",
   },
   bottomBarContainer: {
     position: "absolute",

@@ -64,10 +64,7 @@ const ScrollViewButton: React.FC<ScrollBtnProp> = ({
         >
           <Text
             style={{
-              color:
-                isActive == pageName
-                  ? Colors.light.textInverse
-                  : Colors.light.textMuted,
+              color: Colors.light.textInverse,
               fontSize: 10,
             }}
           >

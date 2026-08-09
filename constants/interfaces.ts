@@ -73,3 +73,17 @@ export interface SuggestedResponder {
   isOnline?: boolean;
   isRequested?: boolean;
 }
+
+export interface Article {
+  id: string;
+  title: string;
+  category: "ADVISORY" | "OFFICIAL" | "COMMUNITY";
+  categoryColor: string;
+  categoryBg: string;
+  publisher: string;
+  time: string;
+  image: string;
+  leftAccent?: string;
+  isFeatured?: boolean;
+  content: string;
+}

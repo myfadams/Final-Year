@@ -1,5 +1,5 @@
 import ImageUpload from "@/components/ImageUpload";
-import Colors from "@/constants/Colors";
+import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { emergencyAlerts } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { Audio } from "expo-av";
@@ -53,16 +53,7 @@ export default function ReportScreen() {
   // Set default placeholder items matching image and video types
   const [photos, setPhotos] = useState<
     { uri: string; type: "image" | "video" }[]
-  >([
-    // {
-    //   uri: "https://images.unsplash.com/photo-1626908013351-800ddd734b8a?w=400&auto=format&fit=crop&q=80",
-    //   type: "image",
-    // },
-    // {
-    //   uri: "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=600&auto=format&fit=crop&q=80",
-    //   type: "video",
-    // },
-  ]);
+  >([]);
   const [isRecording, setIsRecording] = useState(false);
   const [severity, setSeverity] = useState<"Critical" | "Moderate" | "Low">(
     "Moderate",
@@ -126,35 +117,35 @@ export default function ReportScreen() {
     line2: "New York, NY 10001",
   });
 
-  // Incident types mapping icons & colors
+  // Incident types mapping icons & colors using system theme tokens
   const incidentTypes = [
     {
       id: "Medical" as IncidentType,
       label: "Medical",
       icon: BriefcaseMedical,
-      color: "#10B981",
-      bg: "#E6F4EA",
+      color: DESIGN_COLORS.successGreen,
+      bg: ResQColors.greenBg,
     },
     {
       id: "Fire" as IncidentType,
       label: "Fire",
       icon: Flame,
-      color: "#EF4444",
-      bg: "#FEE2E2",
+      color: DESIGN_COLORS.emergencyRed,
+      bg: ResQColors.primaryRedLight,
     },
     {
       id: "Security" as IncidentType,
       label: "Security",
       icon: Shield,
-      color: "#3B82F6",
-      bg: "#DBEAFE",
+      color: DESIGN_COLORS.safetyBlue,
+      bg: DESIGN_COLORS.tertiaryFixed,
     },
     {
       id: "Accident" as IncidentType,
       label: "Accident",
       icon: Car,
-      color: "#F59E0B",
-      bg: "#FEF3C7",
+      color: ResQColors.statusAmber,
+      bg: ResQColors.badgeAmberBg,
     },
   ];
 
@@ -409,6 +400,7 @@ export default function ReportScreen() {
       action: "Details" as const,
       creatorID: "George",
       falseAlarm: false,
+      photos: photos,
     };
 
     // Add to global temporary data list
@@ -470,8 +462,9 @@ export default function ReportScreen() {
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.headerIconButton}
+            activeOpacity={0.7}
           >
-            <ArrowLeft size={24} color={Colors.light.accent} />
+            <ArrowLeft size={20} color={DESIGN_COLORS.slate900} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Report Incident</Text>
           <TouchableOpacity
@@ -481,9 +474,13 @@ export default function ReportScreen() {
                 "No active emergency alerts in your immediate radius.",
               )
             }
-            style={styles.headerIconButton}
+            style={[styles.headerIconButton, { backgroundColor: themeBgColor }]}
+            activeOpacity={0.7}
           >
-            <Bell size={24} color={Colors.light.accent} />
+            <Bell size={20} color={themeColor} />
+            <View
+              style={[styles.notificationDot, { backgroundColor: themeColor }]}
+            />
           </TouchableOpacity>
         </View>
 
@@ -511,10 +508,17 @@ export default function ReportScreen() {
                     ]}
                     activeOpacity={0.8}
                   >
-                    <View style={styles.iconContainer}>
+                    <View
+                      style={[
+                        styles.iconCircleContainer,
+                        isSelected && {
+                          backgroundColor: ResQColors.cardSurface,
+                        },
+                      ]}
+                    >
                       <IconComponent
-                        size={28}
-                        color={isSelected ? themeColor : "#475569"}
+                        size={22}
+                        color={isSelected ? themeColor : DESIGN_COLORS.slate900}
                       />
                       {type.id === "Accident" && (
                         <View
@@ -525,7 +529,7 @@ export default function ReportScreen() {
                         >
                           <AlertTriangle
                             size={10}
-                            color="#FFFFFF"
+                            color={ResQColors.cardSurface}
                             strokeWidth={3}
                           />
                         </View>
@@ -534,10 +538,7 @@ export default function ReportScreen() {
                     <Text
                       style={[
                         styles.gridItemLabel,
-                        isSelected && {
-                          color: themeColor,
-                          fontFamily: typography.bold,
-                        },
+                        isSelected && { color: themeColor },
                       ]}
                     >
                       {type.label}
@@ -561,11 +562,15 @@ export default function ReportScreen() {
                     onPress={() => setSeverity(level)}
                     style={[
                       styles.severityPill,
-                      isSelected && {
-                        backgroundColor: colors.bg,
-                        borderColor: colors.color,
-                        borderWidth: 1.5,
-                      },
+                      isSelected
+                        ? {
+                            backgroundColor: colors.bg,
+                            borderColor: colors.color,
+                            borderWidth: 1.5,
+                          }
+                        : {
+                            borderColor: ResQColors.badgeGrayBg,
+                          },
                     ]}
                     activeOpacity={0.8}
                   >
@@ -602,6 +607,7 @@ export default function ReportScreen() {
                   styles.updateLocationButton,
                   { backgroundColor: themeBgColor },
                 ]}
+                activeOpacity={0.7}
               >
                 <Locate
                   size={14}
@@ -616,7 +622,7 @@ export default function ReportScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.mapCard}>
+            <View style={[styles.mapCard, { borderColor: themeBgColor }]}>
               <View style={styles.mapContainer}>
                 <MapView
                   style={StyleSheet.absoluteFillObject}
@@ -636,7 +642,7 @@ export default function ReportScreen() {
                       >
                         <MarkerIcon
                           size={16}
-                          color="#FFFFFF"
+                          color={ResQColors.cardSurface}
                           strokeWidth={2.5}
                         />
                       </View>
@@ -651,7 +657,9 @@ export default function ReportScreen() {
                 </MapView>
               </View>
               <View style={styles.addressBar}>
-                <MapPin size={18} color="#64748B" style={{ marginRight: 8 }} />
+                <View style={styles.addressIconCircle}>
+                  <MapPin size={18} color={ResQColors.textSubtle} />
+                </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.addressLine1} numberOfLines={1}>
                     {address.line1}
@@ -667,11 +675,16 @@ export default function ReportScreen() {
           {/* Incident Title */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Incident Title</Text>
-            <View style={styles.titleInputContainer}>
+            <View
+              style={[
+                styles.titleInputContainer,
+                { borderColor: themeBgColor },
+              ]}
+            >
               <TextInput
                 style={styles.titleInput}
-                placeholder="Brief title (e.g. Fire in Chemistry Lab, Sprained Ankle...)"
-                placeholderTextColor="#94A3B8"
+                placeholder="Brief title (e.g. Fire in Chemistry Lab, Sprained...)"
+                placeholderTextColor={ResQColors.textFaint}
                 value={title}
                 onChangeText={setTitle}
                 maxLength={60}
@@ -682,10 +695,17 @@ export default function ReportScreen() {
           {/* Incident Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Incident Description</Text>
-            <View style={styles.inputContainer}>
+            <View
+              style={[styles.inputContainer, { borderColor: themeBgColor }]}
+            >
               {isRecording ? (
                 <View style={styles.recordingOverlayContainer}>
-                  <View style={styles.recordingRedDot} />
+                  <View
+                    style={[
+                      styles.recordingRedDot,
+                      { backgroundColor: themeColor },
+                    ]}
+                  />
                   <Text style={styles.recordingTimerText}>
                     Recording voice note: 0:
                     {recordDuration < 10
@@ -700,7 +720,7 @@ export default function ReportScreen() {
                 <TextInput
                   style={styles.textInput}
                   placeholder="What is happening? Please provide details to help responders..."
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={ResQColors.textFaint}
                   multiline={true}
                   value={description}
                   onChangeText={setDescription}
@@ -718,12 +738,19 @@ export default function ReportScreen() {
                     styles.voiceButton,
                     { transform: [{ scale: voiceScale }] },
                     isRecording && {
-                      backgroundColor: Colors.light.accent,
+                      backgroundColor: themeColor,
                       shadowOpacity: 0.15,
                     },
                   ]}
                 >
-                  <Mic size={18} color={isRecording ? "#FFFFFF" : "#64748B"} />
+                  <Mic
+                    size={18}
+                    color={
+                      isRecording
+                        ? ResQColors.cardSurface
+                        : ResQColors.textSubtle
+                    }
+                  />
                 </Animated.View>
               </TouchableOpacity>
             </View>
@@ -749,12 +776,16 @@ export default function ReportScreen() {
                         activeOpacity={0.8}
                       >
                         {isPlaying ? (
-                          <Pause size={14} color="#FFFFFF" fill="#FFFFFF" />
+                          <Pause
+                            size={14}
+                            color={ResQColors.cardSurface}
+                            fill={ResQColors.cardSurface}
+                          />
                         ) : (
                           <Play
                             size={14}
-                            color="#FFFFFF"
-                            fill="#FFFFFF"
+                            color={ResQColors.cardSurface}
+                            fill={ResQColors.cardSurface}
                             style={{ marginLeft: 2 }}
                           />
                         )}
@@ -777,7 +808,11 @@ export default function ReportScreen() {
                         style={styles.deleteVoiceBtn}
                         activeOpacity={0.7}
                       >
-                        <X size={16} color="#E53E3E" strokeWidth={2.5} />
+                        <X
+                          size={16}
+                          color={ResQColors.primaryRedText}
+                          strokeWidth={2.5}
+                        />
                       </TouchableOpacity>
                     </View>
                   );
@@ -803,11 +838,9 @@ export default function ReportScreen() {
                 onPress={handleAddPhoto}
                 activeOpacity={0.7}
               >
-                <Camera
-                  size={22}
-                  color={themeColor}
-                  style={{ marginBottom: 6 }}
-                />
+                <View style={styles.addPhotoCircle}>
+                  <Camera size={18} color={themeColor} />
+                </View>
                 <Text style={[styles.addPhotoText, { color: themeColor }]}>
                   Add Photo
                 </Text>
@@ -826,8 +859,8 @@ export default function ReportScreen() {
                       <View style={styles.playButtonCircle}>
                         <Play
                           size={12}
-                          color="#0F172A"
-                          fill="#0F172A"
+                          color={DESIGN_COLORS.slate900}
+                          fill={DESIGN_COLORS.slate900}
                           style={{ marginLeft: 2 }}
                         />
                       </View>
@@ -838,7 +871,11 @@ export default function ReportScreen() {
                     onPress={() => handleRemovePhoto(index)}
                     style={styles.deletePhotoBadge}
                   >
-                    <X size={12} color="#FFFFFF" strokeWidth={2.5} />
+                    <X
+                      size={12}
+                      color={ResQColors.cardSurface}
+                      strokeWidth={2.5}
+                    />
                   </TouchableOpacity>
                 </View>
               ))}
@@ -862,21 +899,26 @@ export default function ReportScreen() {
             style={[
               styles.submitButton,
               { backgroundColor: themeColor },
-              isUploading && { backgroundColor: "#CBD5E1", shadowOpacity: 0 },
+              isUploading && {
+                backgroundColor: ResQColors.badgeGrayBg,
+                shadowOpacity: 0,
+              },
             ]}
             onPress={handleSubmit}
             disabled={isUploading}
             activeOpacity={0.85}
           >
             <Send
-              size={16}
-              color={isUploading ? "#64748B" : "#FFFFFF"}
+              size={18}
+              color={
+                isUploading ? ResQColors.textSubtle : ResQColors.cardSurface
+              }
               style={{ marginRight: 8 }}
             />
             <Text
               style={[
                 styles.submitButtonText,
-                isUploading && { color: "#64748B" },
+                isUploading && { color: ResQColors.textSubtle },
               ]}
             >
               {isUploading ? "Uploading Attachments..." : "Submit Report"}
@@ -891,31 +933,47 @@ export default function ReportScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: ResQColors.pageBg,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
+    paddingVertical: 12,
+    backgroundColor: ResQColors.cardSurface,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: ResQColors.borderSubtle,
   },
   headerIconButton: {
-    padding: 6,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: ResQColors.cardSurfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  notificationDot: {
+    position: "absolute",
+    top: 3,
+    right: 3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: ResQColors.cardSurface,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontFamily: typography.bold,
-    color: "#0F172A",
+    color: DESIGN_COLORS.slate900,
   },
   scrollContent: {
     paddingBottom: 24,
   },
   section: {
-    marginTop: 20,
+    marginTop: 18,
     paddingHorizontal: 16,
   },
   sectionHeaderRow: {
@@ -925,10 +983,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16.5,
+    fontSize: 16,
     fontFamily: typography.bold,
-    color: "#0F172A",
-    marginBottom: 8,
+    color: DESIGN_COLORS.slate900,
+    marginBottom: 10,
   },
   gridContainer: {
     flexDirection: "row",
@@ -938,18 +996,19 @@ const styles = StyleSheet.create({
   },
   gridItem: {
     width: "48%",
-    height: 86,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
+    height: 115,
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 20,
     borderWidth: 1.5,
-    borderColor: "#E2E8F0",
+    borderColor: ResQColors.borderSubtle,
     justifyContent: "center",
     alignItems: "center",
+    padding: 12,
     ...Platform.select({
       ios: {
-        shadowColor: "#0F172A",
+        shadowColor: DESIGN_COLORS.slate900,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.02,
+        shadowOpacity: 0.03,
         shadowRadius: 6,
       },
       android: {
@@ -957,40 +1016,79 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  iconContainer: {
+  iconCircleContainer: {
     position: "relative",
-    width: 36,
-    height: 36,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: DESIGN_COLORS.slate50,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
+    marginBottom: 8,
   },
   accidentBadge: {
     position: "absolute",
     top: -2,
     right: -2,
-    backgroundColor: "#F59E0B",
+    backgroundColor: ResQColors.statusAmber,
     width: 14,
     height: 14,
     borderRadius: 7,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#FFFFFF",
+    borderColor: ResQColors.cardSurface,
   },
   gridItemLabel: {
     fontSize: 14,
-    fontFamily: typography.medium,
-    color: "#475569",
-    marginTop: 2,
+    fontFamily: typography.semibold,
+    color: DESIGN_COLORS.slate900,
+  },
+  severityContainer: {
+    flexDirection: "row",
+    gap: 10,
+    width: "100%",
+  },
+  severityPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: ResQColors.cardSurface,
+    borderWidth: 1.5,
+    borderColor: ResQColors.badgeGrayBg,
+    ...Platform.select({
+      ios: {
+        shadowColor: DESIGN_COLORS.slate900,
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.02,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  severityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  severityText: {
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+    color: ResQColors.badgeGrayText,
   },
   updateLocationButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: "#FFF5F5",
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: ResQColors.primaryRedLight,
   },
   updateLocationText: {
     fontSize: 12.5,
@@ -998,16 +1096,16 @@ const styles = StyleSheet.create({
     color: Colors.light.accent,
   },
   mapCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: ResQColors.borderSubtle,
     overflow: "hidden",
     ...Platform.select({
       ios: {
-        shadowColor: "#0F172A",
+        shadowColor: DESIGN_COLORS.slate900,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.02,
+        shadowOpacity: 0.03,
         shadowRadius: 8,
       },
       android: {
@@ -1018,40 +1116,74 @@ const styles = StyleSheet.create({
   mapContainer: {
     width: "100%",
     height: 140,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: ResQColors.cardSurfaceSoft,
   },
   addressBar: {
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: ResQColors.cardSurface,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: ResQColors.borderSubtle,
+  },
+  addressIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: ResQColors.cardSurfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
   },
   addressLine1: {
     fontSize: 14,
-    fontFamily: typography.semibold,
-    color: "#0F172A",
+    fontFamily: typography.bold,
+    color: DESIGN_COLORS.slate900,
   },
   addressLine2: {
     fontSize: 12,
     fontFamily: typography.regular,
-    color: "#64748B",
+    color: ResQColors.textSubtle,
     marginTop: 2,
   },
+  titleInputContainer: {
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 26,
+    borderWidth: 1.5,
+    borderColor: ResQColors.borderSubtle,
+    paddingHorizontal: 18,
+    height: 50,
+    justifyContent: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: DESIGN_COLORS.slate900,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.03,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  titleInput: {
+    fontSize: 14,
+    fontFamily: typography.medium,
+    color: DESIGN_COLORS.slate900,
+  },
   inputContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 14,
-    height: 120,
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: ResQColors.borderSubtle,
+    padding: 16,
+    minHeight: 130,
     position: "relative",
     ...Platform.select({
       ios: {
-        shadowColor: "#0F172A",
+        shadowColor: DESIGN_COLORS.slate900,
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.02,
+        shadowOpacity: 0.03,
         shadowRadius: 8,
       },
       android: {
@@ -1061,29 +1193,29 @@ const styles = StyleSheet.create({
   },
   textInput: {
     flex: 1,
-    fontSize: 14.5,
+    fontSize: 14,
     fontFamily: typography.regular,
-    color: "#0F172A",
+    color: DESIGN_COLORS.slate900,
   },
   voiceButtonContainer: {
     position: "absolute",
-    right: 8,
-    bottom: 8,
-    width: 40,
-    height: 40,
+    right: 10,
+    bottom: 10,
+    width: 38,
+    height: 38,
     alignItems: "center",
     justifyContent: "center",
   },
   voiceButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#F1F5F9",
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: ResQColors.cardSurfaceSoft,
     alignItems: "center",
     justifyContent: "center",
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: "#000000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.05,
         shadowRadius: 3,
@@ -1093,69 +1225,157 @@ const styles = StyleSheet.create({
       },
     }),
   },
+  recordingOverlayContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  recordingRedDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.light.accent,
+    marginBottom: 8,
+  },
+  recordingTimerText: {
+    fontSize: 15,
+    fontFamily: typography.bold,
+    color: DESIGN_COLORS.slate900,
+    marginBottom: 4,
+  },
+  recordingCancelHelp: {
+    fontSize: 11.5,
+    fontFamily: typography.regular,
+    color: ResQColors.textSubtle,
+  },
+  voiceNotesListContainer: {
+    gap: 8,
+  },
+  voiceNoteCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: ResQColors.borderSubtle,
+    padding: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: DESIGN_COLORS.slate900,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.02,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
+  playPauseBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  voiceTrackDetails: {
+    flex: 1,
+  },
+  voiceNoteTitle: {
+    fontSize: 14,
+    fontFamily: typography.semibold,
+    color: DESIGN_COLORS.slate900,
+  },
+  voiceNoteMeta: {
+    fontSize: 11.5,
+    fontFamily: typography.regular,
+    color: ResQColors.textSubtle,
+    marginTop: 2,
+  },
+  deleteVoiceBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: ResQColors.primaryRedLight,
+  },
   mediaContainer: {
     flexDirection: "row",
     gap: 12,
   },
   addPhotoCard: {
-    width: 90,
-    height: 90,
-    borderRadius: 14,
-    borderWidth: 1,
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+    borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: "#FFB3AC",
-    backgroundColor: "#FFF8F8",
+    borderColor: ResQColors.primaryRedBorder,
+    backgroundColor: ResQColors.primaryRedLight,
     justifyContent: "center",
     alignItems: "center",
   },
+  addPhotoCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: ResQColors.cardSurface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 6,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+      },
+      android: {
+        elevation: 1,
+      },
+    }),
+  },
   addPhotoText: {
     fontSize: 11.5,
-    fontFamily: typography.semibold,
+    fontFamily: typography.bold,
     color: Colors.light.accent,
   },
   photoWrapper: {
     position: "relative",
-    width: 90,
-    height: 90,
+    width: 100,
+    height: 100,
   },
   uploadedPhoto: {
-    width: 90,
-    height: 90,
-    borderRadius: 14,
-    backgroundColor: "#F1F5F9",
+    width: 100,
+    height: 100,
+    borderRadius: 20,
+    backgroundColor: ResQColors.cardSurfaceSoft,
   },
   deletePhotoBadge: {
     position: "absolute",
     top: -4,
     right: -4,
-    backgroundColor: "#E53E3E",
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    backgroundColor: ResQColors.primaryRedText,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    borderColor: "#FFFFFF",
+    borderColor: ResQColors.cardSurface,
   },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0, 0, 0, 0.25)",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 14,
+    borderRadius: 20,
   },
   playButtonCircle: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "rgba(255, 255, 255, 0.85)",
+    backgroundColor: ResQColors.cardSurface,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 2,
   },
   activeUploadWrapper: {
     marginTop: 16,
@@ -1164,26 +1384,27 @@ const styles = StyleSheet.create({
   uploadingLabelText: {
     fontSize: 13,
     fontFamily: typography.semibold,
-    color: "#64748B",
+    color: ResQColors.textSubtle,
     marginBottom: 8,
   },
   bottomBar: {
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
-    padding: 16,
-    backgroundColor: "#FFFFFF",
+    borderTopColor: ResQColors.borderSubtle,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: ResQColors.cardSurface,
   },
   submitButton: {
     backgroundColor: Colors.light.accent,
-    height: 50,
-    borderRadius: 14,
+    height: 52,
+    borderRadius: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     width: "100%",
   },
   submitButtonText: {
-    color: "#FFFFFF",
+    color: ResQColors.cardSurface,
     fontSize: 16,
     fontFamily: typography.bold,
   },
@@ -1198,10 +1419,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,
-    borderColor: "#FFFFFF",
+    borderColor: ResQColors.cardSurface,
     ...Platform.select({
       ios: {
-        shadowColor: "#000",
+        shadowColor: "#000000",
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.15,
         shadowRadius: 3,
@@ -1222,142 +1443,6 @@ const styles = StyleSheet.create({
     borderLeftColor: "transparent",
     borderRightColor: "transparent",
     alignSelf: "center",
-    marginTop: -1, // overlap slightly to join cleanly
-  },
-  severityContainer: {
-    flexDirection: "row",
-    gap: 8,
-    width: "100%",
-  },
-  severityPill: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0F172A",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.02,
-        shadowRadius: 4,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
-  },
-  severityDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  severityText: {
-    fontSize: 13.5,
-    fontFamily: typography.semibold,
-    color: "#475569",
-  },
-  recordingOverlayContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  recordingRedDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: Colors.light.accent,
-    marginBottom: 8,
-  },
-  recordingTimerText: {
-    fontSize: 15,
-    fontFamily: typography.bold,
-    color: "#0F172A",
-    marginBottom: 4,
-  },
-  recordingCancelHelp: {
-    fontSize: 11.5,
-    fontFamily: typography.regular,
-    color: "#64748B",
-  },
-  voiceNotesListContainer: {
-    gap: 8,
-  },
-  voiceNoteCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    padding: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0F172A",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.02,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
-  },
-  playPauseBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  voiceTrackDetails: {
-    flex: 1,
-  },
-  voiceNoteTitle: {
-    fontSize: 14,
-    fontFamily: typography.semibold,
-    color: "#0F172A",
-  },
-  voiceNoteMeta: {
-    fontSize: 11.5,
-    fontFamily: typography.regular,
-    color: "#64748B",
-    marginTop: 2,
-  },
-  deleteVoiceBtn: {
-    padding: 6,
-    borderRadius: 8,
-    backgroundColor: "#FFF5F5",
-  },
-  titleInputContainer: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    paddingHorizontal: 14,
-    height: 48,
-    justifyContent: "center",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0F172A",
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.02,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 1,
-      },
-    }),
-  },
-  titleInput: {
-    fontSize: 14.5,
-    fontFamily: typography.semibold,
-    color: "#0F172A",
+    marginTop: -1,
   },
 });
