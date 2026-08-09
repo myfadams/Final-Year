@@ -1,5 +1,3 @@
-//
-
 const tintColorLight = "#af101a"; // Primary Brand color (Emergency Red style)
 const tintColorDark = "#ffb3ac"; // Inverse Primary Brand color
 
@@ -23,7 +21,7 @@ export const DESIGN_COLORS = {
   onPrimary: "#ffffff",
   primaryContainer: "#d32f2f",
   onPrimaryContainer: "#fff2f0",
-  inversePrimary: "rgba(175, 16, 26, 0.05)",
+  inversePrimary: "#ffb3ac",
   secondary: "#964900",
   onSecondary: "#ffffff",
   secondaryContainer: "#fc820c",
@@ -132,70 +130,75 @@ export default {
 };
 
 export const ResQColors = {
-  // Surfaces
-  pageBg: DESIGN_COLORS.background,
-  cardSurface: DESIGN_COLORS.surfaceContainerLowest,
+  // Surfaces & Backgrounds
+  pageBg: "#F8F9FA",
+  cardSurface: "#FFFFFF",
+  cardSurfaceSoft: "#F4F6F8",
   inputSurface: DESIGN_COLORS.surfaceContainerLow,
-  border: DESIGN_COLORS.outlineVariant,
+  border: "#E5E7EB",
+  borderSubtle: "#F0F3F6",
   borderStrong: DESIGN_COLORS.outline,
 
   // Text
-  textPrimary: DESIGN_COLORS.onSurface,
-  textSecondary: DESIGN_COLORS.onSurfaceVariant,
-  textMuted: DESIGN_COLORS.outline,
-  textFaint: DESIGN_COLORS.outlineVariant,
+  textPrimary: "#111827",
+  textSecondary: "#374151",
+  textMuted: "#6B7280",
+  textFaint: "#9CA3AF",
+  textSubtle: "#64748B",
 
-  // Brand (Mapped from teal to Primary Red Incidents Theme)
+  // Brand Red Theme
+  primaryRed: "#9E001C",
+  primaryRedDark: "#7F0016",
+  primaryRedLight: "#FEF2F2",
+  primaryRedBorder: "#FEE2E2",
+  primaryRedText: "#BE123C",
+
+  // Category Badges & Soft Tints
+  pinkBg: "#FCE7F3",
+  pinkText: "#BE123C",
+  orangeBg: "#FFEDD5",
+  orangeText: "#C2410C",
+  greenBg: "#DCFCE7",
+  greenText: "#15803D",
+  purpleBg: "#F3E8FF",
+  purpleText: "#7E22CE",
+
+  // Role / Status Badges
+  badgeGrayBg: "#E2E8F0",
+  badgeGrayText: "#475569",
+  badgeAmberBg: "#FEF3C7",
+  badgeAmberText: "#92400E",
+  statusGreen: "#22C55E",
+  statusAmber: "#F59E0B",
+
+  // Legacy Mapped Tokens
   teal: DESIGN_COLORS.primary,
   tealDark: DESIGN_COLORS.surfaceTint,
   tealDeep: DESIGN_COLORS.onPrimaryFixed,
   tealLight: DESIGN_COLORS.primaryFixed,
-
-  // Critical / danger
   red: DESIGN_COLORS.emergencyRed,
   redDark: DESIGN_COLORS.onPrimaryFixedVariant,
   redDeeper: DESIGN_COLORS.onPrimaryFixed,
   redLight: DESIGN_COLORS.errorContainer,
   redBorder: DESIGN_COLORS.outlineVariant,
-
-  // Moderate / warning
   amber: DESIGN_COLORS.warningAmber,
   amberDark: DESIGN_COLORS.onSecondaryFixedVariant,
   amberDeeper: DESIGN_COLORS.onSecondaryFixed,
   amberLight: DESIGN_COLORS.secondaryFixed,
   amberBorder: DESIGN_COLORS.secondaryFixedDim,
-
-  // Low / resolved
   green: DESIGN_COLORS.successGreen,
   greenDark: DESIGN_COLORS.onTertiaryFixedVariant,
   greenDeeper: DESIGN_COLORS.onTertiaryFixed,
   greenLight: DESIGN_COLORS.tertiaryFixed,
   greenBorder: DESIGN_COLORS.outlineVariant,
-
-  // Avatar tints
   avatarTeal: DESIGN_COLORS.primaryFixed,
   avatarBlue: DESIGN_COLORS.tertiaryFixed,
   avatarAmber: DESIGN_COLORS.secondaryFixed,
   avatarGray: DESIGN_COLORS.surfaceDim,
-
-  // Avatar text (on their tints)
   avatarTealText: DESIGN_COLORS.onPrimaryFixed,
   avatarBlueText: DESIGN_COLORS.onTertiaryFixed,
   avatarAmberText: DESIGN_COLORS.onSecondaryFixed,
   avatarGrayText: DESIGN_COLORS.onSurface,
 } as const;
-export const statusColors = {
-  Available: "#22C55E",
-  Away: "#F59E0B",
-  Offline: "#9CA3AF",
-};
 
-export const randomColors = [
-  { bg: "#F87171", text: "#FFFFFF" },
-  { bg: "#60A5FA", text: "#FFFFFF" },
-  { bg: "#34D399", text: "#111827" },
-  { bg: "#FBBF24", text: "#78350F" },
-  { bg: "#C084FC", text: "#FFFFFF" },
-  { bg: "#F472B6", text: "#FFFFFF" },
-];
 export type ResQColor = (typeof ResQColors)[keyof typeof ResQColors];

@@ -1,6 +1,19 @@
-import { Briefcase, GraduationCap, Home, MapPin } from "lucide-react-native";
+import {
+  Briefcase,
+  Coffee,
+  GraduationCap,
+  HeartPulse,
+  Home,
+  MapPin,
+} from "lucide-react-native";
 import React from "react";
-import { Article, caseProp, Person } from "./interfaces";
+import {
+  caseProp,
+  ContactsProp,
+  PendingRequest,
+  Person,
+  SuggestedResponder,
+} from "./interfaces";
 
 export const PEOPLE: Person[] = [
   {
@@ -862,19 +875,18 @@ export const LOCATION_OPTIONS = [
     icon: React.createElement(Briefcase, { size: 20, color: "#1F2937" }),
     description: "Administration building, staff quarters, work offices",
   },
-  // {
-  //   label: "Cafeteria / Social Spaces",
-  //   value: "social",
-  //   icon: React.createElement(Coffee, { size: 20, color: "#1F2937" }),
-  //   description: "Commercial area, food courts, student union building",
-  // },
-  // {
-  //   label: "Health Center / Clinic",
-  //   value: "health",
-  //   icon: React.createElement(HeartPulse, { size: 20, color: "#1F2937" }),
-  //   description: "KNUST Hospital, college sickbays, health points",
-
-  // },
+  {
+    label: "Cafeteria / Social Spaces",
+    value: "social",
+    icon: React.createElement(Coffee, { size: 20, color: "#1F2937" }),
+    description: "Commercial area, food courts, student union building",
+  },
+  {
+    label: "Health Center / Clinic",
+    value: "health",
+    icon: React.createElement(HeartPulse, { size: 20, color: "#1F2937" }),
+    description: "KNUST Hospital, college sickbays, health points",
+  },
   {
     label: "Other Campus Coordinates",
     value: "other",
@@ -883,112 +895,131 @@ export const LOCATION_OPTIONS = [
   },
 ];
 
-export const contactsData = [
+export const DEFAULT_CONTACTS: ContactsProp[] = [
   {
     id: "1",
-    initials: "KC",
-    name: "Karen Castillo",
-    relationship: "Roommate",
+    initials: "AA",
+    name: "Austin Arthur",
+    phone: "+44 999 999 999",
+    relationship: "Family",
+    badgeType: "Family",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
     status: "Available",
     statusColor: "#22C55E",
-    avatarColor: "#FF6B6B",
-    avatarTextColor: "#FFFFFF",
+    avatarColor: "#FCE7F3",
+    avatarTextColor: "#BE123C",
     category: "Family & Friends",
   },
   {
     id: "2",
-    initials: "AT",
-    name: "Alex Tan",
-    relationship: "RA (Republic Hall)",
-    status: "Away",
-    statusColor: "#F59E0B",
-    avatarColor: "#4ECDC4",
-    avatarTextColor: "#0F766E",
-    category: "Family & Friends",
+    initials: "L",
+    name: "Lawrence",
+    phone: "+44 999 999 999",
+    relationship: "Office",
+    badgeType: "Office",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=250&auto=format&fit=crop",
+    status: "Available",
+    statusColor: "#22C55E",
+    avatarColor: "#FFEDD5",
+    avatarTextColor: "#C2410C",
+    category: "Campus & Professional",
   },
   {
     id: "3",
+    initials: "LM",
+    name: "Louis Mason",
+    phone: "+44 999 999 999",
+    relationship: "Friend",
+    badgeType: "Friend",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=250&auto=format&fit=crop",
+    status: "Away",
+    statusColor: "#F59E0B",
+    avatarColor: "#DCFCE7",
+    avatarTextColor: "#15803D",
+    category: "Family & Friends",
+  },
+  {
+    id: "4",
+    initials: "KC",
+    name: "Karen Castillo",
+    phone: "+44 999 888 777",
+    relationship: "Roommate",
+    badgeType: "Friend",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=250&auto=format&fit=crop",
+    status: "Available",
+    statusColor: "#22C55E",
+    avatarColor: "#EC4899",
+    avatarTextColor: "#FFFFFF",
+    category: "Family & Friends",
+  },
+  {
+    id: "5",
     initials: "CS",
     name: "Campus Security",
-    relationship: "Official Safety Dispatch",
-    status: "",
+    phone: "+44 999 000 111",
+    relationship: "Campus Security",
+    badgeType: "Campus",
+    status: "Available",
     statusColor: "#22C55E",
-    avatarColor: "#111827",
+    avatarColor: "#1E1B4B",
     avatarTextColor: "#FFFFFF",
     category: "Campus & Professional",
     verified: true,
-    hasLeftAccent: true,
-    hasMessage: false,
-  },
-  {
-    id: "4",
-    initials: "MS",
-    name: "Maria Santos",
-    relationship: "Academic Advisor",
-    status: "Offline",
-    statusColor: "#9CA3AF",
-    avatarColor: "#A78BFA",
-    avatarTextColor: "#FFFFFF",
-    category: "Campus & Professional",
   },
 ];
 
-export const articles: Article[] = [
+export const DEFAULT_PENDING_REQUESTS: PendingRequest[] = [
   {
-    id: "1",
-    title: "Severe Heat Wave Warning: City-wide Cooling Centers Opened",
-    category: "ADVISORY",
-    categoryColor: "#D32F2F", // Red
-    categoryBg: "#FFDAD6", // Light red
-    publisher: "Emergency Services",
-    time: "Just now",
-    image:
-      "https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?w=800&auto=format&fit=crop&q=80",
-    leftAccent: "#D32F2F",
-    isFeatured: true,
-    content:
-      "A severe heatwave is currently impacting the metropolitan area with temperatures expected to rise above 40°C. ResQ and municipal officials have opened 15 cooling centers across the city, equipped with water, air conditioning, and medical staff. Residents are advised to limit outdoor activity between 11 AM and 4 PM, stay hydrated, and check in on elderly neighbors. Critical services remain active.",
+    id: "pr-1",
+    name: "Sarah Jenkins",
+    role: "Medic",
+    distance: "1.2mi away",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=300&auto=format&fit=crop",
   },
   {
-    id: "2",
-    title: "New Emergency Response Hub Opened",
-    category: "OFFICIAL",
-    categoryColor: "#1976D2", // Blue
-    categoryBg: "#D4E3FF", // Light blue
-    publisher: "ResQ Official",
-    time: "1h ago",
-    image:
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=600&auto=format&fit=crop&q=80",
-    leftAccent: "#1976D2",
-    content:
-      "The new regional emergency operations headquarters is officially open. Designed to improve crisis response times by 30%, this facility centralizes dispatch teams, ambulance crews, and digital coordination personnel in one hub. The hub features advanced mapping screens and satellite backup networks to coordinate disaster responses.",
+    id: "pr-2",
+    name: "David Chen",
+    role: "Volunteer",
+    distance: "3.5mi away",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=300&auto=format&fit=crop",
+  },
+];
+
+export const DEFAULT_SUGGESTED_RESPONDERS: SuggestedResponder[] = [
+  {
+    id: "sr-1",
+    name: "Marcus Thorne",
+    role: "Fire Rescue",
+    distance: "0.8mi away",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=300&auto=format&fit=crop",
+    isOnline: false,
+    isRequested: false,
   },
   {
-    id: "3",
-    title: "Annual Neighborhood Safety Drill Scheduled",
-    category: "COMMUNITY",
-    categoryColor: "#FC820C", // Orange
-    categoryBg: "#FFDCC6", // Light orange
-    publisher: "Local Watch",
-    time: "3h ago",
-    image:
-      "https://images.unsplash.com/photo-1508962914676-134849a727f0?w=600&auto=format&fit=crop&q=80",
-    leftAccent: "#FC820C",
-    content:
-      "Our annual community-wide evacuation and safety drill is scheduled for Saturday at 9:00 AM. In partnership with local fire services, we will simulate a multi-block safety sweep. Community captains will demonstrate emergency supply kit checks and assembly area operations. All residents are highly encouraged to participate in this drill.",
+    id: "sr-2",
+    name: "Elena Rodriguez",
+    role: "EMT Specialist",
+    distance: "1.5mi away",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=300&auto=format&fit=crop",
+    isOnline: true,
+    isRequested: true,
   },
   {
-    id: "4",
-    title: "Heavy Rainfall Expected Tonight: Flash Floods Warning",
-    category: "ADVISORY",
-    categoryColor: "#D32F2F", // Red
-    categoryBg: "#FFDAD6", // Light red
-    publisher: "Weather Service",
-    time: "5h ago",
-    image:
-      "https://images.unsplash.com/photo-1515694346937-94d85e41e6f0?w=600&auto=format&fit=crop&q=80",
-    leftAccent: "#D32F2F",
-    content:
-      "The national meteorological bureau has issued a flash flood warning for low-lying areas. Total rain accumulations of 75-100mm are expected within a 6-hour window tonight. Residents should clear gutters, park vehicles on higher ground, and refrain from driving through flooded roads. Rescue personnel have been pre-positioned at flood hotspots.",
+    id: "sr-3",
+    name: "Robert King",
+    role: "Community Leader",
+    distance: "2.1mi away",
+    avatarUrl:
+      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=300&auto=format&fit=crop",
+    isOnline: false,
+    isRequested: false,
   },
 ];

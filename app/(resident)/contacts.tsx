@@ -1,18 +1,22 @@
 import Contacts from "@/components/Contacts";
-import HomeTabBar from "@/components/HomeTabBar";
-import Colors, {
-  randomColors,
-  ResQColors,
-  statusColors,
-} from "@/constants/Colors";
+import { ResQColors } from "@/constants/Colors";
 import { ContactsProp } from "@/constants/interfaces";
-import { contactsData } from "@/constants/tempData";
+import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
-import { Info, UserPlus, X } from "lucide-react-native";
+import {
+  Bell,
+  Building2,
+  HelpCircle,
+  Search,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react-native";
 import React, { useState } from "react";
 import {
   Alert,
+  Image,
   Modal,
   ScrollView,
   StyleSheet,
@@ -30,32 +34,27 @@ export default function ContactsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // Initial list of trusted contacts matching the mockup design
-  const [contacts, setContacts] = useState<ContactsProp[]>(contactsData);
+  // Category and Search filter states
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
-  // Modal and form states
+  // Contacts list initialized from centralized tempData
+  const [contacts, setContacts] = useState<ContactsProp[]>(DEFAULT_CONTACTS);
+
+  // Add Contact Modal State
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newRelationship, setNewRelationship] = useState("");
-  const [newStatus, setNewStatus] = useState<"Available" | "Away" | "Offline">(
-    "Available",
-  );
+  const [newPhone, setNewPhone] = useState("");
   const [newCategory, setNewCategory] = useState<
-    "Family & Friends" | "Campus & Professional"
-  >("Family & Friends");
+    "Family" | "Office" | "Friend" | "Campus"
+  >("Family");
 
   const handleCallPress = (name: string) => {
-    Alert.alert(
-      "Emergency Call",
-      `Initiating direct emergency call to ${name}...`,
-    );
+    Alert.alert("Emergency Call", `Initiating direct call to ${name}...`);
   };
 
   const handleChatPress = (name: string) => {
-    Alert.alert(
-      "Emergency Chat",
-      `Opening rapid secure chat channel with ${name}...`,
-    );
+    Alert.alert("Emergency Chat", `Opening secure chat with ${name}...`);
   };
 
   const getInitials = (fullName: string) => {
@@ -67,151 +66,268 @@ export default function ContactsScreen() {
   };
 
   const handleAddContact = () => {
-    if (!newName.trim() || !newRelationship.trim()) {
-      Alert.alert("Input Required", "Please provide a name and relationship.");
+    if (!newName.trim()) {
+      Alert.alert("Input Required", "Please enter a contact name.");
       return;
     }
-
-    const colorPair =
-      randomColors[Math.floor(Math.random() * randomColors.length)];
 
     const newContact: ContactsProp = {
       id: Date.now().toString(),
       initials: getInitials(newName),
       name: newName,
-      relationship: newRelationship,
-      status: newStatus,
-      statusColor: statusColors[newStatus],
-      avatarColor: colorPair.bg,
-      avatarTextColor: colorPair.text,
-      category: newCategory,
-      verified: newCategory === "Campus & Professional", // default to verified if campus/pro
-      hasMessage: true,
-      hasLeftAccent: false,
+      phone: newPhone.trim() || "+44 999 999 999",
+      relationship: newCategory,
+      badgeType: newCategory,
+      status: "Available",
+      statusColor: ResQColors.statusGreen,
+      avatarColor: ResQColors.primaryRed,
+      avatarTextColor: "#FFFFFF",
+      category:
+        newCategory === "Office" || newCategory === "Campus"
+          ? "Campus & Professional"
+          : "Family & Friends",
     };
 
     setContacts((prev) => [...prev, newContact]);
     setNewName("");
-    setNewRelationship("");
-    setNewStatus("Available");
-    setNewCategory("Family & Friends");
+    setNewPhone("");
+    setNewCategory("Family");
     setAddModalVisible(false);
-    Alert.alert(
-      "Success",
-      `${newName} has been added to your Trusted Contacts.`,
-    );
+    Alert.alert("Success", `${newName} has been added to your contacts.`);
   };
 
   const handleDeleteContact = (id: string | number, name: string) => {
-    Alert.alert(
-      "Remove Contact",
-      `Are you sure you want to remove ${name} from your trusted emergency contacts?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => {
-            setContacts((prev) => prev.filter((c) => c.id !== id));
-          },
+    Alert.alert("Remove Contact", `Are you sure you want to remove ${name}?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => {
+          setContacts((prev) => prev.filter((c) => c.id !== id));
         },
-      ],
-    );
+      },
+    ]);
   };
 
-  const familyContacts = contacts.filter(
-    (c) => !c.category || c.category === "Family & Friends",
-  );
-  const professionalContacts = contacts.filter(
-    (c) => c.category === "Campus & Professional",
-  );
+  // Filter contacts by selected category and search query
+  const filteredContacts = contacts.filter((c) => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.relationship.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.phone && c.phone.includes(searchQuery));
+
+    const matchesCategory =
+      selectedCategory === "All" ||
+      (c.badgeType &&
+        c.badgeType.toLowerCase() === selectedCategory.toLowerCase()) ||
+      (c.relationship &&
+        c.relationship.toLowerCase().includes(selectedCategory.toLowerCase()));
+
+    return matchesSearch && matchesCategory;
+  });
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Top Header Navigation */}
-      <HomeTabBar pageTitle="Contacts" activePage="Contacts" />
+      {/* Top Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() =>
+            Alert.alert("Help", "Opening support and help guide...")
+          }
+          style={styles.headerIconButton}
+          activeOpacity={0.7}
+        >
+          <HelpCircle
+            size={22}
+            color={ResQColors.primaryRed}
+            strokeWidth={2.2}
+          />
+        </TouchableOpacity>
+
+        <View style={styles.brandTitleContainer}>
+          <Text style={styles.brandTitleText}>ResQ</Text>
+          <Text style={styles.brandDot}>.</Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => Alert.alert("Notifications", "No new notifications.")}
+          style={styles.headerIconButton}
+          activeOpacity={0.7}
+        >
+          <Bell size={22} color={ResQColors.primaryRed} strokeWidth={2.2} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingBottom: 150 + insets.bottom },
+          { paddingBottom: 120 + insets.bottom },
         ]}
       >
-        {/* Info Banner */}
-        <View style={styles.infoBanner}>
-          <View style={styles.infoIconCircle}>
-            <Info size={13} color="#FFFFFF" strokeWidth={3} />
-          </View>
-          <Text style={styles.infoText}>
-            These contacts will be notified instantly if you trigger Emergency
-            Mode / SOS broadcast.
+        {/* Page Title Section */}
+        <View style={styles.titleSection}>
+          <Text style={styles.subTitleText}>Address Book</Text>
+          <Text style={styles.mainTitleText}>Contacts</Text>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchBarContainer}>
+          <Search size={20} color={ResQColors.textFaint} />
+          <TextInput
+            placeholder="Search contacts..."
+            placeholderTextColor={ResQColors.textFaint}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            style={styles.searchInput}
+          />
+        </View>
+
+        {/* My Communities Section */}
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitleText}>MY COMMUNITIES</Text>
+          <TouchableOpacity
+            onPress={() => {
+              setSelectedCategory("All");
+              setSearchQuery("");
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.viewAllText}>View all</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.communitiesRow}>
+          {/* Family Card */}
+          <TouchableOpacity
+            style={[
+              styles.communityCard,
+              {
+                borderColor:
+                  selectedCategory === "Family"
+                    ? ResQColors.pinkText
+                    : ResQColors.pinkBg,
+              },
+              selectedCategory === "Family" && styles.communityCardActive,
+            ]}
+            activeOpacity={0.8}
+            onPress={() => setSelectedCategory("Family")}
+          >
+            <View
+              style={[
+                styles.communityIconBadge,
+                { backgroundColor: ResQColors.pinkBg },
+              ]}
+            >
+              <Users size={22} color={ResQColors.pinkText} />
+            </View>
+            <Text style={styles.communityCardTitle}>Family</Text>
+
+            {/* Avatar Stack */}
+            <View style={styles.avatarStackRow}>
+              <View
+                style={[styles.miniAvatarBox, { backgroundColor: "#FCA5A5" }]}
+              >
+                <Text style={styles.miniAvatarText}>HK</Text>
+              </View>
+              <Image
+                source={{
+                  uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100&auto=format&fit=crop",
+                }}
+                style={[styles.miniAvatarImage, { marginLeft: -8 }]}
+              />
+              <View style={[styles.miniAvatarBadge, { marginLeft: -8 }]}>
+                <Text style={styles.miniBadgeText}>+5</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
+          {/* Office Staff Card */}
+          <TouchableOpacity
+            style={[
+              styles.communityCard,
+              {
+                borderColor:
+                  selectedCategory === "Office"
+                    ? ResQColors.orangeText
+                    : ResQColors.orangeBg,
+              },
+              selectedCategory === "Office" && styles.communityCardActive,
+            ]}
+            activeOpacity={0.8}
+            onPress={() => setSelectedCategory("Office")}
+          >
+            <View
+              style={[
+                styles.communityIconBadge,
+                { backgroundColor: ResQColors.orangeBg },
+              ]}
+            >
+              <Building2 size={22} color={ResQColors.orangeText} />
+            </View>
+            <Text style={styles.communityCardTitle}>Office Staff</Text>
+
+            {/* Avatar Stack */}
+            <View style={styles.avatarStackRow}>
+              <Image
+                source={{
+                  uri: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=100&auto=format&fit=crop",
+                }}
+                style={styles.miniAvatarImage}
+              />
+              <Image
+                source={{
+                  uri: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=100&auto=format&fit=crop",
+                }}
+                style={[styles.miniAvatarImage, { marginLeft: -8 }]}
+              />
+              <View style={[styles.miniAvatarBadge, { marginLeft: -8 }]}>
+                <Text style={styles.miniBadgeText}>+21</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* All Contacts Section */}
+        <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
+          <Text style={styles.sectionTitleText}>ALL CONTACTS</Text>
+          <Text style={styles.contactCountText}>
+            {filteredContacts.length} contacts
           </Text>
         </View>
 
-        {/* Family & Friends Section */}
-        {familyContacts.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <Text style={styles.sectionHeader}>Family & Friends</Text>
-            {familyContacts.map((contact, idx) => (
-              <Contacts
-                id={contact.id}
-                avatarColor={contact.avatarColor}
-                idx={idx}
-                name={contact.name}
-                initials={contact.initials}
-                status={contact.status}
-                avatarTextColor={contact.avatarTextColor}
-                relationship={contact.relationship}
-                statusColor={contact.statusColor}
-                category={contact.category}
-                verified={contact.verified}
-                hasLeftAccent={contact.hasLeftAccent}
-                hasMessage={contact.hasMessage}
-                handleCallPress={handleCallPress}
-                handleChatPress={handleChatPress}
-                handleDeleteContact={handleDeleteContact}
-                key={contact.id}
-              />
-            ))}
-          </View>
-        )}
-
-        {/* Campus & Professional Section */}
-        {professionalContacts.length > 0 && (
-          <View style={[styles.sectionContainer, { marginTop: 12 }]}>
-            <Text style={styles.sectionHeader}>Campus & Professional</Text>
-            {professionalContacts.map((contact, idx) => (
-              <Contacts
-                id={contact.id}
-                avatarColor={contact.avatarColor}
-                idx={idx}
-                name={contact.name}
-                initials={contact.initials}
-                status={contact.status}
-                avatarTextColor={contact.avatarTextColor}
-                relationship={contact.relationship}
-                statusColor={contact.statusColor}
-                category={contact.category}
-                verified={contact.verified}
-                hasLeftAccent={contact.hasLeftAccent}
-                hasMessage={contact.hasMessage}
-                handleCallPress={handleCallPress}
-                handleChatPress={handleChatPress}
-                handleDeleteContact={handleDeleteContact}
-                key={contact.id}
-              />
-            ))}
-          </View>
-        )}
+        <View style={styles.contactsListContainer}>
+          {filteredContacts.map((contact, idx) => (
+            <Contacts
+              key={contact.id}
+              id={contact.id}
+              idx={idx}
+              name={contact.name}
+              initials={contact.initials}
+              phone={contact.phone}
+              avatarUrl={contact.avatarUrl}
+              badgeType={contact.badgeType}
+              relationship={contact.relationship}
+              status={contact.status}
+              statusColor={contact.statusColor}
+              avatarColor={contact.avatarColor}
+              avatarTextColor={contact.avatarTextColor}
+              verified={contact.verified}
+              handleCallPress={handleCallPress}
+              handleChatPress={handleChatPress}
+              handleDeleteContact={handleDeleteContact}
+            />
+          ))}
+        </View>
       </ScrollView>
 
-      {/* Floating Add Contact Button (Circular FAB with only UserPlus icon) */}
+      {/* Floating Add Contact Button (Navigates to Connect screen) */}
       <TouchableOpacity
-        onPress={() => setAddModalVisible(true)}
-        style={[styles.floatingAddButton, { bottom: 72 + insets.bottom + 20 }]}
-        activeOpacity={0.8}
+        onPress={() => router.push("/connect")}
+        style={[styles.fabButton, { bottom: 90 + insets.bottom }]}
+        activeOpacity={0.85}
       >
-        <UserPlus size={24} color="#FFFFFF" />
+        <UserPlus size={26} color="#FFFFFF" strokeWidth={2.3} />
       </TouchableOpacity>
 
       {/* Add Contact Modal Form */}
@@ -224,49 +340,53 @@ export default function ContactsScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Emergency Contact</Text>
-              <TouchableOpacity onPress={() => setAddModalVisible(false)}>
-                <X size={22} color={Colors.light.text} />
+              <Text style={styles.modalTitle}>Add Contact</Text>
+              <TouchableOpacity
+                onPress={() => setAddModalVisible(false)}
+                style={{ padding: 4 }}
+              >
+                <X size={22} color={ResQColors.textPrimary} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView contentContainerStyle={styles.modalForm}>
+            <View style={styles.modalForm}>
               <Text style={styles.inputLabel}>Full Name</Text>
               <TextInput
-                placeholder="e.g. Officer Koomson, Roommate Alex"
+                placeholder="e.g. Austin Arthur, Lawrence"
                 value={newName}
                 onChangeText={setNewName}
                 style={styles.input}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={ResQColors.textFaint}
               />
 
-              <Text style={styles.inputLabel}>Relationship</Text>
+              <Text style={styles.inputLabel}>Phone Number</Text>
               <TextInput
-                placeholder="e.g. Brother, Roommate, Campus Safety"
-                value={newRelationship}
-                onChangeText={setNewRelationship}
+                placeholder="e.g. +44 999 999 999"
+                value={newPhone}
+                onChangeText={setNewPhone}
+                keyboardType="phone-pad"
                 style={styles.input}
-                placeholderTextColor="#9CA3AF"
+                placeholderTextColor={ResQColors.textFaint}
               />
 
-              <Text style={styles.inputLabel}>Category</Text>
-              <View style={styles.statusOptions}>
-                {(["Family & Friends", "Campus & Professional"] as const).map(
+              <Text style={styles.inputLabel}>Category / Badge</Text>
+              <View style={styles.categoryPickerRow}>
+                {(["Family", "Office", "Friend", "Campus"] as const).map(
                   (cat) => (
                     <TouchableOpacity
                       key={cat}
                       style={[
-                        styles.statusOptionButton,
+                        styles.categoryOptionButton,
                         newCategory === cat &&
-                          styles.statusOptionButtonSelected,
+                          styles.categoryOptionButtonSelected,
                       ]}
                       onPress={() => setNewCategory(cat)}
                     >
                       <Text
                         style={[
-                          styles.statusOptionText,
+                          styles.categoryOptionText,
                           newCategory === cat &&
-                            styles.statusOptionTextSelected,
+                            styles.categoryOptionTextSelected,
                         ]}
                       >
                         {cat}
@@ -276,37 +396,14 @@ export default function ContactsScreen() {
                 )}
               </View>
 
-              <Text style={styles.inputLabel}>Initial Availability Status</Text>
-              <View style={styles.statusOptions}>
-                {(["Available", "Away", "Offline"] as const).map((status) => (
-                  <TouchableOpacity
-                    key={status}
-                    style={[
-                      styles.statusOptionButton,
-                      newStatus === status && styles.statusOptionButtonSelected,
-                    ]}
-                    onPress={() => setNewStatus(status)}
-                  >
-                    <Text
-                      style={[
-                        styles.statusOptionText,
-                        newStatus === status && styles.statusOptionTextSelected,
-                      ]}
-                    >
-                      {status}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
               <TouchableOpacity
                 onPress={handleAddContact}
                 style={styles.saveButton}
                 activeOpacity={0.8}
               >
-                <Text style={styles.saveButtonText}>Add Contact</Text>
+                <Text style={styles.saveButtonText}>Save Contact</Text>
               </TouchableOpacity>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -317,104 +414,202 @@ export default function ContactsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.background,
+    backgroundColor: ResQColors.pageBg,
   },
-  customHeader: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: Colors.light.background,
+    paddingVertical: 12,
+    backgroundColor: ResQColors.pageBg,
   },
-  headerButton: {
-    padding: 6,
-    position: "relative",
+  headerIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: ResQColors.primaryRedLight,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: ResQColors.primaryRedBorder,
   },
-  headerBellBadge: {
-    position: "absolute",
-    top: 5,
-    right: 5,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.light.accent,
-    borderWidth: 1.5,
-    borderColor: Colors.light.background,
-  },
-  headerTitleContainer: {
+  brandTitleContainer: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "baseline",
   },
-  headerTitleText: {
+  brandTitleText: {
     fontSize: 24,
     fontFamily: typography.bold,
-    color: "#000000",
+    color: ResQColors.textPrimary,
+    letterSpacing: -0.5,
   },
-  headerTitleDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.light.accent,
-    marginLeft: 2,
-    marginBottom: 6,
+  brandDot: {
+    fontSize: 26,
+    fontFamily: typography.bold,
+    color: ResQColors.primaryRed,
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    paddingBottom: 170,
+    paddingHorizontal: 20,
+    paddingTop: 12,
   },
-  infoBanner: {
-    flexDirection: "row",
-    backgroundColor: "#EEF1FC",
-    borderRadius: 16,
-    padding: 16,
-    alignItems: "center",
-    gap: 12,
+  titleSection: {
     marginBottom: 20,
   },
-  infoIconCircle: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: Colors.light.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  infoText: {
-    fontSize: 13,
+  subTitleText: {
+    fontSize: 14,
     fontFamily: typography.medium,
-    color: "#4B5563",
+    color: ResQColors.textMuted,
+    marginBottom: 4,
+  },
+  mainTitleText: {
+    fontSize: 32,
+    fontFamily: typography.bold,
+    color: ResQColors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  searchBarContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: ResQColors.border,
+    paddingHorizontal: 18,
+    height: 52,
+    marginBottom: 24,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  searchInput: {
     flex: 1,
-    lineHeight: 18,
+    marginLeft: 12,
+    fontSize: 15,
+    fontFamily: typography.regular,
+    color: ResQColors.textPrimary,
   },
-  sectionContainer: {
-    marginBottom: 16,
+  sectionHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
   },
-  sectionHeader: {
+  sectionTitleText: {
     fontSize: 12.5,
     fontFamily: typography.bold,
-    color: "#78716C",
-    textTransform: "uppercase",
+    color: ResQColors.textMuted,
     letterSpacing: 0.8,
-    marginBottom: 12,
-    marginLeft: 4,
+    textTransform: "uppercase",
   },
-  floatingAddButton: {
+  viewAllText: {
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+    color: ResQColors.primaryRed,
+  },
+  contactCountText: {
+    fontSize: 13,
+    fontFamily: typography.medium,
+    color: ResQColors.textMuted,
+  },
+  communitiesRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  communityCard: {
+    flex: 1,
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 24,
+    borderWidth: 1.5,
+    padding: 18,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  communityCardActive: {
+    borderWidth: 2,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  communityIconBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  communityCardTitle: {
+    fontSize: 16.5,
+    fontFamily: typography.bold,
+    color: ResQColors.textPrimary,
+    marginBottom: 14,
+  },
+  avatarStackRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  miniAvatarBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  miniAvatarText: {
+    fontSize: 10.5,
+    fontFamily: typography.bold,
+    color: "#991B1B",
+  },
+  miniAvatarImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+    backgroundColor: ResQColors.border,
+  },
+  miniAvatarBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: ResQColors.cardSurfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: "#FFFFFF",
+  },
+  miniBadgeText: {
+    fontSize: 10.5,
+    fontFamily: typography.bold,
+    color: ResQColors.badgeGrayText,
+  },
+  contactsListContainer: {
+    gap: 2,
+  },
+  fabButton: {
     position: "absolute",
     right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.light.accent,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: ResQColors.primaryRed,
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: Colors.light.accent,
+    shadowColor: ResQColors.primaryRed,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 10,
     elevation: 6,
-    zIndex: 10,
+    zIndex: 20,
   },
   modalOverlay: {
     flex: 1,
@@ -422,13 +617,12 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "#FFFFFF",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 20,
+    backgroundColor: ResQColors.cardSurface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 24,
     paddingBottom: 40,
-    maxHeight: "85%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -436,12 +630,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderColor: "#F3F4F6",
+    borderColor: ResQColors.borderSubtle,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontFamily: typography.bold,
-    color: Colors.light.text,
+    color: ResQColors.textPrimary,
   },
   modalForm: {
     paddingTop: 20,
@@ -449,64 +643,62 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 13.5,
     fontFamily: typography.semibold,
-    color: Colors.light.text,
+    color: ResQColors.textSecondary,
     marginBottom: 8,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    borderRadius: 12,
-    paddingHorizontal: 14,
+    borderColor: ResQColors.border,
+    borderRadius: 14,
+    paddingHorizontal: 16,
     paddingVertical: 12,
-    fontSize: 14.5,
+    fontSize: 15,
     fontFamily: typography.regular,
-    color: Colors.light.text,
-    marginBottom: 20,
+    color: ResQColors.textPrimary,
+    marginBottom: 18,
     backgroundColor: "#F9FAFB",
   },
-  statusOptions: {
+  categoryPickerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
     gap: 8,
+    marginBottom: 24,
   },
-  statusOptionButton: {
+  categoryOptionButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: ResQColors.border,
     borderRadius: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: ResQColors.cardSurface,
   },
-  statusOptionButtonSelected: {
-    borderColor: Colors.light.accent,
-    backgroundColor: ResQColors.tealLight,
+  categoryOptionButtonSelected: {
+    borderColor: ResQColors.primaryRed,
+    backgroundColor: ResQColors.primaryRedLight,
   },
-  statusOptionText: {
+  categoryOptionText: {
     fontSize: 13,
     fontFamily: typography.medium,
-    color: Colors.light.textMuted,
+    color: ResQColors.textMuted,
   },
-  statusOptionTextSelected: {
-    color: ResQColors.tealDark,
-    fontFamily: typography.semibold,
+  categoryOptionTextSelected: {
+    color: ResQColors.primaryRed,
+    fontFamily: typography.bold,
   },
   saveButton: {
-    backgroundColor: Colors.light.accent,
-    borderRadius: 14,
-    paddingVertical: 14,
+    backgroundColor: ResQColors.primaryRed,
+    borderRadius: 16,
+    paddingVertical: 15,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 10,
-    shadowColor: Colors.light.accent,
+    shadowColor: ResQColors.primaryRed,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
     elevation: 3,
   },
   saveButtonText: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: typography.semibold,
     color: "#FFFFFF",
   },

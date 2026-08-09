@@ -25,6 +25,9 @@ export interface ContactsProp {
   verified?: boolean;
   hasLeftAccent?: boolean;
   hasMessage?: boolean;
+  phone?: string;
+  avatarUrl?: string;
+  badgeType?: string;
 }
 export interface HomeButton {
   Icon: React.ReactNode;
@@ -35,11 +38,7 @@ export interface HomeButton {
   iconColor: string;
   onPress?: () => void;
 }
-export const URGENCY_LABELS = {
-  critical: "CRITICAL",
-  high: "HIGH",
-  medium: "MEDIUM",
-};
+
 export interface caseProp {
   id: string | number;
   title: string;
@@ -57,16 +56,20 @@ export interface caseProp {
   responseTime: number;
 }
 
-export interface Article {
+export interface PendingRequest {
   id: string;
-  title: string;
-  category: "ADVISORY" | "OFFICIAL" | "COMMUNITY";
-  categoryColor: string;
-  categoryBg: string;
-  publisher: string;
-  time: string;
-  image: string;
-  leftAccent?: string;
-  isFeatured?: boolean;
-  content: string;
+  name: string;
+  role: string;
+  distance: string;
+  avatarUrl: string;
+}
+
+export interface SuggestedResponder {
+  id: string;
+  name: string;
+  role: string;
+  distance: string;
+  avatarUrl: string;
+  isOnline?: boolean;
+  isRequested?: boolean;
 }
