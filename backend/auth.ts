@@ -171,39 +171,84 @@ export async function getUserProfile(userId: string) {
  * 6. Update User Profile Verification Details
  * Updates the public users table with student verification details.
  */
+export interface UserVerificationData {
+  name?: string;
+  email?: string;
+  student_id_number: string;
+  student_reference_number: string;
+  program_of_study: string;
+  phone: string;
+  location_type: string;
+  address: string;
+  student_card_image_url?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  is_verified?: boolean;
+}
+
+/**
+ * 6. Update User Profile Verification Details
+ * Upserts the public users table with student verification details.
+ */
 export async function updateUserVerification(
   userId: string,
   verificationData: UserVerificationData,
 ) {
   try {
+    const upsertPayload: Record<string, any> = {
+      id: userId,
+      student_id_number: verificationData.student_id_number,
+      student_reference_number: verificationData.student_reference_number,
+      program_of_study: verificationData.program_of_study,
+      phone: verificationData.phone,
+      location_type: verificationData.location_type,
+      address: verificationData.address,
+      is_verified: true,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (verificationData.name) {
+      upsertPayload.name = verificationData.name;
+    }
+    if (verificationData.email) {
+      upsertPayload.email = verificationData.email;
+    }
+    if (verificationData.student_card_image_url) {
+      upsertPayload.student_card_image_url = verificationData.student_card_image_url;
+    }
+    if (verificationData.latitude !== undefined) {
+      upsertPayload.latitude = verificationData.latitude;
+    }
+    if (verificationData.longitude !== undefined) {
+      upsertPayload.longitude = verificationData.longitude;
+    }
+
+    console.log("📄 Upserting user verification payload for ID:", userId);
+    console.log(upsertPayload);
+
     const { data, error } = await supabase
       .from("users")
-      .update({
-        student_id_number: verificationData.student_id_number,
-        student_reference_number: verificationData.student_reference_number,
-        program_of_study: verificationData.program_of_study,
-        phone: verificationData.phone,
-        location_type: verificationData.location_type,
-        address: verificationData.address,
-        ...(verificationData.student_card_image_url && {
-          student_card_image_url: verificationData.student_card_image_url,
-        }),
-        ...(verificationData.latitude !== undefined && {
-          latitude: verificationData.latitude,
-        }),
-        ...(verificationData.longitude !== undefined && {
-          longitude: verificationData.longitude,
-        }),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", userId)
+      .upsert(upsertPayload, { onConflict: "id" })
       .select();
 
-    if (error) throw error;
+    if (error) {
+      console.error("❌ Supabase users upsert error:", error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn("⚠️ Supabase upsert returned 0 rows. Verify Row Level Security (RLS) on users table.");
+      return {
+        data: null,
+        error: "Failed to update profile. Please verify Supabase Row Level Security (RLS) policies on table 'users'.",
+      };
+    }
+
+    console.log("✅ Successfully saved user verification to Supabase users table:", data[0]);
     return { data, error: null };
   } catch (error: any) {
-    console.error("Profile Verification Update Error:", error.message);
-    return { data: null, error: error.message };
+    console.error("❌ Profile Verification Update Error:", error.message || error);
+    return { data: null, error: error.message || String(error) };
   }
 }
 

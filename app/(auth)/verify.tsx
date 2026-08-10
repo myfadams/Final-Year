@@ -9,6 +9,7 @@ import {
   updateUserVerification,
   uploadStudentIdCard,
 } from "@/backend/auth";
+import { processStudentIdOcr, OcrExtractedData } from "@/backend/ocr";
 import { ImagePickerButton } from "@/components/ImagePickerButton";
 import ImageUpload from "@/components/ImageUpload";
 import Colors from "@/constants/Colors";
@@ -53,6 +54,19 @@ const Verify = () => {
   const [locationLoading, setLocationLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [userId, setUserId] = useState<string>("");
+  const [studentCardImageUrl, setStudentCardImageUrl] = useState<string>("");
+
+  const [ocrResult, setOcrResult] = useState<OcrExtractedData | null>(null);
+
+  const [errors, setErrors] = useState<{
+    studentId?: string;
+    studentRef?: string;
+    program?: string;
+    phone?: string;
+    locationType?: string;
+    address?: string;
+    location?: string;
+  }>({});
 
   useEffect(() => {
     getCurrentUser().then(({ user }) => {
@@ -62,14 +76,119 @@ const Verify = () => {
     });
   }, []);
 
+  const isOcrComplete = (data: OcrExtractedData | null): boolean => {
+    if (!data) return false;
+    return Boolean(
+      data.fullName &&
+        data.ReferenceNumber &&
+        data.studentID &&
+        data.dateOfExpiry &&
+        data.course
+    );
+  };
+
+  const handleStudentIdChange = (text: string) => {
+    setStudentId(text);
+    if (errors.studentId) setErrors((prev) => ({ ...prev, studentId: undefined }));
+  };
+
+  const handleStudentRefChange = (text: string) => {
+    setStudentRef(text);
+    if (errors.studentRef) setErrors((prev) => ({ ...prev, studentRef: undefined }));
+  };
+
+  const handlePhoneChange = (text: string) => {
+    setPhone(text);
+    if (errors.phone) setErrors((prev) => ({ ...prev, phone: undefined }));
+  };
+
+  const handleAddressChange = (text: string) => {
+    setAddress(text);
+    if (errors.address) setErrors((prev) => ({ ...prev, address: undefined }));
+  };
+
+  const handleProgramChange = (val: string) => {
+    setProgram(val);
+    if (errors.program) setErrors((prev) => ({ ...prev, program: undefined }));
+  };
+
+  const handleLocationTypeChange = (val: string) => {
+    setLocationType(val);
+    if (errors.locationType) setErrors((prev) => ({ ...prev, locationType: undefined }));
+  };
+
+  const handleImageUploaded = async (uploadedPublicUrl: string) => {
+    console.log("Image successfully uploaded. Triggering OCR.space...");
+    setStudentCardImageUrl(uploadedPublicUrl);
+    const ocrData = await processStudentIdOcr(uploadedPublicUrl);
+    setOcrResult(ocrData);
+
+    if (!ocrData || !isOcrComplete(ocrData)) {
+      Alert.alert(
+        "ID Verification Error",
+        "Unable to extract all required details (Full Name, Student ID, Reference Number, Date of Expiry, and Course) from your Student ID card. Please upload a clearer photo of your official Student ID card."
+      );
+    }
+
+    if (ocrData) {
+      if (ocrData.studentID) {
+        setStudentId(ocrData.studentID);
+        if (errors.studentId) setErrors((prev) => ({ ...prev, studentId: undefined }));
+      }
+
+      if (ocrData.ReferenceNumber) {
+        setStudentRef(ocrData.ReferenceNumber);
+        if (errors.studentRef) setErrors((prev) => ({ ...prev, studentRef: undefined }));
+      }
+
+      if (ocrData.course) {
+        const ocrCourseLower = ocrData.course.toLowerCase();
+        const cleanOcrCourse = ocrCourseLower
+          .replace(
+            /^b\.?sc\s*|b\.?a\s*|bachelor\s*(?:of\s*science|of\s*arts)?\s*(?:in)?\s*/i,
+            ""
+          )
+          .trim();
+
+        const matched = KNUST_PROGRAMMES.find((item) => {
+          const itemLabelLower = item.label.toLowerCase();
+          const cleanItemLabel = itemLabelLower
+            .replace(
+              /^b\.?sc\s*|b\.?a\s*|bachelor\s*(?:of\s*science|of\s*arts)?\s*(?:in)?\s*/i,
+              ""
+            )
+            .trim();
+
+          return (
+            itemLabelLower.includes(ocrCourseLower) ||
+            ocrCourseLower.includes(itemLabelLower) ||
+            (cleanOcrCourse.length > 3 &&
+              cleanItemLabel.includes(cleanOcrCourse)) ||
+            (cleanOcrCourse.length > 3 &&
+              cleanOcrCourse.includes(cleanItemLabel))
+          );
+        });
+
+        if (matched) {
+          console.log(
+            `Matched OCR course "${ocrData.course}" -> "${matched.label}" (${matched.value})`
+          );
+          setProgram(matched.value);
+          if (errors.program) setErrors((prev) => ({ ...prev, program: undefined }));
+        }
+      }
+    }
+  };
+
   const handleGetCurrentLocation = async () => {
     try {
       setLocationLoading(true);
+      if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
         Alert.alert(
           "Permission Denied",
-          "Permission to access location was denied",
+          "Permission to access location was denied"
         );
         setLocationLoading(false);
         return;
@@ -82,7 +201,7 @@ const Verify = () => {
       console.error("Error getting location: ", error);
       Alert.alert(
         "Location Error",
-        "Error getting location. Please make sure location services are enabled.",
+        "Error getting location. Please make sure location services are enabled."
       );
     } finally {
       setLocationLoading(false);
@@ -90,47 +209,47 @@ const Verify = () => {
   };
 
   const handleVerifySubmit = async () => {
+    const newErrors: typeof errors = {};
+
     if (!studentId.trim()) {
-      Alert.alert("Validation Error", "Please enter your Student ID number.");
-      return;
+      newErrors.studentId = "Please enter your Student ID number.";
     }
     if (!studentRef.trim()) {
-      Alert.alert(
-        "Validation Error",
-        "Please enter your Student Reference number.",
-      );
-      return;
-    }
-    if (!imageUri) {
-      Alert.alert(
-        "Validation Error",
-        "Please upload a photo of your Student ID card.",
-      );
-      return;
+      newErrors.studentRef = "Please enter your Student Reference number.";
     }
     if (!program) {
-      Alert.alert("Validation Error", "Please choose a program of study.");
-      return;
+      newErrors.program = "Please choose a program of study.";
     }
     if (!phone.trim()) {
-      Alert.alert("Validation Error", "Please enter your active phone number.");
-      return;
+      newErrors.phone = "Please enter your active phone number.";
     }
     if (!locationType) {
-      Alert.alert("Validation Error", "Please choose a location type.");
-      return;
+      newErrors.locationType = "Please choose a location type.";
     }
     if (!address.trim()) {
+      newErrors.address = "Please enter your location description (address).";
+    }
+    if (!latitude || !longitude) {
+      newErrors.location = "Please click 'Get Current Location' to acquire your coordinates.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    if (!imageUri) {
       Alert.alert(
-        "Validation Error",
-        "Please enter your location description (address).",
+        "Missing Student ID Photo",
+        "Please upload a photo of your Student ID card."
       );
       return;
     }
-    if (!latitude || !longitude) {
+
+    if (!ocrResult || !isOcrComplete(ocrResult)) {
       Alert.alert(
-        "Validation Error",
-        "Please acquire your current coordinates.",
+        "Invalid Student ID Card",
+        "Unable to verify all required information (Full Name, Student ID, Reference Number, Expiry Date, and Course) from your Student ID card. Please upload a clear picture of your official Student ID card."
       );
       return;
     }
@@ -139,67 +258,55 @@ const Verify = () => {
       setIsSubmitting(true);
 
       // Step 1: Get current authenticated user ID
-      let userId: string | undefined;
+      let activeUserId: string | undefined = userId;
+      let currentUserEmail: string | undefined;
       const { user: currentUser } = await getCurrentUser();
-
       if (currentUser?.id) {
-        userId = currentUser.id;
+        activeUserId = currentUser.id;
+        currentUserEmail = currentUser.email;
       } else if (email && password) {
         const { data: signInData } = await signInUser(email, password);
-        userId = signInData?.user?.id;
+        activeUserId = signInData?.user?.id;
+        currentUserEmail = signInData?.user?.email;
       }
 
-      if (!userId) {
+      if (!activeUserId) {
         Alert.alert(
           "Authentication Error",
-          "Could not find active user session. Please sign in again.",
+          "Could not find active user session. Please sign in again."
         );
         setIsSubmitting(false);
         return;
       }
 
-      // Step 2: Upload Student ID Card image
-      let studentCardImageUrl = "";
-      const fileName = imageUri.split("/").pop() || "id_card.jpg";
-      const { publicUrl, error: uploadError } = await uploadStudentIdCard(
-        userId,
-        imageUri,
-        fileName,
-      );
-      if (uploadError) {
-        Alert.alert(
-          "Upload Warning",
-          "Could not upload ID Card image: " + uploadError,
-        );
-      } else if (publicUrl) {
-        studentCardImageUrl = publicUrl;
-      }
-
-      // Step 3: Update verification details in users table
-      const { error: updateError } = await updateUserVerification(userId, {
+      // Step 2: Update verification details in users table
+      const { error: updateError } = await updateUserVerification(activeUserId, {
+        name: ocrResult.fullName || fullName || undefined,
+        email: email || currentUserEmail || undefined,
         student_id_number: studentId.trim(),
         student_reference_number: studentRef.trim(),
-        program_of_study: program,
+        program_of_study: program || "",
         phone: phone.trim(),
-        location_type: locationType,
+        location_type: locationType || "",
         address: address.trim(),
         student_card_image_url: studentCardImageUrl || undefined,
         latitude: latitude,
         longitude: longitude,
+        is_verified: true,
       });
 
       if (updateError) {
         Alert.alert(
           "Verification Failed",
-          "Failed to save verification info: " + updateError,
+          "Failed to save verification info: " + updateError
         );
         setIsSubmitting(false);
         return;
       }
 
       Alert.alert("Success", "Verification details submitted successfully!");
-      // Proceed to the OTP verifyNumber screen
-      router.navigate({
+      // Proceed to the home page using replace
+      router.replace({
         pathname: "/(resident)/home",
         params: { phone: phone.trim() },
       });
@@ -242,7 +349,8 @@ const Verify = () => {
               keyboardType={true}
               label="Student ID number"
               value={studentId}
-              onChangeText={setStudentId}
+              onChangeText={handleStudentIdChange}
+              showError={errors.studentId}
             />
             <CustomInput
               placeholder="Enter Reference number"
@@ -250,28 +358,30 @@ const Verify = () => {
               keyboardType={true}
               label="Student Reference number"
               value={studentRef}
-              onChangeText={setStudentRef}
+              onChangeText={handleStudentRefChange}
+              showError={errors.studentRef}
             />
             {imageUri && (
               <ImageUpload
                 imageUri={imageUri}
                 userId={userId}
                 setDone={setUploadDone}
+                onUploaded={handleImageUploaded}
               />
             )}
-            <ImagePickerButton setImage={setImageUri} disable={uploadDone} />
-            {/* <CustomInput
-            placeholder="Program of Study"
-            Icon={<GraduationCap size={19} color={"#000"} strokeWidth={1.5} />}
-            label=""
-          /> */}
+            <ImagePickerButton
+              setImage={setImageUri}
+              disable={uploadDone || isSubmitting || locationLoading}
+            />
             <DropdownMenu
               label="Program of Study"
               options={KNUST_PROGRAMMES}
               value={program}
               placeholder="Choose a course…"
-              onChange={(opt) => setProgram(String(opt.value))}
+              onChange={(opt) => handleProgramChange(String(opt.value))}
               search={true}
+              showError={errors.program}
+              disabled={isSubmitting || locationLoading}
             />
             <CustomInput
               placeholder="+1 (555) 000 0000"
@@ -279,27 +389,26 @@ const Verify = () => {
               label="Active Phone number"
               keyboardType={true}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={handlePhoneChange}
+              showError={errors.phone}
             />
-            {/* <CustomInput
-            placeholder="Name"
-            Icon={<User size={19} color={"#000"} strokeWidth={1.5} />}
-          /> */}
             <View style={styles.verifyLocationStyle}>
-              {/* <CustomButton /> */}
               <DropdownMenu
                 label="Location Type"
                 options={LOCATION_OPTIONS}
                 value={locationType}
                 placeholder="Pick a location type…"
-                onChange={(opt) => setLocationType(String(opt.value))}
+                onChange={(opt) => handleLocationTypeChange(String(opt.value))}
+                showError={errors.locationType}
+                disabled={isSubmitting || locationLoading}
               />
               <CustomInput
                 placeholder="e.g. Room 304, Block B, Paradise Regained Hostel"
                 Icon={<MapPin size={20} color={Colors.light.accent} />}
                 label="Location Description (Address)"
                 value={address}
-                onChangeText={(text) => setAddress(text)}
+                onChangeText={handleAddressChange}
+                showError={errors.address}
               />
               <CustomButton
                 text={
@@ -308,9 +417,23 @@ const Verify = () => {
                     : "Get Current Location"
                 }
                 isLoading={locationLoading}
+                disabled={isSubmitting || locationLoading}
                 onPress={handleGetCurrentLocation}
                 Icon={<LocateFixed size={20} color={Colors.dark.text} />}
               />
+              {errors.location ? (
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color: Colors.light.error,
+                    fontFamily: typography.medium,
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  {errors.location}
+                </Text>
+              ) : null}
               {latitude && longitude ? (
                 <Text
                   style={{
@@ -331,7 +454,7 @@ const Verify = () => {
               text={"Verify"}
               onPress={handleVerifySubmit}
               isLoading={isSubmitting}
-              disabled={isSubmitting}
+              disabled={isSubmitting || locationLoading}
             />
           </View>
           <View
@@ -343,7 +466,10 @@ const Verify = () => {
             }}
           >
             <Text>{"You can "}</Text>
-            <TouchableOpacity onPress={() => {}}>
+            <TouchableOpacity
+              onPress={() => {}}
+              disabled={isSubmitting || locationLoading}
+            >
               <Text style={{ color: Colors.light.accent }}>skip</Text>
             </TouchableOpacity>
             <Text>{" this and complete it later"}</Text>

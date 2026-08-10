@@ -91,3 +91,9 @@ export const uploadSchoolID = async ({
     upload.start();
   });
 };
+
+export const getStoragePublicUrl = (filePath: string): string => {
+  const { data } = supabase.storage.from("images").getPublicUrl(filePath);
+  return data.publicUrl;
+};
+

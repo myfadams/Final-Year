@@ -22,6 +22,8 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+import { AlertCircle } from "lucide-react-native";
+
 export interface DropdownOption {
   label: string;
   value: string | number;
@@ -39,6 +41,7 @@ export interface DropdownMenuProps {
   disabled?: boolean;
   style?: ViewStyle;
   search?: boolean;
+  showError?: string;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -178,6 +181,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   disabled = false,
   style,
   search = false,
+  showError,
 }) => {
   const [open, setOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -304,6 +308,7 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
           styles.trigger,
           open && styles.triggerOpen,
           disabled && styles.triggerDisabled,
+          !!showError && { borderColor: Colors.light.error, borderWidth: 1.5 },
         ]}
       >
         <View
@@ -328,6 +333,28 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
 
         <Chevron open={open} anim={openAnim} />
       </TouchableOpacity>
+      {showError ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            marginTop: 3,
+            paddingLeft: 4,
+            gap: 5,
+          }}
+        >
+          <AlertCircle size={14} color={Colors.light.error} />
+          <Text
+            style={{
+              fontSize: 12,
+              color: Colors.light.error,
+              fontFamily: typography.medium,
+            }}
+          >
+            {showError}
+          </Text>
+        </View>
+      ) : null}
 
       <Modal
         transparent

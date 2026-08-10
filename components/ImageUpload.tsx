@@ -1,14 +1,15 @@
-import { uploadSchoolID } from "@/backend/storage";
+import { getStoragePublicUrl, uploadSchoolID } from "@/backend/storage";
 import Colors from "@/constants/Colors";
 import { Image } from "expo-image";
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import UploadProgressLoader from "./uploadIcon";
+
 interface ImageUploadProp {
   imageUri: string;
   userId?: string;
   setDone: React.Dispatch<React.SetStateAction<boolean>>;
-  onUploaded?: (path: string) => void;
+  onUploaded?: (publicUrl: string) => void;
 }
 const ImageUpload: React.FC<ImageUploadProp> = ({
   imageUri,
@@ -44,7 +45,8 @@ const ImageUpload: React.FC<ImageUploadProp> = ({
           setUploadDone(true);
           setDone(false);
 
-          onUploaded?.(path);
+          const publicUrl = getStoragePublicUrl(path);
+          onUploaded?.(publicUrl);
         }
       } catch (error) {
         console.error("School ID upload failed:", error);
