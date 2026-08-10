@@ -1,7 +1,8 @@
 import { MapFloatingWindow } from "@/components/MapFloatingWindow";
 import MapViewComponent from "@/components/MapViewComponent";
+import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatingWindow";
 import Colors from "@/constants/Colors";
-import { globalState } from "@/constants/globalState";
+import { globalState, SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
 import { PEOPLE } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
@@ -17,7 +18,7 @@ import {
   SlidersHorizontal,
   Zap,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -38,6 +39,8 @@ export default function LocationScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
+  const [activeSharedLocation, setActiveSharedLocation] =
+    useState<SharedLocationPin | null>(globalState.activeSharedLocation);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
   const [recenterNonce, setRecenterNonce] = useState<string>("");
@@ -49,6 +52,16 @@ export default function LocationScreen() {
     personId?: string;
     action?: string;
     recenter?: string;
+    sharedLocationId?: string;
+    senderName?: string;
+    senderAvatar?: string;
+    lat?: string;
+    lng?: string;
+    locationType?: "location_share" | "walk_safe";
+    timestampText?: string;
+    createdAt?: string;
+    hasImOkay?: string;
+    messageText?: string;
   }>();
 
   // Recenter trigger
@@ -56,10 +69,10 @@ export default function LocationScreen() {
     setRecenterNonce(Math.random().toString());
   };
 
-  // Sync active emergency and handle incoming query parameters when focused
+  // Sync active emergency, shared location pin, and handle incoming query parameters when focused
   useFocusEffect(
     React.useCallback(() => {
-      // 1. Sync active emergency from globalState
+      // 1. Sync active emergency & active shared location from globalState
       const globalActiveId = globalState.activeEmergencyId;
       if (globalActiveId) {
         const found = PEOPLE.find((p) => p.id === globalActiveId);
@@ -70,8 +83,26 @@ export default function LocationScreen() {
         setActiveEmergency(null);
       }
 
+      if (globalState.activeSharedLocation) {
+        setActiveSharedLocation(globalState.activeSharedLocation);
+      }
+
       // 2. Handle deep link / parameter changes
-      const { personId, action, recenter } = params;
+      const {
+        personId,
+        action,
+        recenter,
+        sharedLocationId,
+        senderName,
+        senderAvatar,
+        lat,
+        lng,
+        locationType,
+        timestampText,
+        createdAt,
+        hasImOkay,
+        messageText,
+      } = params;
 
       if (recenter) {
         setSelectedPerson(null);
@@ -79,10 +110,61 @@ export default function LocationScreen() {
         setActiveEmergency(null);
         setRecenterNonce(recenter);
         router.setParams({ recenter: undefined });
+      } else if (sharedLocationId && lat && lng) {
+        const latitude = parseFloat(lat);
+        const longitude = parseFloat(lng);
+        const createdTimestamp = createdAt
+          ? parseInt(createdAt, 10)
+          : Date.now();
+        const now = Date.now();
+        const isExpired =
+          locationType === "location_share" && now - createdTimestamp >= 300000;
+
+        const newPin: SharedLocationPin = {
+          id: sharedLocationId,
+          senderName: senderName || "User",
+          senderAvatar: senderAvatar || "",
+          latitude,
+          longitude,
+          type: locationType || "location_share",
+          timestampText: timestampText || "Shared Location",
+          createdAt: createdTimestamp,
+          messageText: messageText,
+          hasImOkay: hasImOkay === "true",
+          reopenedAt: isExpired ? now : undefined,
+          dismissed: false,
+          cardDismissed: false,
+          isTrackingActive: false,
+        };
+
+        globalState.activeSharedLocation = newPin;
+        setActiveSharedLocation(newPin);
+        setSelectedPerson(null);
+
+        router.setParams({
+          sharedLocationId: undefined,
+          senderName: undefined,
+          senderAvatar: undefined,
+          lat: undefined,
+          lng: undefined,
+          locationType: undefined,
+          timestampText: undefined,
+          createdAt: undefined,
+          hasImOkay: undefined,
+          messageText: undefined,
+        });
       } else if (personId) {
         const person = PEOPLE.find((p) => p.id === personId);
         if (person) {
           setSelectedPerson(person);
+          if (globalState.activeSharedLocation) {
+            const updated = {
+              ...globalState.activeSharedLocation,
+              cardDismissed: true,
+            };
+            globalState.activeSharedLocation = updated;
+            setActiveSharedLocation(updated);
+          }
           if (action === "respond") {
             globalState.activeEmergencyId = personId;
             setActiveEmergency(person);
@@ -92,6 +174,38 @@ export default function LocationScreen() {
       }
     }, [params]),
   );
+
+  // 5-minute pin auto-dismissal timer for snapshot location sharing pins
+  useEffect(() => {
+    if (
+      activeSharedLocation &&
+      activeSharedLocation.type === "location_share" &&
+      !activeSharedLocation.dismissed &&
+      !activeSharedLocation.reopenedAt
+    ) {
+      const elapsed = Date.now() - activeSharedLocation.createdAt;
+      const remainingMs = 300000 - elapsed; // 5 minutes (300,000ms)
+
+      if (remainingMs <= 0) {
+        const dismissedPin = { ...activeSharedLocation, dismissed: true };
+        globalState.activeSharedLocation = dismissedPin;
+        setActiveSharedLocation(dismissedPin);
+      } else {
+        const timer = setTimeout(() => {
+          setActiveSharedLocation((prev) => {
+            if (prev && prev.id === activeSharedLocation.id) {
+              const dismissedPin = { ...prev, dismissed: true };
+              globalState.activeSharedLocation = dismissedPin;
+              return dismissedPin;
+            }
+            return prev;
+          });
+        }, remainingMs);
+
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [activeSharedLocation]);
 
   const handleRespondToggle = () => {
     if (!selectedPerson) return;
@@ -122,6 +236,14 @@ export default function LocationScreen() {
 
     globalState.activeEmergencyId = idStr;
     setActiveEmergency(selectedPerson);
+
+    // MUTUAL EXCLUSION OF ROUTING: Cancel Walk Safe tracking if active
+    if (activeSharedLocation?.isTrackingActive) {
+      const updated = { ...activeSharedLocation, isTrackingActive: false };
+      globalState.activeSharedLocation = updated;
+      setActiveSharedLocation(updated);
+    }
+
     Alert.alert(
       "Response Assigned",
       "You are now responding to this incident. Follow the active navigation line on the map.",
@@ -169,12 +291,24 @@ export default function LocationScreen() {
       <MapViewComponent
         selectedPerson={selectedPerson}
         activeEmergency={activeEmergency}
+        activeSharedLocation={activeSharedLocation}
         recenterNonce={recenterNonce}
         categoryFilter={categoryFilter}
         searchQuery={searchQuery}
         travelMode={travelMode}
         onSelectPerson={(p) => {
           setSelectedPerson(p);
+          if (activeSharedLocation) {
+            const updated = { ...activeSharedLocation, cardDismissed: true };
+            globalState.activeSharedLocation = updated;
+            setActiveSharedLocation(updated);
+          }
+        }}
+        onSelectSharedPin={(pin) => {
+          setSelectedPerson(null);
+          const updated = { ...pin, cardDismissed: false };
+          globalState.activeSharedLocation = updated;
+          setActiveSharedLocation(updated);
         }}
         onRouteCalculated={(dist, dur) => {
           setDistance(dist);
@@ -280,13 +414,17 @@ export default function LocationScreen() {
         style={[
           styles.travelModeContainer,
           {
-            bottom: selectedPerson
-              ? Platform.OS === "ios"
-                ? 355
-                : 320
-              : Platform.OS === "ios"
-                ? 180
-                : 146,
+            bottom:
+              selectedPerson ||
+              (activeSharedLocation &&
+                !activeSharedLocation.cardDismissed &&
+                !activeSharedLocation.dismissed)
+                ? Platform.OS === "ios"
+                  ? 365
+                  : 330
+                : Platform.OS === "ios"
+                  ? 180
+                  : 146,
           },
         ]}
       >
@@ -320,13 +458,17 @@ export default function LocationScreen() {
         style={[
           styles.recenterFloatButton,
           {
-            bottom: selectedPerson
-              ? Platform.OS === "ios"
-                ? 295
-                : 260
-              : Platform.OS === "ios"
-                ? 120
-                : 86,
+            bottom:
+              selectedPerson ||
+              (activeSharedLocation &&
+                !activeSharedLocation.cardDismissed &&
+                !activeSharedLocation.dismissed)
+                ? Platform.OS === "ios"
+                  ? 305
+                  : 270
+                : Platform.OS === "ios"
+                  ? 120
+                  : 86,
           },
         ]}
         onPress={handleRecenter}
@@ -335,7 +477,7 @@ export default function LocationScreen() {
         <Compass size={22} color={Colors.light.accent} />
       </TouchableOpacity>
 
-      {/* FLOATING CARD OVERLAY (MapFloatingWindow Component) */}
+      {/* FLOATING CARD OVERLAY FOR INCIDENTS (MapFloatingWindow Component) */}
       {selectedPerson && (
         <MapFloatingWindow
           selectedPerson={selectedPerson}
@@ -345,9 +487,42 @@ export default function LocationScreen() {
           onClose={() => setSelectedPerson(null)}
           onRespondToggle={handleRespondToggle}
           onOpenDetails={handleOpenDetails}
-          travelMode={travelMode}
         />
       )}
+
+      {/* DEDICATED FLOATING WINDOW FOR WALK SAFE AND LOCATION SHARE */}
+      {activeSharedLocation &&
+        !activeSharedLocation.cardDismissed &&
+        !activeSharedLocation.dismissed && (
+          <SharedLocationFloatingWindow
+            pin={activeSharedLocation}
+            distance={distance}
+            duration={duration}
+            onClose={() => {
+              const updated = { ...activeSharedLocation, cardDismissed: true };
+              globalState.activeSharedLocation = updated;
+              setActiveSharedLocation(updated);
+            }}
+            onTrackToggle={() => {
+              const newTrackingState = !activeSharedLocation.isTrackingActive;
+              const updated = {
+                ...activeSharedLocation,
+                isTrackingActive: newTrackingState,
+              };
+              globalState.activeSharedLocation = updated;
+              setActiveSharedLocation(updated);
+
+              // MUTUAL EXCLUSION OF ROUTING: Cancel emergency response routing if Walk Safe tracking is activated
+              if (
+                newTrackingState &&
+                (activeEmergency || globalState.activeEmergencyId)
+              ) {
+                globalState.activeEmergencyId = null;
+                setActiveEmergency(null);
+              }
+            }}
+          />
+        )}
     </View>
   );
 }

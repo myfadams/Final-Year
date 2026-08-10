@@ -27,9 +27,12 @@ const Contacts: React.FC<ContactsProp & specifiedProp> = ({
   verified,
   hasLeftAccent,
   hasMessage = true,
+  badgeType,
+  phone = "+44 999 999 999",
+  avatarUrl,
 }) => {
   const isOffline = status === "Offline";
-
+  const categoryLabel = badgeType || relationship || "Contact";
   // Determine avatar background and text color based on design spec
   const isSolid =
     avatarTextColor === "#FFFFFF" ||
@@ -106,7 +109,15 @@ const Contacts: React.FC<ContactsProp & specifiedProp> = ({
       <View style={styles.actionRow}>
         {hasMessage && (
           <TouchableOpacity
-            onPress={() => !isOffline && handleChatPress?.(name)}
+            onPress={() =>
+              handleChatPress?.(name, {
+                id,
+                name,
+                relationship: categoryLabel,
+                phone,
+                avatarUrl,
+              })
+            }
             disabled={isOffline}
             style={[styles.actionButton, { backgroundColor: "#F3F4F6" }]}
             activeOpacity={0.7}

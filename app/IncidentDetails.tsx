@@ -175,6 +175,12 @@ export default function IncidentDetailScreen() {
   const [noteDurations, setNoteDurations] = useState<Record<string, number>>(
     {},
   );
+  const [playbackRemaining, setPlaybackRemaining] = useState<
+    Record<string, number>
+  >({});
+  const [playbackProgress, setPlaybackProgress] = useState<
+    Record<string, number>
+  >({});
   const soundRef = React.useRef<Audio.Sound | null>(null);
 
   // Fetch actual audio duration directly from audio file metadata on screen mount
@@ -190,15 +196,13 @@ export default function IncidentDetailScreen() {
 
         for (const note of voiceNotesList) {
           try {
-            let localSource: any = null;
-            try {
-              localSource = require("../audio/Recording.m4a");
-            } catch (e) {
-              localSource = { uri: note.uri };
+            let audioSource: any = require("../audio/Recording.m4a");
+            if (note.uri && !note.uri.includes("audio/Recording.m4a")) {
+              audioSource = { uri: note.uri };
             }
 
             const { sound, status } = await Audio.Sound.createAsync(
-              localSource,
+              audioSource,
               { shouldPlay: false },
             );
             if (status.isLoaded && status.durationMillis) {
@@ -212,7 +216,7 @@ export default function IncidentDetailScreen() {
             }
             await sound.unloadAsync().catch(() => {});
           } catch (e) {
-            // Handled gracefully
+            console.log("Error loading audio duration:", e);
           }
         }
       } catch (e) {
@@ -230,7 +234,11 @@ export default function IncidentDetailScreen() {
     };
   }, [voiceNotesList]);
 
-  const handlePlayVoiceNote = async (note: { id: string; uri: string }) => {
+  const handlePlayVoiceNote = async (note: {
+    id: string;
+    uri: string;
+    duration?: number;
+  }) => {
     if (soundRef.current) {
       await soundRef.current.unloadAsync().catch(() => {});
       soundRef.current = null;
@@ -238,88 +246,74 @@ export default function IncidentDetailScreen() {
 
     if (playingNoteId === note.id) {
       setPlayingNoteId(null);
+      setPlaybackRemaining((prev) => ({
+        ...prev,
+        [note.id]: noteDurations[note.id] || note.duration || 14,
+      }));
+      setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
       return;
     }
 
     try {
-      setPlayingNoteId(note.id);
-
-      // Configure iOS & Android audio mode so audio plays at loud volume through device speakers even in silent mode!
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: false,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: false,
       });
 
-      let soundObj: Audio.Sound | null = null;
+      setPlayingNoteId(note.id);
 
-      const updateStatus = (status: any) => {
-        if (status.isLoaded) {
-          if (status.durationMillis) {
-            const exactSecs = Math.round(status.durationMillis / 1000);
-            if (exactSecs > 0) {
-              setNoteDurations((prev) => ({ ...prev, [note.id]: exactSecs }));
+      let audioSource: any = require("../audio/Recording.m4a");
+      if (note.uri && !note.uri.includes("audio/Recording.m4a")) {
+        audioSource = { uri: note.uri };
+      }
+
+      const totalSec = noteDurations[note.id] || note.duration || 14;
+      setPlaybackRemaining((prev) => ({ ...prev, [note.id]: totalSec }));
+      setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
+
+      const { sound } = await Audio.Sound.createAsync(
+        audioSource,
+        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
+        (status) => {
+          if (status.isLoaded) {
+            if (status.durationMillis) {
+              const exactSecs = Math.round(status.durationMillis / 1000);
+              if (exactSecs > 0) {
+                setNoteDurations((prev) => ({ ...prev, [note.id]: exactSecs }));
+              }
+            }
+            if (status.isPlaying && status.durationMillis) {
+              const durationMillis = status.durationMillis;
+              const remainingSec = Math.max(
+                0,
+                Math.ceil((durationMillis - status.positionMillis) / 1000),
+              );
+              setPlaybackRemaining((prev) => ({
+                ...prev,
+                [note.id]: remainingSec,
+              }));
+              setPlaybackProgress((prev) => ({
+                ...prev,
+                [note.id]: status.positionMillis / durationMillis,
+              }));
+            }
+            if (!status.isPlaying && status.didJustFinish) {
+              setPlayingNoteId(null);
+              setPlaybackRemaining((prev) => ({
+                ...prev,
+                [note.id]: noteDurations[note.id] || note.duration || 14,
+              }));
+              setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
             }
           }
-          if (!status.isPlaying && status.didJustFinish) {
-            setPlayingNoteId(null);
-          }
-        }
-      };
+        },
+      );
 
-      // 1. Try bundled local audio file via require
-      try {
-        const localAudioAsset = require("../audio/Recording.m4a");
-        const { sound } = await Audio.Sound.createAsync(
-          localAudioAsset,
-          { shouldPlay: true, volume: 1.0 },
-          updateStatus,
-        );
-        soundObj = sound;
-        await soundObj.setVolumeAsync(1.0);
-        await soundObj.playAsync();
-      } catch (e1) {
-        console.log("Local require failed, attempting URI:", e1);
-        // 2. Try URI directly (for user recordings created on device)
-        try {
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: note.uri },
-            { shouldPlay: true, volume: 1.0 },
-            updateStatus,
-          );
-          soundObj = sound;
-          await soundObj.setVolumeAsync(1.0);
-          await soundObj.playAsync();
-        } catch (e2) {
-          console.log("URI play failed, attempting web fallback:", e2);
-          // 3. Fallback online sound
-          try {
-            const { sound } = await Audio.Sound.createAsync(
-              {
-                uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-              },
-              { shouldPlay: true, volume: 1.0 },
-              updateStatus,
-            );
-            soundObj = sound;
-            await soundObj.setVolumeAsync(1.0);
-            await soundObj.playAsync();
-          } catch (e3) {
-            console.error("All audio sources failed", e1, e2, e3);
-            Alert.alert("Audio Error", "Could not play audio file.");
-          }
-        }
-      }
-
-      soundRef.current = soundObj;
-      if (!soundObj) {
-        setPlayingNoteId(null);
-      }
+      soundRef.current = sound;
     } catch (err) {
-      console.error("Failed to play audio", err);
+      console.error("Failed to play audio:", err);
       setPlayingNoteId(null);
+      Alert.alert("Audio Error", "Could not play audio file.");
     }
   };
 
@@ -381,7 +375,16 @@ export default function IncidentDetailScreen() {
   };
 
   const handleMessage = () => {
-    Alert.alert("Secure Messaging", "Opening secure response chat room...");
+    router.push({
+      pathname: "/chat",
+      params: {
+        mode: "emergency",
+        incidentId: incident.id.toString(),
+        title: incident.title,
+        severity: incident.severity,
+        location: incident.location,
+      },
+    });
   };
 
   const handleRefresh = () => {
@@ -644,11 +647,25 @@ export default function IncidentDetailScreen() {
             </Text>
             {voiceNotesList.map((note) => {
               const isPlaying = playingNoteId === note.id;
+              const totalSec = noteDurations[note.id] || note.duration || 14;
+              const currentRemaining =
+                isPlaying && playbackRemaining[note.id] !== undefined
+                  ? playbackRemaining[note.id]
+                  : totalSec;
+              const currentProgress = isPlaying
+                ? playbackProgress[note.id] || 0
+                : 0;
+
               const formatSeconds = (sec: number) => {
                 const mins = Math.floor(sec / 60);
                 const secs = sec % 60;
                 return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
               };
+
+              const waveformBars = [
+                12, 22, 16, 30, 24, 14, 28, 34, 20, 15, 26, 18, 10, 22, 29, 16,
+                24, 12,
+              ];
 
               return (
                 <View key={note.id} style={styles.voiceNoteCard}>
@@ -681,30 +698,35 @@ export default function IncidentDetailScreen() {
                           { color: severityColors.color },
                         ]}
                       >
-                        {formatSeconds(note.duration)}
+                        {formatSeconds(currentRemaining)}
                       </Text>
                     </View>
                   </View>
 
                   {/* Visualizer Waveform Bar */}
                   <View style={styles.waveformContainer}>
-                    {[
-                      12, 22, 16, 30, 24, 14, 28, 34, 20, 15, 26, 18, 10, 22,
-                      29, 16, 24, 12,
-                    ].map((h, i) => (
-                      <View
-                        key={i}
-                        style={[
-                          styles.waveformBar,
-                          {
-                            height: h,
-                            backgroundColor: isPlaying
-                              ? severityColors.color
-                              : "#CBD5E1",
-                          },
-                        ]}
-                      />
-                    ))}
+                    {waveformBars.map((h, i) => {
+                      const totalBars = waveformBars.length;
+                      const activeBarCount = Math.floor(
+                        currentProgress * totalBars,
+                      );
+                      const isBarPlayed = isPlaying && i <= activeBarCount;
+
+                      return (
+                        <View
+                          key={i}
+                          style={[
+                            styles.waveformBar,
+                            {
+                              height: h,
+                              backgroundColor: isBarPlayed
+                                ? severityColors.color
+                                : "#CBD5E1",
+                            },
+                          ]}
+                        />
+                      );
+                    })}
                   </View>
 
                   {/* Controls Row */}
@@ -730,7 +752,7 @@ export default function IncidentDetailScreen() {
                     </TouchableOpacity>
                     <Text style={styles.voiceStatusText}>
                       {isPlaying
-                        ? "Playing audio recording..."
+                        ? `Playing audio recording... (${formatSeconds(currentRemaining)})`
                         : "Tap to listen to audio report"}
                     </Text>
                   </View>

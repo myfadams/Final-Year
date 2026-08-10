@@ -1,3 +1,5 @@
+import { SharedLocationPinMarker } from "@/components/SharedLocationPinMarker";
+import { SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
 import { PEOPLE } from "@/constants/tempData";
 import axios from "axios";
@@ -168,7 +170,9 @@ const PulseRing: React.FC<{ color: string }> = ({ color }) => {
 interface MapViewComponentProps {
   selectedPerson: Person | null;
   activeEmergency: Person | null;
+  activeSharedLocation?: SharedLocationPin | null;
   onSelectPerson: (p: Person) => void;
+  onSelectSharedPin?: (pin: SharedLocationPin) => void;
   onRouteCalculated?: (distance: string, duration: string) => void;
   recenterNonce?: string;
   categoryFilter?: string; // category filter state passed from parent
@@ -179,7 +183,9 @@ interface MapViewComponentProps {
 const MapViewComponent: React.FC<MapViewComponentProps> = ({
   selectedPerson,
   activeEmergency,
+  activeSharedLocation,
   onSelectPerson,
+  onSelectSharedPin,
   onRouteCalculated,
   recenterNonce,
   categoryFilter,
@@ -352,12 +358,28 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     }
   };
 
-  // Recalculate route whenever user location, activeEmergency, selectedPerson or travelMode changes
+  // Recalculate route whenever user location, activeEmergency, selectedPerson, activeSharedLocation or travelMode changes
   useEffect(() => {
     if (!location) return;
 
-    const target = adjustedActiveEmergency || adjustedSelectedPerson;
-    if (!target) {
+    let targetLat: number | null = null;
+    let targetLng: number | null = null;
+
+    if (
+      activeSharedLocation?.isTrackingActive &&
+      !activeSharedLocation.dismissed
+    ) {
+      targetLat = activeSharedLocation.latitude;
+      targetLng = activeSharedLocation.longitude;
+    } else {
+      const target = adjustedActiveEmergency || adjustedSelectedPerson;
+      if (target) {
+        targetLat = target.latitude;
+        targetLng = target.longitude;
+      }
+    }
+
+    if (targetLat === null || targetLng === null) {
       setRouteCoords([]);
       setDistance("");
       setDuration("");
@@ -366,10 +388,16 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     }
 
     updateRoute(location, {
-      latitude: target.latitude,
-      longitude: target.longitude,
+      latitude: targetLat,
+      longitude: targetLng,
     });
-  }, [location, adjustedActiveEmergency, adjustedSelectedPerson, travelMode]);
+  }, [
+    location,
+    adjustedActiveEmergency,
+    adjustedSelectedPerson,
+    activeSharedLocation,
+    travelMode,
+  ]);
 
   // Handle active emergency victim position updates and jitter simulation
   useEffect(() => {
@@ -418,57 +446,96 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     });
   }, [victimLocation]);
 
-  // Center/fit map camera to focus on selected/active emergencies
+  // Center/fit map camera to focus on selected/active pin or fallback to device location when windows are dismissed
   useEffect(() => {
-    if (mapRef.current) {
-      if (adjustedActiveEmergency) {
-        // Active emergency navigation: fit both responder and destination in view
-        if (location) {
-          mapRef.current.fitToCoordinates(
-            [
-              location,
-              {
-                latitude: adjustedActiveEmergency.latitude,
-                longitude: adjustedActiveEmergency.longitude,
-              },
-            ],
+    if (!mapRef.current) return;
+
+    const isSharedLocationCardActive = Boolean(
+      activeSharedLocation &&
+      !activeSharedLocation.dismissed &&
+      !activeSharedLocation.cardDismissed,
+    );
+
+    if (isSharedLocationCardActive && activeSharedLocation) {
+      if (activeSharedLocation.isTrackingActive && location) {
+        // Fit responder and shared location in view when tracking route
+        mapRef.current.fitToCoordinates(
+          [
+            location,
             {
-              edgePadding: { top: 120, right: 100, bottom: 250, left: 100 },
-              animated: true,
+              latitude: activeSharedLocation.latitude,
+              longitude: activeSharedLocation.longitude,
             },
-          );
-        }
-        hasCentered.current = false;
-      } else if (adjustedSelectedPerson) {
-        // Selected emergency preview: zoom directly to focus on the selected victim marker,
-        // offset the center slightly south so the marker is pushed up and not covered by the modal
+          ],
+          {
+            edgePadding: { top: 120, right: 100, bottom: 250, left: 100 },
+            animated: true,
+          },
+        );
+      } else {
+        // Zoom directly to pinned shared location
         mapRef.current.animateToRegion(
           {
-            latitude: adjustedSelectedPerson.latitude - 0.0025,
-            longitude: adjustedSelectedPerson.longitude,
+            latitude: activeSharedLocation.latitude - 0.0025,
+            longitude: activeSharedLocation.longitude,
             latitudeDelta: 0.008,
             longitudeDelta: 0.008,
           },
           1000,
         );
-        hasCentered.current = false;
-      } else if (location) {
-        // Fallback: center on responder if nothing is selected or active
-        if (!hasCentered.current) {
-          hasCentered.current = true;
-          mapRef.current.animateToRegion(
-            {
-              latitude: location.latitude,
-              longitude: location.longitude,
-              latitudeDelta: 0.008,
-              longitudeDelta: 0.008,
-            },
-            1000,
-          );
-        }
       }
+      hasCentered.current = false;
+    } else if (adjustedActiveEmergency) {
+      // Active emergency navigation: fit both responder and destination in view
+      if (location) {
+        mapRef.current.fitToCoordinates(
+          [
+            location,
+            {
+              latitude: adjustedActiveEmergency.latitude,
+              longitude: adjustedActiveEmergency.longitude,
+            },
+          ],
+          {
+            edgePadding: { top: 120, right: 100, bottom: 250, left: 100 },
+            animated: true,
+          },
+        );
+      }
+      hasCentered.current = false;
+    } else if (adjustedSelectedPerson) {
+      // Selected emergency preview: zoom directly to focus on the selected victim marker
+      mapRef.current.animateToRegion(
+        {
+          latitude: adjustedSelectedPerson.latitude - 0.0025,
+          longitude: adjustedSelectedPerson.longitude,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        1000,
+      );
+      hasCentered.current = false;
+    } else if (location) {
+      // Fallback: center on user's device location when no floating window is open
+      mapRef.current.animateToRegion(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.008,
+          longitudeDelta: 0.008,
+        },
+        1000,
+      );
+      hasCentered.current = true;
     }
-  }, [location, adjustedActiveEmergency, adjustedSelectedPerson]);
+  }, [
+    location,
+    adjustedActiveEmergency,
+    adjustedSelectedPerson,
+    activeSharedLocation,
+    activeSharedLocation?.cardDismissed,
+    activeSharedLocation?.dismissed,
+  ]);
 
   // Handle manual recenter double-press trigger
   useEffect(() => {
@@ -592,6 +659,14 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           );
         })}
 
+      {/* Shared Location Pin Marker (Walk Safe & Location Snapshot) */}
+      {activeSharedLocation && !activeSharedLocation.dismissed && (
+        <SharedLocationPinMarker
+          pin={activeSharedLocation}
+          onPress={() => onSelectSharedPin?.(activeSharedLocation)}
+        />
+      )}
+
       {/* Responder Location Marker */}
       {location && (
         <Marker coordinate={location} anchor={{ x: 0.5, y: 0.5 }}>
@@ -605,20 +680,27 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       )}
 
       {/* Polyline Route */}
-      {routeCoords.length > 0 && adjustedActiveEmergency && (
-        <>
-          <Polyline
-            coordinates={routeCoords}
-            strokeWidth={10}
-            strokeColor="rgba(175, 16, 26, 0.12)"
-          />
-          <Polyline
-            coordinates={routeCoords}
-            strokeWidth={4}
-            strokeColor="#af101a"
-          />
-        </>
-      )}
+      {routeCoords.length > 0 &&
+        (adjustedActiveEmergency || activeSharedLocation?.isTrackingActive) && (
+          <>
+            <Polyline
+              coordinates={routeCoords}
+              strokeWidth={10}
+              strokeColor={
+                activeSharedLocation?.isTrackingActive
+                  ? "rgba(13, 148, 136, 0.18)"
+                  : "rgba(175, 16, 26, 0.12)"
+              }
+            />
+            <Polyline
+              coordinates={routeCoords}
+              strokeWidth={4}
+              strokeColor={
+                activeSharedLocation?.isTrackingActive ? "#0D9488" : "#af101a"
+              }
+            />
+          </>
+        )}
     </MapView>
   );
 };

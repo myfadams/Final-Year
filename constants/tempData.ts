@@ -10,6 +10,7 @@ import React from "react";
 import {
   Article,
   caseProp,
+  ChatMessage,
   ContactsProp,
   PendingRequest,
   Person,
@@ -1122,3 +1123,184 @@ export const articles: Article[] = [
       "The national meteorological bureau has issued a flash flood warning for low-lying areas. Total rain accumulations of 75-100mm are expected within a 6-hour window tonight. Residents should clear gutters, park vehicles on higher ground, and refrain from driving through flooded roads. Rescue personnel have been pre-positioned at flood hotspots.",
   },
 ];
+
+export const getContactChatMessages = (
+  contactId?: string,
+  contactName?: string,
+  contactRole?: string,
+  contactAvatar?: string,
+): ChatMessage[] => {
+  const idStr = (contactId || "").toString();
+  const nameStr = (contactName || "").toLowerCase();
+
+  // 1. Karen Castillo (Roommate)
+  if (idStr === "4" || nameStr.includes("karen")) {
+    return [
+      {
+        id: "k1",
+        sender: "other",
+        senderName: "Karen Castillo",
+        senderRole: "Roommate",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+        timestamp: "10:15 AM",
+        type: "text",
+        text: "Hey! Do you have the lecture notes for Biochemistry from yesterday?",
+      },
+      {
+        id: "k2",
+        sender: "me",
+        timestamp: "10:17 AM",
+        type: "text",
+        text: "Yes, I will send them over to you in a few minutes!",
+      },
+    ];
+  }
+
+  // 2. Austin Arthur (Family / Location Share)
+  if (idStr === "1" || nameStr.includes("austin")) {
+    return [
+      {
+        id: "a1",
+        sender: "other",
+        senderName: "Austin Arthur",
+        senderRole: "Family",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
+        timestamp: "10:24 AM",
+        type: "text",
+        text: "Hey, I just reached the Commercial Area shuttle terminal. Sharing my location snapshot with you.",
+      },
+      {
+        id: "a2",
+        sender: "other",
+        senderName: "Austin Arthur",
+        senderRole: "Family",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
+        timestamp: "10:25 AM",
+        type: "location_share",
+        text: "Austin Arthur shared current location snapshot",
+        locationTimestampText: "Captured 2 mins ago • Commercial Area Terminal",
+        locationCoords: { latitude: 6.67318, longitude: -1.56425 },
+      },
+      {
+        id: "a3",
+        sender: "other",
+        senderName: "Austin Arthur",
+        senderRole: "Family",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
+        timestamp: "10:26 AM",
+        type: "text",
+        text: "Tap the location card to view me on the main map!",
+      },
+    ];
+  }
+
+  // 3. Helen Miller (Family / Walk Safe)
+  if (idStr === "6" || nameStr.includes("helen")) {
+    return [
+      {
+        id: "h1",
+        sender: "other",
+        senderName: "Helen Miller",
+        senderRole: "Family",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=250&auto=format&fit=crop",
+        timestamp: "09:40 AM",
+        type: "text",
+        text: "Hey! I am walking towards Unity Hall Gate. Starting a Walk Safe session so you can track me.",
+      },
+      {
+        id: "h2",
+        sender: "other",
+        senderName: "Helen Miller",
+        senderRole: "Family",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=250&auto=format&fit=crop",
+        timestamp: "09:41 AM",
+        type: "walk_safe",
+        text: "Helen Miller requested a Walk Safe session • Track live movement on map",
+        locationTimestampText: "Live GPS Stream • Unity Hall Gate, KNUST",
+        locationCoords: { latitude: 6.68124, longitude: -1.57018 },
+      },
+      {
+        id: "h3",
+        sender: "me",
+        timestamp: "09:42 AM",
+        type: "text",
+        text: "Got it Aunt Helen! I'm watching your live location on the map now.",
+      },
+    ];
+  }
+
+  // 4. Dr. Sarah Vance (Academic Office / Walk Safe > 10 mins ago)
+  if (idStr === "7" || nameStr.includes("sarah") || nameStr.includes("vance")) {
+    const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
+    return [
+      {
+        id: "sv1",
+        sender: "other",
+        senderName: "Dr. Sarah Vance",
+        senderRole: "Academic Office",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=250&auto=format&fit=crop",
+        timestamp: "10:10 AM",
+        type: "text",
+        text: "I am walking back to the Science Faculty library alone. Starting a Walk Safe session.",
+      },
+      {
+        id: "sv2",
+        sender: "other",
+        senderName: "Dr. Sarah Vance",
+        senderRole: "Academic Office",
+        senderAvatar:
+          "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=250&auto=format&fit=crop",
+        timestamp: "10:12 AM",
+        type: "walk_safe",
+        text: "Dr. Sarah Vance requested a Walk Safe session • Track live movement on map",
+        locationTimestampText: "Live GPS Stream • Science Faculty Quad",
+        locationCoords: { latitude: 6.6742, longitude: -1.5698 },
+        createdTimestamp: fifteenMinsAgo,
+      },
+      {
+        id: "sv3",
+        sender: "me",
+        timestamp: "10:13 AM",
+        type: "text",
+        text: "Understood Dr. Vance! Keeping an eye on your live location.",
+      },
+    ];
+  }
+
+  // 4. Default for any other contact
+  const targetName = contactName || "Contact";
+  const targetRole = contactRole || "Trusted Contact";
+  const targetAvatar =
+    contactAvatar ||
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80";
+
+  return [
+    {
+      id: "gen1",
+      sender: "other",
+      senderName: targetName,
+      senderRole: targetRole,
+      senderAvatar: targetAvatar,
+      timestamp: "10:30 AM",
+      type: "text",
+      text: `Hey! Let me know if you need any assistance or if you're heading out.`,
+    },
+    {
+      id: "gen2",
+      sender: "me",
+      timestamp: "10:32 AM",
+      type: "text",
+      text: "Thanks! I'll activate Walk Safe or share location when leaving campus.",
+    },
+  ];
+};
+
+export const DEFAULT_CONTACT_CHAT_MESSAGES: ChatMessage[] =
+  getContactChatMessages("6", "Helen Miller");

@@ -88,3 +88,22 @@ export interface Article {
   isFeatured?: boolean;
   content: string;
 }
+
+export interface ChatMessage {
+  id: string;
+  sender: "me" | "other" | "system";
+  senderName?: string;
+  senderRole?: string;
+  senderAvatar?: string;
+  timestamp: string;
+  type: "text" | "audio" | "media" | "location_share" | "walk_safe" | "im_okay";
+  text?: string;
+  audioUri?: string;
+  audioDuration?: number;
+  isUploading?: boolean;
+  mediaUri?: string;
+  mediaType?: "image" | "video";
+  locationCoords?: { latitude: number; longitude: number };
+  locationTimestampText?: string;
+  createdTimestamp?: number;
+}

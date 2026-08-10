@@ -53,8 +53,18 @@ export default function ContactsScreen() {
     Alert.alert("Emergency Call", `Initiating direct call to ${name}...`);
   };
 
-  const handleChatPress = (name: string) => {
-    Alert.alert("Emergency Chat", `Opening secure chat with ${name}...`);
+  const handleChatPress = (name: string, contactObj?: any) => {
+    router.push({
+      pathname: "/chat",
+      params: {
+        mode: "contact",
+        contactId: contactObj?.id || "1",
+        name: contactObj?.name || name,
+        relationship: contactObj?.relationship || "Contact",
+        phone: contactObj?.phone || "+44 999 999 999",
+        avatarUrl: contactObj?.avatarUrl,
+      },
+    });
   };
 
   const getInitials = (fullName: string) => {
