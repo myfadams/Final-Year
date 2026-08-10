@@ -100,7 +100,7 @@ export default function login() {
           </View>
         </View>
       ) : (
-        <SignUp />
+        <SignUp onSwitchToLogin={() => setActivePage("login")} />
       )}
 
       {showFooter && (

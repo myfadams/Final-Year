@@ -43,6 +43,29 @@ export interface UserProfile {
 }
 
 /**
+ * Check if a user with the given email already exists in the public users table.
+ */
+export async function checkEmailExists(email: string): Promise<boolean> {
+  try {
+    const cleanEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase
+      .from("users")
+      .select("id")
+      .ilike("email", cleanEmail)
+      .maybeSingle();
+
+    if (error) {
+      console.warn("checkEmailExists warning:", error.message);
+      return false;
+    }
+    return !!data;
+  } catch (err) {
+    console.error("checkEmailExists error:", err);
+    return false;
+  }
+}
+
+/**
  * 1. Sign Up a New User
  * Registers the user under Supabase Auth.
  * The SQL trigger 'on_auth_user_created' will copy their ID, email, and name into the public users table.
@@ -73,6 +96,17 @@ export async function signUpUser(
 
     if (error) {
       let msg = error.message;
+      const lowerMsg = (msg || "").toLowerCase();
+      const isExistingUser =
+        lowerMsg.includes("already registered") ||
+        lowerMsg.includes("user already exists") ||
+        lowerMsg.includes("already in use") ||
+        lowerMsg.includes("email already registered");
+
+      if (isExistingUser) {
+        return { data: null, error: "An account with this email already exists", isExistingUser: true };
+      }
+
       if (!msg || typeof msg !== "string" || msg.includes("[object Object]")) {
         msg = "Account creation failed due to a server error. Please try again.";
       }
@@ -80,9 +114,14 @@ export async function signUpUser(
         msg =
           "Database trigger or email service error on Supabase server. Please check Supabase Auth triggers and logs.";
       }
-      return { data: null, error: msg };
+      return { data: null, error: msg, isExistingUser: false };
     }
-    return { data, error: null };
+
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      return { data: null, error: "An account with this email already exists", isExistingUser: true };
+    }
+
+    return { data, error: null, isExistingUser: false };
   } catch (error: any) {
     console.error("Sign Up Error:", error);
     let msg = error?.message || String(error);
@@ -95,7 +134,7 @@ export async function signUpUser(
       msg =
         "Database trigger or email service error on Supabase server. Please check Supabase Auth triggers and logs.";
     }
-    return { data: null, error: msg };
+    return { data: null, error: msg, isExistingUser: false };
   }
 }
 

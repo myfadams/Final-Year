@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { signUpUser } from "@/backend/auth";
+import { checkEmailExists, signUpUser } from "@/backend/auth";
 import AlternativeLogin from "@/components/AlternativeLogin";
 import CustomButton from "@/components/CustomButton";
 import CustomInput from "@/components/CustomInput";
@@ -19,7 +19,11 @@ interface FormErrors {
   general?: string;
 }
 
-export default function SignUp() {
+interface SignUpProps {
+  onSwitchToLogin?: () => void;
+}
+
+export default function SignUp({ onSwitchToLogin }: SignUpProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -62,35 +66,72 @@ export default function SignUp() {
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleAccountExists = () => {
+    Alert.alert(
+      "Account Already Exists",
+      "An account with this email address already exists. Please log in with your credentials.",
+      [
+        {
+          text: "Log In",
+          onPress: () => {
+            if (onSwitchToLogin) {
+              onSwitchToLogin();
+            } else {
+              router.replace("/(auth)/login");
+            }
+          },
+        },
+      ]
+    );
+    setErrors({ email: "An account with this email already exists" });
+  };
+
   const handleCreateAccount = async () => {
     setErrors({});
     if (!validateForm()) return;
 
     setIsLoading(true);
     try {
-      const { error } = await signUpUser(
+      // 1. Check if email already exists in users table
+      const exists = await checkEmailExists(userDetails.email.trim());
+      if (exists) {
+        setIsLoading(false);
+        handleAccountExists();
+        return;
+      }
+
+      // 2. Attempt registration with Supabase
+      const { error, isExistingUser } = await signUpUser(
         userDetails.email.trim(),
         userDetails.password,
         userDetails.fullName.trim()
       );
 
+      if (isExistingUser) {
+        setIsLoading(false);
+        handleAccountExists();
+        return;
+      }
+
       if (error) {
         const lowerError = error.toLowerCase();
 
-        // 1. Email field specific errors
+        // Email field specific errors
         if (
           lowerError.includes("already registered") ||
           lowerError.includes("user already exists") ||
           lowerError.includes("already in use")
         ) {
-          setErrors({ email: "An account with this email already exists" });
+          setIsLoading(false);
+          handleAccountExists();
+          return;
         } else if (
           lowerError.includes("invalid email") ||
           lowerError.includes("email address is invalid")
         ) {
           setErrors({ email: "Please enter a valid email address" });
         }
-        // 2. Password field specific errors
+        // Password field specific errors
         else if (
           lowerError.includes("password should be") ||
           lowerError.includes("password is too weak") ||
@@ -98,11 +139,12 @@ export default function SignUp() {
         ) {
           setErrors({ password: error });
         }
-        // 3. Rate limits or system/server errors -> Display popup Alert
+        // Rate limits or system/server errors
         else {
           Alert.alert("Sign Up Notice", error, [{ text: "OK" }]);
           console.log("Sign up notice:", error);
         }
+        setIsLoading(false);
         return;
       }
 
