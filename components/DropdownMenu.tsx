@@ -1,10 +1,13 @@
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
   FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  KeyboardEvent,
   Modal,
   Platform,
   StatusBar,
@@ -62,7 +65,7 @@ export interface DropdownMenuProps {
 //   mono: Platform.select({ ios: "Courier New", android: "monospace" }),
 // };
 
-const { width: SCREEN_W } = Dimensions.get("window");
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
 
 // ─── Chevron ──────────────────────────────────────────────────────────────────
 
@@ -181,19 +184,39 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
   const [anchorY, setAnchorY] = useState(0);
   const [anchorX, setAnchorX] = useState(0);
   const [anchorW, setAnchorW] = useState(SCREEN_W - 48);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const triggerRef = useRef<View>(null);
   const openAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const showSub = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   const selected = options.find((o) => o.value === value) ?? null;
 
   const filteredOptions = search
     ? options.filter(
-        (o) =>
-          o.label.toLowerCase().includes(searchText.toLowerCase()) ||
-          o.description?.toLowerCase().includes(searchText.toLowerCase()),
-      )
+      (o) =>
+        o.label.toLowerCase().includes(searchText.toLowerCase()) ||
+        o.description?.toLowerCase().includes(searchText.toLowerCase()),
+    )
     : options;
 
   const measureAndOpen = useCallback(() => {
@@ -256,6 +279,18 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
     outputRange: [0.94, 1],
   });
 
+  const statusH = Platform.OS === "android" ? (StatusBar.currentHeight ?? 0) : 0;
+  const PANEL_DEFAULT_HEIGHT = 380;
+  const availableBottom =
+    keyboardHeight > 0 ? SCREEN_H - keyboardHeight - 16 : SCREEN_H - 16;
+
+  let panelTop = anchorY;
+  if (anchorY + PANEL_DEFAULT_HEIGHT > availableBottom) {
+    panelTop = Math.max(statusH + 16, availableBottom - PANEL_DEFAULT_HEIGHT);
+  }
+
+  const maxListHeight = Math.max(120, availableBottom - panelTop - 110);
+
   return (
     <View style={[styles.wrapper, style]}>
       {label ? <Text style={styles.label}>{label}</Text> : null}
@@ -301,72 +336,78 @@ export const DropdownMenu: React.FC<DropdownMenuProps> = ({
         onRequestClose={closeDropdown}
         statusBarTranslucent
       >
-        <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFill}
-            onPress={closeDropdown}
-            activeOpacity={1}
-          />
-        </Animated.View>
-
-        <Animated.View
-          style={[
-            styles.panel,
-            {
-              top: anchorY,
-              left: anchorX,
-              width: anchorW,
-              opacity: fadeAnim,
-              transform: [{ translateY }, { scaleY }],
-            },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
         >
-          <View style={styles.panelHeader}>
-            <View style={styles.panelRule} />
-            <Text style={styles.panelCount}>
-              {filteredOptions.length}{" "}
-              {filteredOptions.length === 1 ? "option" : "options"}
-            </Text>
-            <View style={styles.panelRule} />
-          </View>
+          <Animated.View style={[styles.backdrop, { opacity: fadeAnim }]}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              onPress={closeDropdown}
+              activeOpacity={1}
+            />
+          </Animated.View>
 
-          {search && (
-            <View style={styles.searchContainer}>
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search..."
-                placeholderTextColor="#A8A29C"
-                value={searchText}
-                onChangeText={setSearchText}
-                autoCapitalize="none"
-                autoCorrect={false}
-                clearButtonMode="while-editing"
-              />
+          <Animated.View
+            style={[
+              styles.panel,
+              {
+                top: panelTop,
+                left: anchorX,
+                width: anchorW,
+                opacity: fadeAnim,
+                transform: [{ translateY }, { scaleY }],
+              },
+            ]}
+          >
+            <View style={styles.panelHeader}>
+              <View style={styles.panelRule} />
+              <Text style={styles.panelCount}>
+                {filteredOptions.length}{" "}
+                {filteredOptions.length === 1 ? "option" : "options"}
+              </Text>
+              <View style={styles.panelRule} />
             </View>
-          )}
 
-          <FlatList
-            data={filteredOptions}
-            keyExtractor={(item) => String(item.value)}
-            renderItem={({ item, index }) => (
-              <DropdownItem
-                option={item}
-                isSelected={item.value === value}
-                onSelect={() => handleSelect(item)}
-                index={index}
-              />
+            {search && (
+              <View style={styles.searchContainer}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search..."
+                  placeholderTextColor="#A8A29C"
+                  value={searchText}
+                  onChangeText={setSearchText}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  clearButtonMode="while-editing"
+                />
+              </View>
             )}
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-            style={{ maxHeight: 320 }}
-          />
 
-          <View style={styles.panelFooter}>
-            <View style={styles.panelFooterDot} />
-            <View style={styles.panelFooterLine} />
-            <View style={styles.panelFooterDot} />
-          </View>
-        </Animated.View>
+            <FlatList
+              data={filteredOptions}
+              keyExtractor={(item) => String(item.value)}
+              renderItem={({ item, index }) => (
+                <DropdownItem
+                  option={item}
+                  isSelected={item.value === value}
+                  onSelect={() => handleSelect(item)}
+                  index={index}
+                />
+              )}
+              bounces={false}
+              showsVerticalScrollIndicator={true}
+              style={{ maxHeight: maxListHeight }}
+              keyboardShouldPersistTaps="handled"
+            />
+
+            <View style={styles.panelFooter}>
+              <View style={styles.panelFooterDot} />
+              <View style={styles.panelFooterLine} />
+              <View style={styles.panelFooterDot} />
+            </View>
+          </Animated.View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
