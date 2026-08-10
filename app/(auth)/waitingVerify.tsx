@@ -1,10 +1,13 @@
 import { supabase } from "@/backend/supabaseConfig";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   AppState,
   Easing,
@@ -20,14 +23,56 @@ const POLL_INTERVAL_MS = 3000;
 
 export default function WaitingVerify() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ email?: string }>();
-  const email = params.email || "username@gmail.com";
+  const params = useLocalSearchParams<{
+    email?: string;
+    password?: string;
+    fullName?: string;
+  }>();
+
+  const [email, setEmail] = useState<string>(params.email || "");
+  const [password, setPassword] = useState<string>(params.password || "");
+  const [fullName, setFullName] = useState<string>(params.fullName || "");
+  const [isChecking, setIsChecking] = useState(false);
+
+  // Load saved credentials from AsyncStorage if params were not passed
+  useEffect(() => {
+    async function loadStoredCredentials() {
+      try {
+        const stored = await AsyncStorage.getItem("@pending_verify_credentials");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (!email && parsed.email) setEmail(parsed.email);
+          if (!password && parsed.password) setPassword(parsed.password);
+          if (!fullName && parsed.fullName) setFullName(parsed.fullName);
+        }
+      } catch (e) {
+        console.error("Failed to load pending credentials:", e);
+      }
+    }
+    loadStoredCredentials();
+  }, [email, password, fullName]);
 
   // Loading spin animation for the middle ring
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   // Guard so we only navigate once, even if multiple checks resolve true
   const hasNavigatedRef = useRef(false);
+
+  const navigateToVerify = async () => {
+    if (hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    try {
+      await AsyncStorage.removeItem("@pending_verify_credentials");
+    } catch (e) {}
+    router.replace({
+      pathname: "/(auth)/verify",
+      params: {
+        email: email || params.email || "",
+        fullName: fullName || params.fullName || "",
+        password: password || params.password || "",
+      },
+    });
+  };
 
   useEffect(() => {
     Animated.loop(
@@ -45,48 +90,146 @@ export default function WaitingVerify() {
     outputRange: ["0deg", "360deg"],
   });
 
-  // Poll Supabase to see if the user has confirmed their email yet.
-  const checkVerified = async () => {
-    if (hasNavigatedRef.current) return;
+  const handleDeepLinkUrl = async (url: string | null) => {
+    if (!url || hasNavigatedRef.current) return;
 
-    // getUser() hits Supabase directly (not just the cached local session),
-    // so it reflects the confirmation as soon as the user taps the link.
-    const { data, error } = await supabase.auth.getUser();
+    try {
+      let accessToken: string | undefined;
+      let refreshToken: string | undefined;
+      let code: string | undefined;
 
-    if (error) {
-      // Session may be stale/missing until the user completes verification
-      // on some flows — don't treat this as fatal, just keep polling.
-      return;
+      if (url.includes("#")) {
+        const hashString = url.split("#")[1];
+        const searchParams = new URLSearchParams(hashString);
+        accessToken = searchParams.get("access_token") || undefined;
+        refreshToken = searchParams.get("refresh_token") || undefined;
+      }
+
+      const parsed = Linking.parse(url);
+      if (!accessToken && parsed.queryParams) {
+        accessToken = (parsed.queryParams.access_token as string) || undefined;
+        refreshToken = (parsed.queryParams.refresh_token as string) || undefined;
+        code = (parsed.queryParams.code as string) || undefined;
+      }
+
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (!error && data.session?.user) {
+          await navigateToVerify();
+          return;
+        }
+      } else if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error && data.session?.user) {
+          await navigateToVerify();
+          return;
+        }
+      }
+    } catch (err) {
+      console.error("Error handling deep link URL:", err);
     }
+  };
 
-    const isVerified = !!data?.user?.email_confirmed_at;
+  // Poll Supabase to see if the user has confirmed their email yet.
+  const checkVerified = async (isManual = false) => {
+    if (hasNavigatedRef.current) return;
+    if (isManual) setIsChecking(true);
 
-    if (isVerified && !hasNavigatedRef.current) {
-      hasNavigatedRef.current = true;
-      router.replace("/verify");
+    try {
+      // 1. Try refreshing current session from Supabase backend
+      try {
+        const { data: refreshData } = await supabase.auth.refreshSession();
+        if (refreshData?.session?.user?.email_confirmed_at) {
+          await navigateToVerify();
+          return;
+        }
+      } catch (e) {}
+
+      // 2. Try getUser() directly
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        if (!error && data?.user?.email_confirmed_at) {
+          await navigateToVerify();
+          return;
+        }
+      } catch (e) {}
+
+      // 3. Attempt signInWithPassword with credentials.
+      // Supabase will allow sign-in as soon as the email is verified.
+      const activeEmail = email || params.email;
+      const activePassword = password || params.password;
+
+      if (activeEmail && activePassword) {
+        try {
+          const { data: signInData, error: signInError } =
+            await supabase.auth.signInWithPassword({
+              email: activeEmail,
+              password: activePassword,
+            });
+
+          if (!signInError && signInData?.user) {
+            await navigateToVerify();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      if (isManual) {
+        Alert.alert(
+          "Verification Pending",
+          `We could not confirm your email verification yet. Please tap the verification link sent to ${activeEmail || "your email"} and try again.`,
+          [{ text: "OK" }]
+        );
+      }
+    } finally {
+      if (isManual) setIsChecking(false);
     }
   };
 
   useEffect(() => {
+    // Check initial deep link URL if app was launched via link
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLinkUrl(url);
+    });
+
+    // Listen for incoming deep link URLs while app is open
+    const linkingSub = Linking.addEventListener("url", (event) => {
+      if (event.url) handleDeepLinkUrl(event.url);
+    });
+
     // Check immediately on mount, then on an interval.
     checkVerified();
-    const intervalId = setInterval(checkVerified, POLL_INTERVAL_MS);
+    const intervalId = setInterval(() => checkVerified(false), POLL_INTERVAL_MS);
 
-    // Also check right away whenever the app comes back to the foreground —
-    // this is the common path: user leaves the app to tap the email link,
-    // then returns.
-    const subscription = AppState.addEventListener("change", (nextState) => {
+    // Listen for auth state changes (e.g. session update after email confirmation)
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        if (session?.user?.email_confirmed_at && !hasNavigatedRef.current) {
+          navigateToVerify();
+        }
+      }
+    );
+
+    // Also check right away whenever the app comes back to the foreground
+    const appStateSub = AppState.addEventListener("change", (nextState) => {
       if (nextState === "active") {
-        checkVerified();
+        checkVerified(false);
       }
     });
 
     return () => {
       clearInterval(intervalId);
-      subscription.remove();
+      appStateSub.remove();
+      linkingSub.remove();
+      authListener?.subscription?.unsubscribe();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [email, password]);
+
+  const displayEmail = email || params.email || "username@gmail.com";
 
   return (
     <>
@@ -125,8 +268,8 @@ export default function WaitingVerify() {
 
           {/* Subtext */}
           <Text style={styles.subtitle}>
-            We're quickly verifying your credentials to ensure. An email has
-            been sent to <Text style={styles.emailText}>{email}</Text>
+            We're quickly verifying your credentials. An email has been sent to{" "}
+            <Text style={styles.emailText}>{displayEmail}</Text>
           </Text>
 
           {/* Pending Status Badge */}
@@ -134,6 +277,17 @@ export default function WaitingVerify() {
             <View style={styles.badgeDot} />
             <Text style={styles.badgeText}>PENDING</Text>
           </View>
+
+          {/* Manual Check Button */}
+          <TouchableOpacity
+            style={styles.manualCheckButton}
+            onPress={() => checkVerified(true)}
+            disabled={isChecking}
+          >
+            <Text style={styles.manualCheckButtonText}>
+              {isChecking ? "Checking Status..." : "I've Confirmed My Email"}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Back action at the bottom */}
@@ -239,6 +393,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#4b5563",
     letterSpacing: 0.5,
+  },
+  manualCheckButton: {
+    marginTop: 24,
+    backgroundColor: "#af101a",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  manualCheckButtonText: {
+    fontFamily: typography.semibold,
+    fontSize: 14,
+    color: "#ffffff",
   },
   footer: {
     paddingBottom: 24,

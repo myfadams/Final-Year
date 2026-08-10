@@ -6,7 +6,7 @@ import { View } from "react-native";
 import UploadProgressLoader from "./uploadIcon";
 interface ImageUploadProp {
   imageUri: string;
-  userId: string;
+  userId?: string;
   setDone: React.Dispatch<React.SetStateAction<boolean>>;
   onUploaded?: (path: string) => void;
 }

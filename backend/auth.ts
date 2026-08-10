@@ -54,7 +54,7 @@ export async function signUpUser(
 ) {
   try {
     // build options safely — only set emailRedirectTo when it's an absolute http(s) URL
-    const redirectUrl = getVerifyRedirectUrl("(auth)/waitingVerify");
+    const redirectUrl = getVerifyRedirectUrl("verify");
     const options: any = {
       data: {
         full_name: fullName,
@@ -63,11 +63,6 @@ export async function signUpUser(
     };
     if (typeof redirectUrl === "string" && /^https?:\/\//i.test(redirectUrl)) {
       options.emailRedirectTo = redirectUrl;
-    } else {
-      console.warn(
-        "Skipping emailRedirectTo; invalid redirect URL:",
-        redirectUrl,
-      );
     }
 
     const { data, error } = await supabase.auth.signUp({
@@ -76,12 +71,31 @@ export async function signUpUser(
       options,
     });
 
-    if (error) throw error;
+    if (error) {
+      let msg = error.message;
+      if (!msg || typeof msg !== "string" || msg.includes("[object Object]")) {
+        msg = "Account creation failed due to a server error. Please try again.";
+      }
+      if (msg.includes("unexpected_failure") || (error as any).status === 500) {
+        msg =
+          "Database trigger or email service error on Supabase server. Please check Supabase Auth triggers and logs.";
+      }
+      return { data: null, error: msg };
+    }
     return { data, error: null };
   } catch (error: any) {
-    // surface raw error for easier debugging (avoid re-parsing JSON/html)
     console.error("Sign Up Error:", error);
-    return { data: null, error: error?.message ?? String(error) };
+    let msg = error?.message || String(error);
+    if (
+      msg.includes("Unexpected character: <") ||
+      msg.includes("JSON Parse error") ||
+      msg.includes("statusText") ||
+      msg.includes("unexpected_failure")
+    ) {
+      msg =
+        "Database trigger or email service error on Supabase server. Please check Supabase Auth triggers and logs.";
+    }
+    return { data: null, error: msg };
   }
 }
 
@@ -207,12 +221,12 @@ export async function uploadStudentIdCard(
     const response = await fetch(fileUri);
     const blob = await response.blob();
 
-    // Define the upload path in the bucket (e.g., student-ids/{userId}/{timestamp}.jpg)
+    // Define the upload path in the bucket (e.g., schoolID/{userId}/{timestamp}.jpg)
     const fileExt = fileName.split(".").pop() || "jpg";
-    const filePath = `${userId}/${Date.now()}.${fileExt}`;
+    const filePath = `schoolID/${userId}/${Date.now()}.${fileExt}`;
 
     const { data, error } = await supabase.storage
-      .from("student-ids")
+      .from("images")
       .upload(filePath, blob, {
         contentType: `image/${fileExt === "png" ? "png" : "jpeg"}`,
         upsert: true,
@@ -222,7 +236,7 @@ export async function uploadStudentIdCard(
 
     // Get the public URL of the uploaded image file
     const { data: publicUrlData } = supabase.storage
-      .from("student-ids")
+      .from("images")
       .getPublicUrl(filePath);
 
     return { publicUrl: publicUrlData.publicUrl, error: null };

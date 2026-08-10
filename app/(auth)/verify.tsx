@@ -3,6 +3,8 @@ import CustomInput from "@/components/CustomInput";
 import DropdownMenu from "@/components/DropdownMenu";
 
 import {
+  getCurrentUser,
+  signInUser,
   signUpUser,
   updateUserVerification,
   uploadStudentIdCard,
@@ -15,7 +17,7 @@ import { typography } from "@/constants/typograyph";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { IdCard, LocateFixed, MapPin, Phone } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -50,6 +52,15 @@ const Verify = () => {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [locationLoading, setLocationLoading] = useState<boolean>(false);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string>("");
+
+  useEffect(() => {
+    getCurrentUser().then(({ user }) => {
+      if (user?.id) {
+        setUserId(user.id);
+      }
+    });
+  }, []);
 
   const handleGetCurrentLocation = async () => {
     try {
@@ -79,13 +90,6 @@ const Verify = () => {
   };
 
   const handleVerifySubmit = async () => {
-    if (!fullName || !email || !password) {
-      Alert.alert(
-        "Registration Error",
-        "Missing registration details. Please return to the Sign Up screen.",
-      );
-      return;
-    }
     if (!studentId.trim()) {
       Alert.alert("Validation Error", "Please enter your Student ID number.");
       return;
@@ -134,22 +138,25 @@ const Verify = () => {
     try {
       setIsSubmitting(true);
 
-      // Step 1: Sign up user
-      const { data: signUpData, error: signUpError } = await signUpUser(
-        email,
-        password,
-        fullName,
-      );
-      if (signUpError || !signUpData?.user) {
+      // Step 1: Get current authenticated user ID
+      let userId: string | undefined;
+      const { user: currentUser } = await getCurrentUser();
+
+      if (currentUser?.id) {
+        userId = currentUser.id;
+      } else if (email && password) {
+        const { data: signInData } = await signInUser(email, password);
+        userId = signInData?.user?.id;
+      }
+
+      if (!userId) {
         Alert.alert(
-          "Registration Failed",
-          signUpError || "Could not register user.",
+          "Authentication Error",
+          "Could not find active user session. Please sign in again.",
         );
         setIsSubmitting(false);
         return;
       }
-
-      const userId = signUpData.user.id;
 
       // Step 2: Upload Student ID Card image
       let studentCardImageUrl = "";
@@ -246,7 +253,11 @@ const Verify = () => {
               onChangeText={setStudentRef}
             />
             {imageUri && (
-              <ImageUpload imageUri={imageUri} setDone={setUploadDone} />
+              <ImageUpload
+                imageUri={imageUri}
+                userId={userId}
+                setDone={setUploadDone}
+              />
             )}
             <ImagePickerButton setImage={setImageUri} disable={uploadDone} />
             {/* <CustomInput

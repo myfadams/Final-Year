@@ -1,12 +1,9 @@
-import { decode } from "base64-arraybuffer";
-import { Buffer } from "buffer";
-import * as FileSystem from "expo-file-system/legacy";
 import * as tus from "tus-js-client";
 import { supabase } from "./supabaseConfig";
 
 interface UploadSchoolIDOptions {
   imageUri: string;
-  userId: string;
+  userId?: string;
   onProgress?: (progress: number) => void;
 }
 
@@ -15,15 +12,8 @@ export const uploadSchoolID = async ({
   userId,
   onProgress,
 }: UploadSchoolIDOptions): Promise<string> => {
-  const base64 = await FileSystem.readAsStringAsync(imageUri, {
-    // expo-file-system may not export EncodingType in some versions; use string literal
-    encoding: "base64",
-  });
-
-  const fileData = decode(base64);
-
-  const fileName = `${userId}-${Date.now()}.jpg`;
-  const filePath = `schoolID/${fileName}`;
+  const response = await fetch(imageUri);
+  const blob = await response.blob();
 
   const {
     data: { session },
@@ -33,14 +23,21 @@ export const uploadSchoolID = async ({
     throw new Error("User is not authenticated");
   }
 
-  const projectId = process.env.EXPO_PUBLIC_SUPABASE_PROJECT_ID;
+  const effectiveUserId = userId || session.user.id;
+  const fileName = `${effectiveUserId}-${Date.now()}.jpg`;
+  const filePath = `schoolID/${fileName}`;
+
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || "";
+  const projectId =
+    process.env.EXPO_PUBLIC_SUPABASE_PROJECT_ID ||
+    supabaseUrl.match(/https?:\/\/([^.]+)\.supabase\.co/)?.[1];
 
   if (!projectId) {
     throw new Error("Supabase project ID is missing");
   }
 
   return new Promise((resolve, reject) => {
-    const upload = new tus.Upload(Buffer.from(fileData), {
+    const upload = new tus.Upload(blob, {
       endpoint: `https://${projectId}.storage.supabase.co/storage/v1/upload/resumable`,
 
       retryDelays: [0, 3000, 5000, 10000],
@@ -59,9 +56,23 @@ export const uploadSchoolID = async ({
         cacheControl: "3600",
       },
 
-      onError(error) {
-        console.error("Upload failed:", error);
-        reject(error);
+      async onError(error) {
+        console.warn("TUS Upload failed, trying standard Supabase storage upload...", error);
+        try {
+          const { error: sbError } = await supabase.storage
+            .from("images")
+            .upload(filePath, blob, {
+              contentType: "image/jpeg",
+              upsert: true,
+            });
+
+          if (sbError) throw sbError;
+          onProgress?.(100);
+          resolve(filePath);
+        } catch (fallbackError) {
+          console.error("Standard storage upload failed:", fallbackError);
+          reject(error);
+        }
       },
 
       onProgress(bytesUploaded, bytesTotal) {
