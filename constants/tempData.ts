@@ -1304,3 +1304,67 @@ export const getContactChatMessages = (
 
 export const DEFAULT_CONTACT_CHAT_MESSAGES: ChatMessage[] =
   getContactChatMessages("6", "Helen Miller");
+
+export const getEmergencyChatMessages = (): ChatMessage[] => {
+  return [
+    {
+      id: "s1",
+      sender: "system",
+      timestamp: "10:40 AM",
+      type: "text",
+      text: "Incident escalated to Multi-Unit Emergency Response",
+    },
+    {
+      id: "m1",
+      sender: "other",
+      senderName: "John Doe",
+      senderRole: "EMT Lead",
+      senderAvatar:
+        "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80",
+      timestamp: "10:42 AM",
+      type: "text",
+      text: "Unit 4 is en route. ETA 3 minutes. Patient history indicates severe asthma.",
+    },
+    {
+      id: "m2",
+      sender: "other",
+      senderName: "Dispatch Control",
+      senderRole: "KNUST Security",
+      senderAvatar:
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+      timestamp: "10:44 AM",
+      type: "text",
+      text: "Traffic on Main St is heavy. Advise taking 4th Ave detour.",
+    },
+    {
+      id: "evn_default",
+      sender: "other",
+      senderName: "Dispatch Control",
+      senderRole: "KNUST Security",
+      senderAvatar:
+        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+      timestamp: "10:44 AM",
+      type: "audio",
+      audioUri:
+        "https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/thrust.mp3",
+      audioDuration: 3,
+    },
+    {
+      id: "s2",
+      sender: "system",
+      timestamp: "10:45 AM",
+      type: "text",
+      text: "Ambulance Unit 4 is on-site",
+    },
+    {
+      id: "m3",
+      sender: "me",
+      timestamp: "10:46 AM",
+      type: "text",
+      text: "Copy that. We are entering the building now. Please prep oxygen and stretcher at the main entrance.",
+    },
+  ];
+};
+
+export const DEFAULT_EMERGENCY_CHAT_MESSAGES: ChatMessage[] =
+  getEmergencyChatMessages();

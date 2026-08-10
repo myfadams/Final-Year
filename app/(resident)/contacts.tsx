@@ -55,7 +55,7 @@ export default function ContactsScreen() {
 
   const handleChatPress = (name: string, contactObj?: any) => {
     router.push({
-      pathname: "/chat",
+      pathname: "/contactChat",
       params: {
         mode: "contact",
         contactId: contactObj?.id || "1",

@@ -40,6 +40,10 @@ import {
 } from "react-native";
 import MapView, { Circle, Marker } from "react-native-maps";
 
+// Default demo clip used whenever a voice note doesn't have a real, playable URI.
+const FALLBACK_VOICE_NOTE_URI =
+  "https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/thrust.mp3";
+
 export default function IncidentDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<any>();
@@ -158,20 +162,38 @@ export default function IncidentDetailScreen() {
         }))
       : []);
 
-  // Retrieve attached voice notes (from params, report submit, or mock data)
+  // Retrieve attached voice notes (from params, report submit, or mock data).
+  // Memoized off stable primitives (incident.id, the raw params string) so this
+  // array keeps a STABLE reference across re-renders. Without this, a new array
+  // was created on every render, which retriggered the duration-fetch effect
+  // below on every render — including its cleanup, which was unloading the
+  // sound that was actively playing, killing playback moments after it started.
   const voiceNotesList: { id: string; uri: string; duration: number }[] =
-    params.voiceNotes
-      ? JSON.parse(params.voiceNotes)
-      : (incident as any).voiceNotes || [
+    React.useMemo(() => {
+      if (params.voiceNotes) {
+        try {
+          const parsed = JSON.parse(params.voiceNotes as string);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {
+          console.log("Failed to parse voiceNotes param:", e);
+        }
+      }
+
+      return (
+        (incident as any).voiceNotes || [
           {
             id: "vn_1",
-            uri: "file:///c:/Users/adams/Documents/gravity-project/Final-Year/audio/Recording.m4a",
-            duration: 14,
+            uri: FALLBACK_VOICE_NOTE_URI,
+            duration: 3,
           },
-        ];
+        ]
+      );
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [params.voiceNotes, incident.id]);
 
   // Audio Playback state for voice notes
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
+  const [pausedNoteId, setPausedNoteId] = useState<string | null>(null);
   const [noteDurations, setNoteDurations] = useState<Record<string, number>>(
     {},
   );
@@ -182,138 +204,218 @@ export default function IncidentDetailScreen() {
     Record<string, number>
   >({});
   const soundRef = React.useRef<Audio.Sound | null>(null);
+  const isMountedRef = React.useRef(true);
 
-  // Fetch actual audio duration directly from audio file metadata on screen mount
+  // Resolve a safe, playable URI for a voice note, falling back to a demo clip
+  // for anything that isn't a genuine remote/local audio URI.
+  const resolveVoiceNoteUri = (uri?: string | null) => {
+    if (!uri) return FALLBACK_VOICE_NOTE_URI;
+    const isPlayableScheme =
+      uri.startsWith("http://") ||
+      uri.startsWith("https://") ||
+      uri.startsWith("file://") ||
+      uri.startsWith("content://") ||
+      uri.startsWith("data:");
+    return isPlayableScheme ? uri : FALLBACK_VOICE_NOTE_URI;
+  };
+
+  // Configure the audio mode once on mount. On unmount, stop and release
+  // whatever is currently loaded so nothing keeps playing in the background.
   React.useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
-    const fetchDurations = async () => {
-      try {
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: false,
-          playsInSilentModeIOS: true,
-        });
-
-        for (const note of voiceNotesList) {
-          try {
-            let audioSource: any = require("../audio/Recording.m4a");
-            if (note.uri && !note.uri.includes("audio/Recording.m4a")) {
-              audioSource = { uri: note.uri };
-            }
-
-            const { sound, status } = await Audio.Sound.createAsync(
-              audioSource,
-              { shouldPlay: false },
-            );
-            if (status.isLoaded && status.durationMillis) {
-              const exactSeconds = Math.round(status.durationMillis / 1000);
-              if (isMounted && exactSeconds > 0) {
-                setNoteDurations((prev) => ({
-                  ...prev,
-                  [note.id]: exactSeconds,
-                }));
-              }
-            }
-            await sound.unloadAsync().catch(() => {});
-          } catch (e) {
-            console.log("Error loading audio duration:", e);
-          }
-        }
-      } catch (e) {
-        // Ignored
-      }
-    };
-
-    fetchDurations();
+    Audio.setAudioModeAsync({
+      allowsRecordingIOS: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => {});
 
     return () => {
-      isMounted = false;
-      if (soundRef.current) {
-        soundRef.current.unloadAsync().catch(() => {});
+      isMountedRef.current = false;
+      const sound = soundRef.current;
+      soundRef.current = null;
+      if (sound) {
+        sound.setOnPlaybackStatusUpdate(null);
+        sound.unloadAsync().catch(() => {});
       }
     };
+  }, []);
+
+  // Fetch each voice note's real duration once (without playing it). This only
+  // reruns when voiceNotesList genuinely changes (e.g. navigating to a
+  // different incident), not on every render.
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadDurations = async () => {
+      for (const note of voiceNotesList) {
+        if (cancelled) return;
+        try {
+          const { sound, status } = await Audio.Sound.createAsync(
+            { uri: resolveVoiceNoteUri(note.uri) },
+            { shouldPlay: false },
+          );
+          if (status.isLoaded && status.durationMillis && !cancelled) {
+            const exactSeconds = Math.max(
+              1,
+              Math.round(status.durationMillis / 1000),
+            );
+            setNoteDurations((prev) => ({ ...prev, [note.id]: exactSeconds }));
+          }
+          await sound.unloadAsync().catch(() => {});
+        } catch (e) {
+          console.log("Error loading audio duration:", e);
+        }
+      }
+    };
+
+    loadDurations();
+
+    return () => {
+      cancelled = true;
+    };
   }, [voiceNotesList]);
+
+  // Stop any playing voice note when the screen loses focus (e.g. user
+  // navigates to another tab/screen) so audio doesn't keep running unattended.
+  useFocusEffect(
+    React.useCallback(() => {
+      return () => {
+        const sound = soundRef.current;
+        soundRef.current = null;
+        if (sound) {
+          sound.setOnPlaybackStatusUpdate(null);
+          sound.stopAsync().catch(() => {});
+          sound.unloadAsync().catch(() => {});
+        }
+        setPlayingNoteId(null);
+        setPausedNoteId(null);
+      };
+    }, []),
+  );
+
+  const stopActivePlayback = async () => {
+    setPlayingNoteId(null);
+    setPausedNoteId(null);
+    const sound = soundRef.current;
+    soundRef.current = null;
+    if (sound) {
+      sound.setOnPlaybackStatusUpdate(null);
+      try {
+        await sound.stopAsync();
+      } catch (e) {}
+      try {
+        await sound.unloadAsync();
+      } catch (e) {}
+    }
+  };
 
   const handlePlayVoiceNote = async (note: {
     id: string;
     uri: string;
     duration?: number;
   }) => {
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync().catch(() => {});
-      soundRef.current = null;
-    }
-
-    if (playingNoteId === note.id) {
-      setPlayingNoteId(null);
-      setPlaybackRemaining((prev) => ({
-        ...prev,
-        [note.id]: noteDurations[note.id] || note.duration || 14,
-      }));
-      setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
+    // 1. If currently PLAYING this note -> PAUSE IT (keep sound loaded & preserve position!)
+    if (playingNoteId === note.id && soundRef.current) {
+      try {
+        await soundRef.current.pauseAsync();
+        setPlayingNoteId(null);
+        setPausedNoteId(note.id);
+      } catch (e) {
+        console.error("Error pausing voice note:", e);
+      }
       return;
     }
 
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-      });
-
-      setPlayingNoteId(note.id);
-
-      let audioSource: any = require("../audio/Recording.m4a");
-      if (note.uri && !note.uri.includes("audio/Recording.m4a")) {
-        audioSource = { uri: note.uri };
+    // 2. If currently PAUSED on this note -> RESUME IT from paused position!
+    if (pausedNoteId === note.id && soundRef.current) {
+      try {
+        setPausedNoteId(null);
+        setPlayingNoteId(note.id);
+        await soundRef.current.playAsync();
+      } catch (e) {
+        console.error("Error resuming voice note:", e);
       }
+      return;
+    }
 
-      const totalSec = noteDurations[note.id] || note.duration || 14;
-      setPlaybackRemaining((prev) => ({ ...prev, [note.id]: totalSec }));
+    // 3. Only one note plays at a time — stop and release whatever is active first.
+    await stopActivePlayback();
+
+    try {
+      const knownDuration = noteDurations[note.id] || note.duration || 3;
+      setPlaybackRemaining((prev) => ({ ...prev, [note.id]: knownDuration }));
       setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
+      setPlayingNoteId(note.id);
+      setPausedNoteId(null);
 
-      const { sound } = await Audio.Sound.createAsync(
-        audioSource,
-        { shouldPlay: true, progressUpdateIntervalMillis: 100 },
-        (status) => {
-          if (status.isLoaded) {
-            if (status.durationMillis) {
-              const exactSecs = Math.round(status.durationMillis / 1000);
-              if (exactSecs > 0) {
-                setNoteDurations((prev) => ({ ...prev, [note.id]: exactSecs }));
-              }
-            }
-            if (status.isPlaying && status.durationMillis) {
-              const durationMillis = status.durationMillis;
-              const remainingSec = Math.max(
-                0,
-                Math.ceil((durationMillis - status.positionMillis) / 1000),
-              );
-              setPlaybackRemaining((prev) => ({
-                ...prev,
-                [note.id]: remainingSec,
-              }));
-              setPlaybackProgress((prev) => ({
-                ...prev,
-                [note.id]: status.positionMillis / durationMillis,
-              }));
-            }
-            if (!status.isPlaying && status.didJustFinish) {
-              setPlayingNoteId(null);
-              setPlaybackRemaining((prev) => ({
-                ...prev,
-                [note.id]: noteDurations[note.id] || note.duration || 14,
-              }));
-              setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
-            }
-          }
+      const { sound, status } = await Audio.Sound.createAsync(
+        { uri: resolveVoiceNoteUri(note.uri) },
+        {
+          shouldPlay: true,
+          positionMillis: 0,
+          volume: 1.0,
+          isMuted: false,
+          progressUpdateIntervalMillis: 150,
         },
       );
 
+      if (!status.isLoaded) {
+        await sound.unloadAsync().catch(() => {});
+        throw new Error("Failed to load audio");
+      }
+
       soundRef.current = sound;
+      const fallbackDurationMs = knownDuration * 1000;
+
+      sound.setOnPlaybackStatusUpdate((playbackStatus) => {
+        if (!isMountedRef.current || !playbackStatus.isLoaded) return;
+
+        const durationMs =
+          playbackStatus.durationMillis && playbackStatus.durationMillis > 0
+            ? playbackStatus.durationMillis
+            : fallbackDurationMs;
+        const positionMs = playbackStatus.positionMillis ?? 0;
+
+        if (durationMs > 0) {
+          const remainingSec = Math.max(
+            0,
+            Math.ceil((durationMs - positionMs) / 1000),
+          );
+          setPlaybackRemaining((prev) => ({
+            ...prev,
+            [note.id]: remainingSec,
+          }));
+          setPlaybackProgress((prev) => ({
+            ...prev,
+            [note.id]: Math.min(1, positionMs / durationMs),
+          }));
+        }
+
+        if (playbackStatus.didJustFinish) {
+          setPlayingNoteId((current) => (current === note.id ? null : current));
+          setPausedNoteId((current) => (current === note.id ? null : current));
+          setPlaybackRemaining((prev) => ({
+            ...prev,
+            [note.id]: Math.round(durationMs / 1000),
+          }));
+          setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
+
+          if (soundRef.current === sound) {
+            soundRef.current = null;
+          }
+          sound.setOnPlaybackStatusUpdate(null);
+          sound.unloadAsync().catch(() => {});
+        }
+      });
     } catch (err) {
-      console.error("Failed to play audio:", err);
+      console.error("Failed to play voice note in incident detail:", err);
       setPlayingNoteId(null);
-      Alert.alert("Audio Error", "Could not play audio file.");
+      setPausedNoteId(null);
+      await stopActivePlayback();
+      Alert.alert("Audio Error", "Could not play voice note.");
     }
   };
 
@@ -376,9 +478,8 @@ export default function IncidentDetailScreen() {
 
   const handleMessage = () => {
     router.push({
-      pathname: "/chat",
+      pathname: "/emergencyChat",
       params: {
-        mode: "emergency",
         incidentId: incident.id.toString(),
         title: incident.title,
         severity: incident.severity,
@@ -647,12 +748,14 @@ export default function IncidentDetailScreen() {
             </Text>
             {voiceNotesList.map((note) => {
               const isPlaying = playingNoteId === note.id;
+              const isPaused = pausedNoteId === note.id;
+              const isPlayingOrPaused = isPlaying || isPaused;
               const totalSec = noteDurations[note.id] || note.duration || 14;
               const currentRemaining =
-                isPlaying && playbackRemaining[note.id] !== undefined
+                isPlayingOrPaused && playbackRemaining[note.id] !== undefined
                   ? playbackRemaining[note.id]
                   : totalSec;
-              const currentProgress = isPlaying
+              const currentProgress = isPlayingOrPaused
                 ? playbackProgress[note.id] || 0
                 : 0;
 
@@ -710,7 +813,8 @@ export default function IncidentDetailScreen() {
                       const activeBarCount = Math.floor(
                         currentProgress * totalBars,
                       );
-                      const isBarPlayed = isPlaying && i <= activeBarCount;
+                      const isBarPlayed =
+                        isPlayingOrPaused && i <= activeBarCount;
 
                       return (
                         <View

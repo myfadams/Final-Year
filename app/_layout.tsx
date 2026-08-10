@@ -37,6 +37,8 @@ export default function RootLayout() {
       <Stack.Screen name="report" />
       <Stack.Screen name="incidentsDetails" />
       <Stack.Screen name="connect" />
+      <Stack.Screen name="contactChat" />
+      <Stack.Screen name="emergencyChat" />
     </Stack>
   );
 }
