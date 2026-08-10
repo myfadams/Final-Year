@@ -66,6 +66,10 @@ const CustomInput: React.FC<CustomInputData> = ({
           keyboardType={keyboardType ? "phone-pad" : "default"}
           value={value}
           onChangeText={onChangeText}
+          textContentType="none"
+          autoComplete="off"
+
+
         />
         {PasswordIcon && (
           <TouchableOpacity
@@ -100,3 +104,5 @@ const CustomInput: React.FC<CustomInputData> = ({
 };
 
 export default CustomInput;
+
+

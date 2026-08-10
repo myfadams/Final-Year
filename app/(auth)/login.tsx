@@ -12,6 +12,7 @@ import {
   Keyboard,
   KeyboardAvoidingView,
   Platform,
+  ScrollView,
   Text,
   TouchableOpacity,
   View,
@@ -41,98 +42,113 @@ export default function login() {
     };
   }, []);
 
+  const scrollContent = (
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator={false}
+    >
+      <View>
+        <Text
+          style={{
+            color: Colors.light.text,
+            fontFamily: typography.medium,
+            fontSize: 24,
+            textAlign: "center",
+            marginVertical: 18,
+          }}
+        >
+          Sign In to Connect With Emergency Services
+        </Text>
+        <ActiveComponent activePage={activePage} setPage={setActivePage} />
+      </View>
+      {activePage === "login" ? (
+        <View style={styles.inputView}>
+          <CustomInput
+            placeholder="Enter your Email"
+            Icon={<Mail size={19} color={"#000"} strokeWidth={1.5} />}
+            label="Email"
+          />
+          <CustomInput
+            placeholder="Enter your Password"
+            Icon={<KeyRound size={19} color={"#000"} strokeWidth={1.5} />}
+            PasswordIcon={true}
+            label="Password"
+          />
+
+          <View>
+            <TouchableOpacity>
+              <Text style={styles.forgotstyles}>Forgot Password?</Text>
+            </TouchableOpacity>
+          </View>
+          <CustomButton
+            text={"Login"}
+            onPress={() => {
+              setIsLoading(true);
+              setTimeout(() => {
+                //temp
+                router.navigate("/(resident)/home");
+                setIsLoading(false);
+              }, 3000);
+            }}
+            disabled={isLoading}
+            isLoading={isLoading}
+          />
+          <View>
+            <AlternativeLogin title="Or sign with" />
+          </View>
+        </View>
+      ) : (
+        <SignUp />
+      )}
+
+      {showFooter && (
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            alignItems: "flex-end",
+            paddingBottom: 16,
+          }}
+        >
+          <Text>
+            {activePage === "login"
+              ? "Don't have an account? "
+              : "Already have an account? "}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (activePage === "signup") {
+                setActivePage("login");
+                return;
+              }
+              setActivePage("signup");
+            }}
+          >
+            <Text style={{ color: Colors.light.accent }}>
+              {activePage === "login" ? "Create an account" : "login"}.
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+    </ScrollView>
+  );
+
   return (
     <>
       <StatusBar style="dark" backgroundColor={Colors.light.accent} />
       <SafeAreaView style={{ flex: 1 }}>
-        <KeyboardAvoidingView
-          style={styles.container}
-          behavior={Platform.OS === "ios" ? "padding" : "height"}
-        >
-          <View>
-            <Text
-              style={{
-                color: Colors.light.text,
-                fontFamily: typography.medium,
-                fontSize: 24,
-                textAlign: "center",
-                marginVertical: 18,
-              }}
-            >
-              Sign In to Connect With Emergency Services
-            </Text>
-            <ActiveComponent activePage={activePage} setPage={setActivePage} />
-          </View>
-          {activePage === "login" ? (
-            <View style={styles.inputView}>
-              <CustomInput
-                placeholder="Enter your Email"
-                Icon={<Mail size={19} color={"#000"} strokeWidth={1.5} />}
-                label="Email"
-              />
-              <CustomInput
-                placeholder="Enter your Password"
-                Icon={<KeyRound size={19} color={"#000"} strokeWidth={1.5} />}
-                PasswordIcon={true}
-                label="Password"
-              />
-
-              <View>
-                <TouchableOpacity>
-                  <Text style={styles.forgotstyles}>Forgot Password?</Text>
-                </TouchableOpacity>
-              </View>
-              <CustomButton
-                text={"Login"}
-                onPress={() => {
-                  setIsLoading(true);
-                  setTimeout(() => {
-                    //temp
-                    router.navigate("/(resident)/home");
-                    setIsLoading(false);
-                  }, 3000);
-                }}
-                disabled={isLoading}
-                isLoading={isLoading}
-              />
-              <View>
-                <AlternativeLogin title="Or sign with" />
-              </View>
-            </View>
-          ) : (
-            <SignUp />
-          )}
-
-          {showFooter && (
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "center",
-                alignItems: "flex-end",
-                // marginVertical: 16,
-              }}
-            >
-              <Text>
-                {activePage === "login"
-                  ? "Don't have an account? "
-                  : "Already have an account? "}
-              </Text>
-              <TouchableOpacity
-                onPress={() => {
-                  if (activePage === "signup") {
-                    setActivePage("login");
-                    return;
-                  }
-                  setActivePage("signup");
-                }}
-              >
-                <Text style={{ color: Colors.light.accent }}>
-                  {activePage === "login" ? "Create an account" : "login"}.
-                </Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </KeyboardAvoidingView>
+        {Platform.OS === "ios" ? (
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior="padding"
+          >
+            {scrollContent}
+          </KeyboardAvoidingView>
+        ) : (
+          scrollContent
+        )}
       </SafeAreaView>
     </>
   );

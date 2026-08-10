@@ -45,7 +45,7 @@ export default function SignUp() {
   };
 
   return (
-    <View style={styles.inputView}>
+    <View style={[styles.inputView, { flex: undefined }]}>
       <CustomInput
         placeholder="Enter your full name..."
         label="Full Name"
@@ -87,7 +87,7 @@ export default function SignUp() {
           setPasswordMatch(text === userDetails.password);
         }}
         showError={passwordMatch ? undefined : "Password does not match"}
-        // value={userDetails.confirmPassword}
+        value={userDetails.confirmPassword}
       />
 
       <CustomButton
