@@ -1,3 +1,4 @@
+import { getVerifyRedirectUrl } from "@/externalFunctions/expoFunctions";
 import { supabase } from "./supabaseConfig";
 
 /**
@@ -52,22 +53,35 @@ export async function signUpUser(
   fullName: string,
 ) {
   try {
+    // build options safely — only set emailRedirectTo when it's an absolute http(s) URL
+    const redirectUrl = getVerifyRedirectUrl("(auth)/waitingVerify");
+    const options: any = {
+      data: {
+        full_name: fullName,
+        name: fullName,
+      },
+    };
+    if (typeof redirectUrl === "string" && /^https?:\/\//i.test(redirectUrl)) {
+      options.emailRedirectTo = redirectUrl;
+    } else {
+      console.warn(
+        "Skipping emailRedirectTo; invalid redirect URL:",
+        redirectUrl,
+      );
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: {
-          full_name: fullName,
-          name: fullName,
-        },
-      },
+      options,
     });
 
     if (error) throw error;
     return { data, error: null };
   } catch (error: any) {
-    console.error("Sign Up Error:", error.message);
-    return { data: null, error: error.message };
+    // surface raw error for easier debugging (avoid re-parsing JSON/html)
+    console.error("Sign Up Error:", error);
+    return { data: null, error: error?.message ?? String(error) };
   }
 }
 

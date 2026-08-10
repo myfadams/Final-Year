@@ -31,7 +31,10 @@ export default function SignUp() {
     signUpUser(userDetails.email, userDetails.password, userDetails.fullName)
       .then(() => {
         console.log("account created successfully");
-        router.navigate("/(auth)/verify");
+        router.navigate({
+          pathname: "/(auth)/waitingVerify",
+          params: { email: userDetails.email },
+        });
       })
       .catch((error) => {
         console.log(error);

@@ -1,3 +1,4 @@
+import { uploadSchoolID } from "@/backend/storage";
 import Colors from "@/constants/Colors";
 import { Image } from "expo-image";
 import React, { useEffect, useState } from "react";
@@ -5,38 +6,67 @@ import { View } from "react-native";
 import UploadProgressLoader from "./uploadIcon";
 interface ImageUploadProp {
   imageUri: string;
+  userId: string;
   setDone: React.Dispatch<React.SetStateAction<boolean>>;
+  onUploaded?: (path: string) => void;
 }
-
-const ImageUpload: React.FC<ImageUploadProp> = ({ imageUri, setDone }) => {
+const ImageUpload: React.FC<ImageUploadProp> = ({
+  imageUri,
+  userId,
+  setDone,
+  onUploaded,
+}) => {
   const [progress, setProgress] = useState(0);
   const [uploadDone, setUploadDone] = useState(false);
 
-  // Simulate upload
   useEffect(() => {
-    setProgress(0);
-    setUploadDone(false);
-    setDone(true);
-    const t = setInterval(() => {
-      setProgress((p) => {
-        if (p >= 100) {
-          clearInterval(t);
+    let cancelled = false;
+
+    const upload = async () => {
+      try {
+        setProgress(0);
+        setUploadDone(false);
+        setDone(true);
+
+        const path = await uploadSchoolID({
+          imageUri,
+          userId,
+
+          onProgress: (value) => {
+            if (!cancelled) {
+              setProgress(value);
+            }
+          },
+        });
+
+        if (!cancelled) {
+          setProgress(100);
           setUploadDone(true);
           setDone(false);
-          return 100;
+
+          onUploaded?.(path);
         }
-        return p + 2;
-      });
-    }, 80);
-    setDone(false);
-    return () => clearInterval(t);
-  }, [imageUri]);
+      } catch (error) {
+        console.error("School ID upload failed:", error);
+
+        if (!cancelled) {
+          setDone(false);
+          setUploadDone(false);
+        }
+      }
+    };
+
+    upload();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUri, userId]);
 
   return (
     <View
       style={{
         flex: 1,
-        // backgroundColor: '#fff',
         alignItems: "center",
         justifyContent: "center",
         height: 250,
@@ -47,17 +77,19 @@ const ImageUpload: React.FC<ImageUploadProp> = ({ imageUri, setDone }) => {
       }}
     >
       {!uploadDone && <UploadProgressLoader progress={progress} size={85} />}
+
       <Image
-        // source={"../designs/images.png"}
-        style={{ flex: 1, width: "100%", height: "100%", borderRadius: 12 }}
+        style={{
+          flex: 1,
+          width: "100%",
+          height: "100%",
+          borderRadius: 12,
+        }}
         source={imageUri}
-        // placeholder={{ blurhash }}
         contentFit="cover"
         blurRadius={uploadDone ? 0 : 100}
-        // transition={1000}
       />
     </View>
   );
 };
-
 export default ImageUpload;

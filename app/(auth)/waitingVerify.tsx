@@ -1,11 +1,22 @@
+import { supabase } from "@/backend/supabaseConfig";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
-import { useRouter, useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  AppState,
+  Easing,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
+
+const POLL_INTERVAL_MS = 3000;
 
 export default function WaitingVerify() {
   const router = useRouter();
@@ -15,6 +26,9 @@ export default function WaitingVerify() {
   // Loading spin animation for the middle ring
   const spinAnim = useRef(new Animated.Value(0)).current;
 
+  // Guard so we only navigate once, even if multiple checks resolve true
+  const hasNavigatedRef = useRef(false);
+
   useEffect(() => {
     Animated.loop(
       Animated.timing(spinAnim, {
@@ -22,7 +36,7 @@ export default function WaitingVerify() {
         duration: 1800,
         easing: Easing.linear,
         useNativeDriver: true,
-      })
+      }),
     ).start();
   }, [spinAnim]);
 
@@ -30,6 +44,49 @@ export default function WaitingVerify() {
     inputRange: [0, 1],
     outputRange: ["0deg", "360deg"],
   });
+
+  // Poll Supabase to see if the user has confirmed their email yet.
+  const checkVerified = async () => {
+    if (hasNavigatedRef.current) return;
+
+    // getUser() hits Supabase directly (not just the cached local session),
+    // so it reflects the confirmation as soon as the user taps the link.
+    const { data, error } = await supabase.auth.getUser();
+
+    if (error) {
+      // Session may be stale/missing until the user completes verification
+      // on some flows — don't treat this as fatal, just keep polling.
+      return;
+    }
+
+    const isVerified = !!data?.user?.email_confirmed_at;
+
+    if (isVerified && !hasNavigatedRef.current) {
+      hasNavigatedRef.current = true;
+      router.replace("/verify");
+    }
+  };
+
+  useEffect(() => {
+    // Check immediately on mount, then on an interval.
+    checkVerified();
+    const intervalId = setInterval(checkVerified, POLL_INTERVAL_MS);
+
+    // Also check right away whenever the app comes back to the foreground —
+    // this is the common path: user leaves the app to tap the email link,
+    // then returns.
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        checkVerified();
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      subscription.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -40,10 +97,7 @@ export default function WaitingVerify() {
           <View style={styles.outerRing}>
             {/* Spinning Ring */}
             <Animated.View
-              style={[
-                styles.middleRing,
-                { transform: [{ rotate: spin }] },
-              ]}
+              style={[styles.middleRing, { transform: [{ rotate: spin }] }]}
             />
             {/* Static Inner Circle with Shield */}
             <View style={styles.innerCircle}>

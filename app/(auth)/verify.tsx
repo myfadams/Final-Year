@@ -193,7 +193,7 @@ const Verify = () => {
       Alert.alert("Success", "Verification details submitted successfully!");
       // Proceed to the OTP verifyNumber screen
       router.navigate({
-        pathname: "/(auth)/waitingVerify",
+        pathname: "/(resident)/home",
         params: { phone: phone.trim() },
       });
     } catch (err: any) {
