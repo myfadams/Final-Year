@@ -114,7 +114,8 @@ export default function SignUp({ onSwitchToLogin }: SignUpProps) {
       }
 
       if (error) {
-        const lowerError = error.toLowerCase();
+        const errorString = typeof error === "string" ? error : (error as any)?.message || "Sign up failed";
+        const lowerError = errorString.toLowerCase();
 
         // Email field specific errors
         if (
@@ -137,12 +138,11 @@ export default function SignUp({ onSwitchToLogin }: SignUpProps) {
           lowerError.includes("password is too weak") ||
           lowerError.includes("password must be")
         ) {
-          setErrors({ password: error });
+          setErrors({ password: errorString });
         }
         // Rate limits or system/server errors
         else {
-          Alert.alert("Sign Up Notice", error, [{ text: "OK" }]);
-          console.log("Sign up notice:", error);
+          setErrors({ general: errorString });
         }
         setIsLoading(false);
         return;

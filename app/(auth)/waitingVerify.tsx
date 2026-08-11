@@ -1,3 +1,4 @@
+import { resendVerificationEmail } from "@/backend/auth";
 import { supabase } from "@/backend/supabaseConfig";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
@@ -19,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
+
 const POLL_INTERVAL_MS = 3000;
 
 export default function WaitingVerify() {
@@ -33,6 +35,32 @@ export default function WaitingVerify() {
   const [password, setPassword] = useState<string>(params.password || "");
   const [fullName, setFullName] = useState<string>(params.fullName || "");
   const [isChecking, setIsChecking] = useState(false);
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
+
+  const displayEmail = email || params.email || "";
+
+  const handleResendEmail = async () => {
+    const targetEmail = displayEmail;
+    if (!targetEmail) return;
+
+    setIsResendingEmail(true);
+    try {
+      const { error } = await resendVerificationEmail(targetEmail);
+      if (error) {
+        Alert.alert("Resend Failed", error);
+      } else {
+        Alert.alert(
+          "Email Resent",
+          `A new verification link has been sent to ${targetEmail}. Please check your inbox and spam folder.`
+        );
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err?.message || "Failed to resend verification email.");
+    } finally {
+      setIsResendingEmail(false);
+    }
+  };
+
 
   // Load saved credentials from AsyncStorage if params were not passed
   useEffect(() => {
@@ -229,8 +257,6 @@ export default function WaitingVerify() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [email, password]);
 
-  const displayEmail = email || params.email || "username@gmail.com";
-
   return (
     <>
       <StatusBar style="dark" backgroundColor={Colors.light.background} />
@@ -288,7 +314,28 @@ export default function WaitingVerify() {
               {isChecking ? "Checking Status..." : "I've Confirmed My Email"}
             </Text>
           </TouchableOpacity>
+
+          {/* Resend Verification Email Button */}
+          <TouchableOpacity
+            style={{ marginTop: 14, paddingVertical: 8, paddingHorizontal: 16 }}
+            onPress={handleResendEmail}
+            disabled={isResendingEmail || isChecking}
+          >
+            <Text
+              style={{
+                fontFamily: typography.medium,
+                fontSize: 14,
+                color: Colors.light.accent,
+                textAlign: "center",
+              }}
+            >
+              {isResendingEmail
+                ? "Resending Email..."
+                : "Didn't receive email? Resend"}
+            </Text>
+          </TouchableOpacity>
         </View>
+
 
         {/* Back action at the bottom */}
         <View style={styles.footer}>

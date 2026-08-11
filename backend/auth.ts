@@ -144,17 +144,53 @@ export async function signUpUser(
 export async function signInUser(email: string, password: string) {
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim(),
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      const msg = error.message || (error as any)?.error_description || "Invalid login credentials";
+      return { data: null, error: msg };
+    }
     return { data, error: null };
   } catch (error: any) {
-    console.error("Sign In Error:", error.message);
-    return { data: null, error: error.message };
+    console.error("Sign In Error:", error);
+    const msg = error?.message || (typeof error === "string" ? error : "An unexpected error occurred during sign in.");
+    return { data: null, error: msg };
   }
 }
+
+/**
+ * Resend email verification link to user
+ */
+export async function resendVerificationEmail(email: string) {
+  try {
+    const redirectUrl = getVerifyRedirectUrl("verify");
+    const options: any = {};
+    if (typeof redirectUrl === "string" && /^https?:\/\//i.test(redirectUrl)) {
+      options.emailRedirectTo = redirectUrl;
+    }
+
+    const { data, error } = await supabase.auth.resend({
+      type: "signup",
+      email: email.trim(),
+      options,
+    });
+
+    if (error) {
+      console.error("Resend Verification Email Error:", error.message);
+      const msg = error.message || (error as any)?.error_description || "Failed to resend verification email.";
+      return { data: null, error: msg };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.error("Resend Verification Email Exception:", error);
+    const msg = error?.message || (typeof error === "string" ? error : "Failed to resend verification email.");
+    return { data: null, error: msg };
+  }
+}
+
 
 /**
  * 3. Sign Out Current User
@@ -162,11 +198,13 @@ export async function signInUser(email: string, password: string) {
 export async function signOutUser() {
   try {
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (error) {
+      return { error: error.message || "Sign out failed" };
+    }
     return { error: null };
   } catch (error: any) {
-    console.error("Sign Out Error:", error.message);
-    return { error: error.message };
+    console.error("Sign Out Error:", error);
+    return { error: error?.message || (typeof error === "string" ? error : "Sign out failed") };
   }
 }
 
@@ -179,11 +217,13 @@ export async function getCurrentUser() {
       data: { user },
       error,
     } = await supabase.auth.getUser();
-    if (error) throw error;
+    if (error) {
+      return { user: null, error: error.message || "Failed to get current user" };
+    }
     return { user, error: null };
   } catch (error: any) {
-    console.error("Get Current User Error:", error.message);
-    return { user: null, error: error.message };
+    console.error("Get Current User Error:", error);
+    return { user: null, error: error?.message || (typeof error === "string" ? error : "Failed to get current user") };
   }
 }
 
@@ -198,11 +238,13 @@ export async function getUserProfile(userId: string) {
       .eq("id", userId)
       .single();
 
-    if (error) throw error;
+    if (error) {
+      return { profile: null, error: error.message || "Failed to fetch user profile" };
+    }
     return { profile: data as UserProfile, error: null };
   } catch (error: any) {
-    console.error("Get User Profile Error:", error.message);
-    return { profile: null, error: error.message };
+    console.error("Get User Profile Error:", error);
+    return { profile: null, error: error?.message || (typeof error === "string" ? error : "Failed to fetch user profile") };
   }
 }
 
