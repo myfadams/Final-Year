@@ -1,9 +1,9 @@
+import { getCurrentUser, getUserProfile } from "@/backend/auth";
+import Colors from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
+import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
-import { getCurrentUser, getUserProfile } from "@/backend/auth";
-import { globalState } from "@/constants/globalState";
-import Colors from "@/constants/Colors";
 
 export default function Index() {
   const router = useRouter();

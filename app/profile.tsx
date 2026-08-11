@@ -1,4 +1,5 @@
-import { signOutUser } from "@/backend/auth";
+import NavHeader from "@/components/NavHeader";
+import { getCurrentUser, getUserProfile, UserProfile, signOutUser } from "@/backend/auth";
 import Colors from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
@@ -17,7 +18,7 @@ import {
   User,
   Users,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -29,13 +30,53 @@ import {
   View,
 } from "react-native";
 
+const getInitials = (name?: string | null) => {
+  if (!name || !name.trim()) return "U";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    return parts[0].substring(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
 export default function ProfileScreen() {
   const router = useRouter();
 
-  // Default profile avatar matching the mockup photo style
-  const [avatar, setAvatar] = useState<string>(
-    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80",
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(
+    globalState.userProfile
   );
+
+  const [avatar, setAvatar] = useState<string | null>(
+    globalState.userProfile?.profile_image_url || null
+  );
+
+  useEffect(() => {
+    async function loadProfile() {
+      if (globalState.userProfile) {
+        setUserProfile(globalState.userProfile);
+        if (globalState.userProfile.profile_image_url) {
+          setAvatar(globalState.userProfile.profile_image_url);
+        }
+      } else {
+        try {
+          const { user } = await getCurrentUser();
+          if (user) {
+            const { profile } = await getUserProfile(user.id);
+            if (profile) {
+              globalState.userProfile = profile;
+              setUserProfile(profile);
+              if (profile.profile_image_url) {
+                setAvatar(profile.profile_image_url);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load profile in ProfileScreen:", err);
+        }
+      }
+    }
+    loadProfile();
+  }, []);
 
   const handlePickImage = async () => {
     // Request media library permissions
@@ -95,34 +136,8 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* App Top Bar Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={handleHelpCenter}
-          style={styles.headerIconButton}
-          activeOpacity={0.7}
-        >
-          <HelpCircle size={24} color={Colors.light.accent} strokeWidth={2.2} />
-        </TouchableOpacity>
-
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>ResQ</Text>
-          <View style={styles.logoDot} />
-        </View>
-
-        <TouchableOpacity
-          onPress={() =>
-            Alert.alert(
-              "System Status",
-              "All campus security networks are active.",
-            )
-          }
-          style={styles.headerIconButton}
-          activeOpacity={0.7}
-        >
-          <Bell size={24} color={Colors.light.accent} strokeWidth={2.2} />
-        </TouchableOpacity>
-      </View>
+      {/* Navigation Header */}
+      <NavHeader title="Profile" />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -132,12 +147,20 @@ export default function ProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarShadow}>
-              <Image
-                source={{ uri: avatar }}
-                style={styles.avatarImage}
-                contentFit="cover"
-                transition={200}
-              />
+              {avatar || userProfile?.profile_image_url ? (
+                <Image
+                  source={{ uri: avatar || userProfile?.profile_image_url || "" }}
+                  style={styles.avatarImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={styles.avatarInitialsContainer}>
+                  <Text style={styles.avatarInitialsText}>
+                    {getInitials(userProfile?.name)}
+                  </Text>
+                </View>
+              )}
             </View>
             {/* Red Floating Action Button for Edit */}
             <TouchableOpacity
@@ -149,15 +172,21 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.profileName}>George</Text>
-          <Text style={styles.profilePhone}>+1 (555) 019-8472</Text>
+          <Text style={styles.profileName}>
+            {userProfile?.name || "ResQ User"}
+          </Text>
+          <Text style={styles.profilePhone}>
+            {userProfile?.phone || userProfile?.email || "No contact provided"}
+          </Text>
 
-          {/* Protected Status Badge */}
+          {/* Role Status Badge */}
           <View style={styles.protectedBadge}>
             <View style={styles.badgeCheckCircle}>
               <View style={styles.badgeCheckInner} />
             </View>
-            <Text style={styles.protectedText}>PROTECTED</Text>
+            <Text style={styles.protectedText}>
+              {(userProfile?.role || "STUDENT").toUpperCase()}
+            </Text>
           </View>
         </View>
 
@@ -186,7 +215,7 @@ export default function ProfileScreen() {
               onPress={() =>
                 Alert.alert(
                   "Personal Information",
-                  "George\nPhone: +1 (555) 019-8472\nResident ID: RES-8921\nRoom: Building C, Room 402",
+                  `Name: ${userProfile?.name || "N/A"}\nEmail: ${userProfile?.email || "N/A"}\nPhone: ${userProfile?.phone || "N/A"}\nStudent ID: ${userProfile?.student_id_number || "N/A"}\nAddress: ${userProfile?.address || "N/A"}`
                 )
               }
               activeOpacity={0.7}
@@ -367,6 +396,21 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 3,
     borderColor: "#FFFFFF",
+  },
+  avatarInitialsContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: Colors.light.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+  },
+  avatarInitialsText: {
+    color: "#FFFFFF",
+    fontSize: 34,
+    fontFamily: typography.bold,
   },
   editButton: {
     position: "absolute",
