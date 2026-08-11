@@ -1,24 +1,26 @@
+import NavHeader from "@/components/NavHeader";
 import Colors, { ResQColors } from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
+import { getCurrentUser, getUserProfile, UserProfile, signOutUser } from "@/backend/auth";
 import { useRouter } from "expo-router";
 import {
-    ChevronRight,
-    GraduationCap,
-    Heart,
-    IdCard,
-    LogOut,
-    Mail,
-    MapPin,
-    Phone,
-    ShieldCheck,
+  ChevronRight,
+  GraduationCap,
+  Heart,
+  IdCard,
+  LogOut,
+  Mail,
+  MapPin,
+  Phone
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -40,38 +42,56 @@ const ProfileItem: React.FC<ProfileItemProps> = ({ icon, label, value }) => (
 
 const settingsPage = () => {
   const router = useRouter();
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(
+    globalState.userProfile
+  );
   const [contacts, setContacts] = useState([
     { name: "Meme (Mother)", phone: "+233 24 999 8888", color: "#FF6B6B" },
     { name: "Here (Roommate)", phone: "+233 50 111 2222", color: "#3B7597" },
   ]);
 
-  const handleLogout = () => {
-    router.replace("/login");
+  useEffect(() => {
+    async function loadUserProfile() {
+      if (globalState.userProfile) {
+        setUserProfile(globalState.userProfile);
+      } else {
+        try {
+          const { user } = await getCurrentUser();
+          if (user) {
+            const { profile } = await getUserProfile(user.id);
+            if (profile) {
+              globalState.userProfile = profile;
+              setUserProfile(profile);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to load user profile in settingsPage:", err);
+        }
+      }
+    }
+    loadUserProfile();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOutUser();
+    } catch (e) {
+      console.error("Error signing out:", e);
+    }
+    globalState.userProfile = null;
+    router.replace("/(auth)/login");
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <NavHeader title="Settings" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Header Section */}
-        <View style={styles.header}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>GA</Text>
-            </View>
-            <View style={styles.badge}>
-              <ShieldCheck size={16} color="#fff" strokeWidth={2.5} />
-            </View>
-          </View>
-          <Text style={styles.userName}>George Adams</Text>
-          <View style={styles.verifiedRow}>
-            <Text style={styles.verifiedText}>Verified Resident</Text>
-          </View>
-        </View>
-
         {/* Safety Stats Section */}
         <View style={styles.statsCard}>
           <View style={styles.statBox}>
-            <Text style={styles.statNumber}>Active</Text>
+            <Text style={styles.statNumber}>
+              {userProfile?.is_verified ? "Verified" : "Active"}
+            </Text>
             <Text style={styles.statLabel}>Security Status</Text>
           </View>
           <View style={styles.statDivider} />
@@ -88,36 +108,38 @@ const settingsPage = () => {
 
         {/* Personal Information */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Student Information</Text>
+          <Text style={styles.sectionTitle}>
+            {userProfile?.name ? `${userProfile.name}'s Information` : "Student Information"}
+          </Text>
           <View style={styles.card}>
             <ProfileItem
               icon={<IdCard size={20} color={Colors.light.primary} />}
               label="Student ID"
-              value="3364622"
+              value={userProfile?.student_id_number || "Not set"}
             />
             <View style={styles.rowDivider} />
             <ProfileItem
               icon={<GraduationCap size={20} color={Colors.light.primary} />}
               label="Program of Study"
-              value="B.Sc. Computer Science"
+              value={userProfile?.program_of_study || "Not set"}
             />
             <View style={styles.rowDivider} />
             <ProfileItem
               icon={<Mail size={20} color={Colors.light.primary} />}
-              label="University Email"
-              value="george.resq@knust.edu.gh"
+              label="Email"
+              value={userProfile?.email || "Not set"}
             />
             <View style={styles.rowDivider} />
             <ProfileItem
               icon={<Phone size={20} color={Colors.light.primary} />}
               label="Phone Number"
-              value="+233 24 123 4567"
+              value={userProfile?.phone || "Not set"}
             />
             <View style={styles.rowDivider} />
             <ProfileItem
               icon={<MapPin size={20} color={Colors.light.primary} />}
-              label="Residential Address"
-              value="Paradise Regained Hostel, Room 304"
+              label={userProfile?.location_type || "Residential Address"}
+              value={userProfile?.address || "Not set"}
             />
           </View>
         </View>
@@ -242,7 +264,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#fff",
     marginHorizontal: 16,
-    marginTop: -16,
+    marginTop: 16,
     borderRadius: 16,
     paddingVertical: 16,
     borderWidth: 1,

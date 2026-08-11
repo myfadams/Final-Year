@@ -14,11 +14,11 @@ const NavHeader = ({ title }: { title: string }) => {
       >
         <ArrowLeft size={24} color={Colors.light.accent} />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>Incident Details</Text>
+      <Text style={styles.headerTitle}>{title}</Text>
       <TouchableOpacity
         onPress={() =>
           Alert.alert(
-            "Incident Settings",
+            "Notifications",
             "Options to mute updates or report false alarm.",
           )
         }
