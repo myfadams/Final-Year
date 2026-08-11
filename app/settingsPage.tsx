@@ -1,4 +1,5 @@
 import { getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import { getMedicalInfo, saveMedicalInfo, MedicalDataState } from "@/backend/medical";
 import CustomButton from "@/components/CustomButton";
 import MedicalFieldItem from "@/components/MedicalFieldItem";
 import NavHeader from "@/components/NavHeader";
@@ -22,6 +23,8 @@ import {
 import React, { useEffect, useState } from "react";
 import {
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -45,200 +48,263 @@ const ProfileItem: React.FC<ProfileItemProps> = ({ icon, label, value }) => (
   </View>
 );
 
-interface MedicalData {
-  bloodGroup: string;
-  allergies: string;
-  medications: string;
-  chronicConditions: string;
-  emergencyNotes: string;
-}
-
 const settingsPage = () => {
   const router = useRouter();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(
     globalState.userProfile
   );
-  const [isSavingMedical, setIsSavingMedical] = useState(false);
+  const [isLoadingMedical, setIsLoadingMedical] = useState<boolean>(true);
+  const [isSavingMedical, setIsSavingMedical] = useState<boolean>(false);
 
-  // Medical data stored as an object
-  const [medicalData, setMedicalData] = useState<MedicalData>({
-    bloodGroup: "O+",
-    allergies: "Penicillin, Peanuts",
-    medications: "Asthma Inhaler (Ventolin)",
-    chronicConditions: "Mild Asthma",
-    emergencyNotes: "Primary Emergency Contact: Mother (+233 24 999 8888)",
+  // Medical data initialized to empty strings
+  const [medicalData, setMedicalData] = useState<MedicalDataState>({
+    bloodGroup: "",
+    allergies: "",
+    medications: "",
+    chronicConditions: "",
+    emergencyNotes: "",
   });
 
   useEffect(() => {
-    async function loadUserProfile() {
-      if (globalState.userProfile) {
-        setUserProfile(globalState.userProfile);
-      } else {
-        try {
+    async function loadData() {
+      setIsLoadingMedical(true);
+      try {
+        let currentUserId = globalState.userProfile?.id;
+        if (!currentUserId) {
           const { user } = await getCurrentUser();
           if (user) {
+            currentUserId = user.id;
             const { profile } = await getUserProfile(user.id);
             if (profile) {
               globalState.userProfile = profile;
               setUserProfile(profile);
             }
           }
-        } catch (err) {
-          console.error("Failed to load user profile in settingsPage:", err);
+        } else {
+          setUserProfile(globalState.userProfile);
         }
+
+        if (currentUserId) {
+          const { data, error } = await getMedicalInfo(currentUserId);
+          if (error) {
+            console.warn("Could not fetch medical info:", error.message || error);
+          }
+          if (data) {
+            setMedicalData({
+              bloodGroup: data.blood_group || "",
+              allergies: data.allergies || "",
+              medications: data.medications || "",
+              chronicConditions: data.chronic_conditions || "",
+              emergencyNotes: data.emergency_notes || "",
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Failed loading profile / medical info in settingsPage:", err);
+      } finally {
+        setIsLoadingMedical(false);
       }
     }
-    loadUserProfile();
+    loadData();
   }, []);
 
-  const handleSaveMedicalInfo = () => {
+  const handleSaveMedicalInfo = async () => {
+    let userId = userProfile?.id || globalState.userProfile?.id;
+    if (!userId) {
+      const { user } = await getCurrentUser();
+      userId = user?.id;
+    }
+
+    if (!userId) {
+      Alert.alert("Error", "Unable to identify current user. Please log in again.");
+      return;
+    }
+
     setIsSavingMedical(true);
-    setTimeout(() => {
+    try {
+      const { data, error } = await saveMedicalInfo(userId, medicalData);
+      if (error) {
+        Alert.alert(
+          "Save Failed",
+          error.message || "Could not save medical info to database."
+        );
+      } else {
+        Alert.alert(
+          "Saved",
+          "Medical information has been saved successfully!"
+        );
+        if (data) {
+          setMedicalData({
+            bloodGroup: data.blood_group || "",
+            allergies: data.allergies || "",
+            medications: data.medications || "",
+            chronicConditions: data.chronic_conditions || "",
+            emergencyNotes: data.emergency_notes || "",
+          });
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Save Failed", err?.message || "An unexpected error occurred.");
+    } finally {
       setIsSavingMedical(false);
-      Alert.alert(
-        "Saved",
-        "Medical information has been saved successfully!"
-      );
-    }, 500);
+    }
   };
+
+  const isMedicalDisabled = isSavingMedical || isLoadingMedical;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <NavHeader title="Personal & Medical Information" />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Safety Stats Section */}
-        <View style={styles.statsCard}>
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>
-              {userProfile?.is_verified ? "Verified" : "Active"}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Safety Stats Section */}
+          <View style={styles.statsCard}>
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>
+                {userProfile?.is_verified ? "Verified" : "Active"}
+              </Text>
+              <Text style={styles.statLabel}>Security Status</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>2</Text>
+              <Text style={styles.statLabel}>Trusted Contacts</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statBox}>
+              <Text style={styles.statNumber}>0</Text>
+              <Text style={styles.statLabel}>Alerts Sent</Text>
+            </View>
+          </View>
+
+          {/* Personal Information Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {userProfile?.name ? `${userProfile.name}'s Personal Info` : "Personal Information"}
             </Text>
-            <Text style={styles.statLabel}>Security Status</Text>
+            <View style={styles.card}>
+              <ProfileItem
+                icon={<IdCard size={20} color={Colors.light.primary} />}
+                label="Student ID"
+                value={userProfile?.student_id_number || "Not set"}
+              />
+              <View style={styles.rowDivider} />
+              <ProfileItem
+                icon={<Hash size={20} color={Colors.light.primary} />}
+                label="Reference Number"
+                value={userProfile?.student_reference_number || "Not set"}
+              />
+              <View style={styles.rowDivider} />
+              <ProfileItem
+                icon={<GraduationCap size={20} color={Colors.light.primary} />}
+                label="Program of Study"
+                value={userProfile?.program_of_study || "Not set"}
+              />
+              <View style={styles.rowDivider} />
+              <ProfileItem
+                icon={<Mail size={20} color={Colors.light.primary} />}
+                label="Email Address"
+                value={userProfile?.email || "Not set"}
+              />
+              <View style={styles.rowDivider} />
+              <ProfileItem
+                icon={<Phone size={20} color={Colors.light.primary} />}
+                label="Phone Number"
+                value={userProfile?.phone || "Not set"}
+              />
+              <View style={styles.rowDivider} />
+              <ProfileItem
+                icon={<MapPin size={20} color={Colors.light.primary} />}
+                label={userProfile?.location_type || "Residential Address"}
+                value={userProfile?.address || "Not set"}
+              />
+            </View>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>2</Text>
-            <Text style={styles.statLabel}>Trusted Contacts</Text>
+
+          {/* Medical Information Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Medical Information</Text>
+
+            <MedicalFieldItem
+              label="Blood Group / Type"
+              value={medicalData.bloodGroup}
+              placeholder={isLoadingMedical ? "Loading..." : "e.g. O+, A-, B+"}
+              icon={<Droplet size={16} color={ResQColors.primaryRed} />}
+              disabled={isMedicalDisabled}
+              onChangeText={(text) =>
+                setMedicalData((prev) => ({ ...prev, bloodGroup: text }))
+              }
+            />
+
+            <MedicalFieldItem
+              label="Allergies"
+              value={medicalData.allergies}
+              placeholder={isLoadingMedical ? "Loading..." : "e.g. Penicillin, Peanuts, Latex"}
+              icon={<AlertCircle size={16} color={ResQColors.primaryRed} />}
+              disabled={isMedicalDisabled}
+              onChangeText={(text) =>
+                setMedicalData((prev) => ({ ...prev, allergies: text }))
+              }
+            />
+
+            <MedicalFieldItem
+              label="Current Medications"
+              value={medicalData.medications}
+              placeholder={isLoadingMedical ? "Loading..." : "e.g. Inhaler, Insulin, Antihistamines"}
+              icon={<Pill size={16} color={ResQColors.primaryRed} />}
+              disabled={isMedicalDisabled}
+              onChangeText={(text) =>
+                setMedicalData((prev) => ({ ...prev, medications: text }))
+              }
+            />
+
+            <MedicalFieldItem
+              label="Chronic Conditions & Health Notes"
+              value={medicalData.chronicConditions}
+              placeholder={isLoadingMedical ? "Loading..." : "e.g. Asthma, Diabetes, Epilepsy"}
+              icon={<Activity size={16} color={ResQColors.primaryRed} />}
+              disabled={isMedicalDisabled}
+              onChangeText={(text) =>
+                setMedicalData((prev) => ({ ...prev, chronicConditions: text }))
+              }
+              multiline={true}
+            />
+
+            <MedicalFieldItem
+              label="Emergency Notes for Responders"
+              value={medicalData.emergencyNotes}
+              placeholder={isLoadingMedical ? "Loading..." : "e.g. Special emergency medical instructions"}
+              icon={<FileText size={16} color={ResQColors.primaryRed} />}
+              disabled={isMedicalDisabled}
+              onChangeText={(text) =>
+                setMedicalData((prev) => ({ ...prev, emergencyNotes: text }))
+              }
+              multiline={true}
+            />
+
+            {/* Save Medical Info Button */}
+            <View style={{ marginTop: 14, marginBottom: 12 }}>
+              <CustomButton
+                text="Save Medical Info"
+                onPress={handleSaveMedicalInfo}
+                isLoading={isSavingMedical}
+                disabled={isMedicalDisabled}
+                color={ResQColors.primaryRed}
+                textColor="#FFFFFF"
+              />
+            </View>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statBox}>
-            <Text style={styles.statNumber}>0</Text>
-            <Text style={styles.statLabel}>Alerts Sent</Text>
-          </View>
-        </View>
 
-        {/* Personal Information Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {userProfile?.name ? `${userProfile.name}'s Personal Info` : "Personal Information"}
-          </Text>
-          <View style={styles.card}>
-            <ProfileItem
-              icon={<IdCard size={20} color={Colors.light.primary} />}
-              label="Student ID"
-              value={userProfile?.student_id_number || "Not set"}
-            />
-            <View style={styles.rowDivider} />
-            <ProfileItem
-              icon={<Hash size={20} color={Colors.light.primary} />}
-              label="Reference Number"
-              value={userProfile?.student_reference_number || "Not set"}
-            />
-            <View style={styles.rowDivider} />
-            <ProfileItem
-              icon={<GraduationCap size={20} color={Colors.light.primary} />}
-              label="Program of Study"
-              value={userProfile?.program_of_study || "Not set"}
-            />
-            <View style={styles.rowDivider} />
-            <ProfileItem
-              icon={<Mail size={20} color={Colors.light.primary} />}
-              label="Email Address"
-              value={userProfile?.email || "Not set"}
-            />
-            <View style={styles.rowDivider} />
-            <ProfileItem
-              icon={<Phone size={20} color={Colors.light.primary} />}
-              label="Phone Number"
-              value={userProfile?.phone || "Not set"}
-            />
-            <View style={styles.rowDivider} />
-            <ProfileItem
-              icon={<MapPin size={20} color={Colors.light.primary} />}
-              label={userProfile?.location_type || "Residential Address"}
-              value={userProfile?.address || "Not set"}
-            />
-          </View>
-        </View>
-
-        {/* Medical Information Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Medical Information</Text>
-
-          <MedicalFieldItem
-            label="Blood Group / Type"
-            value={medicalData.bloodGroup}
-            placeholder="e.g. O+, A-, B+"
-            icon={<Droplet size={16} color={ResQColors.primaryRed} />}
-            onChangeText={(text) =>
-              setMedicalData((prev) => ({ ...prev, bloodGroup: text }))
-            }
-          />
-
-          <MedicalFieldItem
-            label="Allergies"
-            value={medicalData.allergies}
-            placeholder="e.g. Penicillin, Peanuts, Latex"
-            icon={<AlertCircle size={16} color={ResQColors.primaryRed} />}
-            onChangeText={(text) =>
-              setMedicalData((prev) => ({ ...prev, allergies: text }))
-            }
-          />
-
-          <MedicalFieldItem
-            label="Current Medications"
-            value={medicalData.medications}
-            placeholder="e.g. Inhaler, Insulin, Antihistamines"
-            icon={<Pill size={16} color={ResQColors.primaryRed} />}
-            onChangeText={(text) =>
-              setMedicalData((prev) => ({ ...prev, medications: text }))
-            }
-          />
-
-          <MedicalFieldItem
-            label="Chronic Conditions & Health Notes"
-            value={medicalData.chronicConditions}
-            placeholder="e.g. Asthma, Diabetes, Epilepsy"
-            icon={<Activity size={16} color={ResQColors.primaryRed} />}
-            onChangeText={(text) =>
-              setMedicalData((prev) => ({ ...prev, chronicConditions: text }))
-            }
-            multiline={true}
-          />
-
-          <MedicalFieldItem
-            label="Emergency Notes for Responders"
-            value={medicalData.emergencyNotes}
-            placeholder="e.g. Special emergency medical instructions"
-            icon={<FileText size={16} color={ResQColors.primaryRed} />}
-            onChangeText={(text) =>
-              setMedicalData((prev) => ({ ...prev, emergencyNotes: text }))
-            }
-            multiline={true}
-          />
-
-          {/* Save Medical Info Button */}
-          <View style={{ marginTop: 14, marginBottom: 12 }}>
-            <CustomButton
-              text="Save Medical Info"
-              onPress={handleSaveMedicalInfo}
-              isLoading={isSavingMedical}
-              color={ResQColors.primaryRed}
-              textColor="#FFFFFF"
-            />
-          </View>
-        </View>
-
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };

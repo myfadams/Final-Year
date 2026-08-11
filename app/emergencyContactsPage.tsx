@@ -1,12 +1,19 @@
+import { getCurrentUser } from "@/backend/auth";
+import {
+  addTrustedContact,
+  deleteTrustedContact,
+  getTrustedContacts,
+} from "@/backend/contacts";
 import AddContactModal from "@/components/AddContactModal";
 import EmergencyContactCard, {
   EmergencyContact,
 } from "@/components/EmergencyContactCard";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { AlertCircle, Plus, Shield, Users } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -17,57 +24,97 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-// Initial default emergency contacts for demonstration
-const INITIAL_CONTACTS: EmergencyContact[] = [
-  {
-    id: "1",
-    name: "Eleanor Vance (Mother)",
-    phone: "+233 24 999 8888",
-    relationship: "Mother",
-    isPrimary: true,
-  },
-  {
-    id: "2",
-    name: "Marcus Vance (Father)",
-    phone: "+233 20 111 2222",
-    relationship: "Father",
-    isPrimary: false,
-  },
-  {
-    id: "3",
-    name: "Kofi Owusu",
-    phone: "+233 55 444 3333",
-    relationship: "Roommate",
-    isPrimary: false,
-  },
-];
-
 const EmergencyContactsPage = () => {
-  const [contacts, setContacts] = useState<EmergencyContact[]>(INITIAL_CONTACTS);
+  const [contacts, setContacts] = useState<EmergencyContact[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
 
-  const handleAddContact = (newContactData: {
+  const fetchContacts = async () => {
+    setIsLoading(true);
+    try {
+      const { user } = await getCurrentUser();
+      if (user) {
+        setUserId(user.id);
+        const { data, error } = await getTrustedContacts(user.id);
+        if (error) {
+          console.warn("Could not fetch trusted contacts:", error.message || error);
+        }
+        if (data) {
+          const mapped: EmergencyContact[] = data.map((rec, index) => ({
+            id: rec.id,
+            name: rec.contact_name,
+            phone: rec.contact_phone,
+            relationship: rec.relationship || "Contact",
+            isPrimary: index === 0,
+          }));
+          setContacts(mapped);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch trusted contacts:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchContacts();
+  }, []);
+
+  const handleAddContact = async (newContactData: {
     name: string;
     phone: string;
     relationship: string;
-  }) => {
-    const newContact: EmergencyContact = {
-      id: Date.now().toString(),
-      name: newContactData.name,
-      phone: newContactData.phone,
-      relationship: newContactData.relationship,
-      isPrimary: contacts.length === 0, // First contact becomes primary automatically
-    };
+  }): Promise<boolean> => {
+    let currentUserId = userId;
+    if (!currentUserId) {
+      const { user } = await getCurrentUser();
+      currentUserId = user?.id || null;
+    }
 
-    setContacts((prev) => [newContact, ...prev]);
-    Alert.alert(
-      "Contact Added",
-      `${newContact.name} has been added to your emergency contacts.`
-    );
+    if (!currentUserId) {
+      Alert.alert("Error", "User account not identified. Please try logging in again.");
+      return false;
+    }
+
+    const { data, error } = await addTrustedContact(currentUserId, newContactData);
+    if (error) {
+      Alert.alert("Add Failed", error.message || "Could not save contact to database.");
+      return false;
+    }
+
+    if (data) {
+      const newContact: EmergencyContact = {
+        id: data.id,
+        name: data.contact_name,
+        phone: data.contact_phone,
+        relationship: data.relationship || "Contact",
+        isPrimary: contacts.length === 0,
+      };
+
+      setContacts((prev) => [newContact, ...prev]);
+      Alert.alert(
+        "Contact Added",
+        `${newContact.name} has been added to your emergency contacts.`
+      );
+      return true;
+    }
+    return false;
   };
 
-  const handleRemoveContact = (id: string) => {
+  const handleRemoveContact = async (id: string) => {
+    const target = contacts.find((c) => c.id === id);
+    const { error } = await deleteTrustedContact(id);
+    if (error) {
+      Alert.alert("Delete Failed", error.message || "Failed to remove contact.");
+      return;
+    }
+
     setContacts((prev) => prev.filter((item) => item.id !== id));
+    if (target) {
+      Alert.alert("Contact Removed", `${target.name} has been removed.`);
+    }
   };
 
   return (
@@ -112,8 +159,22 @@ const EmergencyContactsPage = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Contacts List or Empty State */}
-        {contacts.length > 0 ? (
+        {/* Loading Indicator or Contacts List or Empty State */}
+        {isLoading ? (
+          <View style={{ paddingVertical: 40, alignItems: "center" }}>
+            <HeartBeatWave width={180} height={60} color={ResQColors.primaryRed} thickness={14} />
+            <Text
+              style={{
+                marginTop: 12,
+                fontSize: 14,
+                fontFamily: typography.medium,
+                color: "#64748B",
+              }}
+            >
+              Loading emergency contacts...
+            </Text>
+          </View>
+        ) : contacts.length > 0 ? (
           contacts.map((item) => (
             <EmergencyContactCard
               key={item.id}

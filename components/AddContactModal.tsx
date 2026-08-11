@@ -23,7 +23,7 @@ interface AddContactModalProps {
     name: string;
     phone: string;
     relationship: string;
-  }) => void;
+  }) => Promise<boolean | void> | boolean | void;
 }
 
 const COMMON_RELATIONS = [
@@ -47,6 +47,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [relationship, setRelationship] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<{
     name?: string;
     phone?: string;
@@ -61,6 +62,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
   };
 
   const handleClose = () => {
+    if (isSaving) return;
     handleReset();
     onClose();
   };
@@ -86,14 +88,25 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (isSaving) return;
     if (validate()) {
-      onAddContact({
-        name: name.trim(),
-        phone: phone.trim(),
-        relationship: relationship.trim(),
-      });
-      handleClose();
+      setIsSaving(true);
+      try {
+        const result = await onAddContact({
+          name: name.trim(),
+          phone: phone.trim(),
+          relationship: relationship.trim(),
+        });
+        if (result !== false) {
+          handleReset();
+          onClose();
+        }
+      } catch (err) {
+        console.error("Error adding contact in modal:", err);
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -120,8 +133,9 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.closeButton}
+                  style={[styles.closeButton, isSaving && { opacity: 0.5 }]}
                   onPress={handleClose}
+                  disabled={isSaving}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
                   <X size={20} color="#64748B" />
@@ -141,6 +155,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                     style={[
                       styles.inputWrapper,
                       errors.name ? styles.inputError : null,
+                      isSaving ? { opacity: 0.7 } : null,
                     ]}
                   >
                     <User size={18} color="#64748B" />
@@ -149,6 +164,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                       placeholder="e.g. Jane Doe"
                       placeholderTextColor="#94A3B8"
                       value={name}
+                      editable={!isSaving}
                       onChangeText={(text) => {
                         setName(text);
                         if (errors.name)
@@ -171,6 +187,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                     style={[
                       styles.inputWrapper,
                       errors.phone ? styles.inputError : null,
+                      isSaving ? { opacity: 0.7 } : null,
                     ]}
                   >
                     <Phone size={18} color="#64748B" />
@@ -179,6 +196,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                       placeholder="e.g. +233 24 123 4567"
                       placeholderTextColor="#94A3B8"
                       value={phone}
+                      editable={!isSaving}
                       onChangeText={(text) => {
                         setPhone(text);
                         if (errors.phone)
@@ -201,6 +219,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                     style={[
                       styles.inputWrapper,
                       errors.relationship ? styles.inputError : null,
+                      isSaving ? { opacity: 0.7 } : null,
                     ]}
                   >
                     <Heart size={18} color="#64748B" />
@@ -209,6 +228,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                       placeholder="e.g. Mother, Brother, Doctor"
                       placeholderTextColor="#94A3B8"
                       value={relationship}
+                      editable={!isSaving}
                       onChangeText={(text) => {
                         setRelationship(text);
                         if (errors.relationship)
@@ -232,7 +252,9 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
                         style={[
                           styles.chip,
                           relationship === rel ? styles.chipSelected : null,
+                          isSaving && { opacity: 0.5 },
                         ]}
+                        disabled={isSaving}
                         onPress={() => {
                           setRelationship(rel);
                           if (errors.relationship)
@@ -261,19 +283,23 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({
               {/* Modal Actions */}
               <View style={styles.actionsContainer}>
                 <TouchableOpacity
-                  style={styles.cancelButton}
+                  style={[styles.cancelButton, isSaving && { opacity: 0.5 }]}
                   onPress={handleClose}
+                  disabled={isSaving}
                 >
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={styles.submitButton}
-                  onPress={handleSubmit}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.submitButtonText}>Save Contact</Text>
-                </TouchableOpacity>
+                <View style={{ flex: 1.5 }}>
+                  <CustomButton
+                    text="Save Contact"
+                    onPress={handleSubmit}
+                    isLoading={isSaving}
+                    disabled={isSaving}
+                    color={ResQColors.primaryRed}
+                    textColor="#FFFFFF"
+                  />
+                </View>
               </View>
             </KeyboardAvoidingView>
           </TouchableWithoutFeedback>
@@ -394,14 +420,15 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: "row",
     gap: 12,
+    alignItems: "center",
     paddingTop: 14,
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
   },
   cancelButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 12,
+    height: 50,
+    borderRadius: 30,
     backgroundColor: "#F1F5F9",
     justifyContent: "center",
     alignItems: "center",
@@ -410,19 +437,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: typography.semibold,
     color: "#475569",
-  },
-  submitButton: {
-    flex: 1.5,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: ResQColors.primaryRed,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  submitButtonText: {
-    fontSize: 15,
-    fontFamily: typography.semibold,
-    color: "#FFFFFF",
   },
 });
 

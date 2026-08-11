@@ -1,8 +1,12 @@
 // import EmergencyActionCard from "@/components/EmergencyActionCard";
 // import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import { getCachedUserProfile, getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import { getTrustedContacts, TrustedContactRecord } from "@/backend/contacts";
+import { getMedicalInfo, MedicalRecord } from "@/backend/medical";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
+import HeartBeatWave from "@/components/HeartBeatWave";
+import MedicalInfoModal from "@/components/MedicalInfoModal";
 import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import ProfileComponent from "@/components/ProfileComponent";
 import PulsatingButton from "@/components/PulsatingButton";
@@ -13,20 +17,28 @@ import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
+  Activity,
+  AlertCircle,
   AlertTriangle,
   ArrowRight,
   BriefcaseMedical,
   Check,
   CheckCircle2,
+  Droplet,
+  FileText,
   Footprints,
+  Heart,
   HeartPulse,
   MapPin,
   Phone,
+  PhoneCall,
+  Pill,
   Plus,
   Radio,
   Search,
   ShieldAlert,
   Siren,
+  User,
   UserCheck,
   UserMinus,
   UserPlus,
@@ -35,6 +47,7 @@ import {
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Linking,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -88,6 +101,40 @@ const Home = () => {
   const [locationSharedVisible, setLocationSharedVisible] = useState(false);
   const [medicalIdVisible, setMedicalIdVisible] = useState(false);
   const [checkInVisible, setCheckInVisible] = useState(false);
+
+  // Medical ID Fetched Data States
+  const [medicalInfo, setMedicalInfo] = useState<MedicalRecord | null>(null);
+  const [medicalContacts, setMedicalContacts] = useState<TrustedContactRecord[]>([]);
+  const [isLoadingMedicalId, setIsLoadingMedicalId] = useState<boolean>(false);
+
+  const fetchMedicalIdData = async () => {
+    setIsLoadingMedicalId(true);
+    try {
+      const { user } = await getCurrentUser();
+      if (user) {
+        const [medRes, contactsRes] = await Promise.all([
+          getMedicalInfo(user.id),
+          getTrustedContacts(user.id),
+        ]);
+
+        if (medRes.data) {
+          setMedicalInfo(medRes.data);
+        } else {
+          setMedicalInfo(null);
+        }
+
+        if (contactsRes.data) {
+          setMedicalContacts(contactsRes.data);
+        } else {
+          setMedicalContacts([]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch medical ID modal data:", err);
+    } finally {
+      setIsLoadingMedicalId(false);
+    }
+  };
 
   // Trusted Network Modal States
   const [addResponderVisible, setAddResponderVisible] = useState(false);
@@ -247,7 +294,10 @@ const Home = () => {
                 <BriefcaseMedical size={22} color={ResQColors.primaryRedText} />
               }
               iconBgColor={ResQColors.primaryRedLight}
-              onPress={() => setMedicalIdVisible(true)}
+              onPress={() => {
+                setMedicalIdVisible(true);
+                fetchMedicalIdData();
+              }}
             />
             <PrimaryModuleCard
               title="I'm Ok (Check In)"
@@ -366,52 +416,16 @@ const Home = () => {
         </View>
       </Modal>
 
-      {/* MEDICAL ID MODAL */}
-      <Modal visible={medicalIdVisible} transparent={true} animationType="fade">
-        <View style={styles.overlayBg}>
-          <View style={styles.medicalIdCard}>
-            <View style={styles.modalHeaderRow}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <HeartPulse size={24} color={Colors.light.primary} />
-                <Text style={styles.modalTitleText}>Medical ID</Text>
-              </View>
-              <TouchableOpacity onPress={() => setMedicalIdVisible(false)}>
-                <X size={20} color={Colors.light.text} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.medicalDetailBox}>
-              <Text style={styles.medicalLabel}>Full Name</Text>
-              <Text style={styles.medicalVal}>George Adams</Text>
-            </View>
-            <View style={styles.medicalDetailBox}>
-              <Text style={styles.medicalLabel}>Blood Type</Text>
-              <Text style={styles.medicalVal}>O Positive (O+)</Text>
-            </View>
-            <View style={styles.medicalDetailBox}>
-              <Text style={styles.medicalLabel}>
-                Known Conditions & Allergies
-              </Text>
-              <Text style={styles.medicalVal}>Asthma, Penicillin Allergy</Text>
-            </View>
-            <View style={styles.medicalDetailBox}>
-              <Text style={styles.medicalLabel}>Emergency Contact</Text>
-              <Text style={styles.medicalVal}>
-                Karen Castillo (+44 999 888 777)
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              style={styles.modalPrimaryBtn}
-              onPress={() => setMedicalIdVisible(false)}
-            >
-              <Text style={styles.modalPrimaryBtnText}>Close Medical ID</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* MEDICAL ID MODAL COMPONENT */}
+      <MedicalInfoModal
+        visible={medicalIdVisible}
+        onClose={() => setMedicalIdVisible(false)}
+        userId={userProfile?.id}
+        userName={userProfile?.name}
+        medicalRecord={medicalInfo}
+        emergencyContacts={medicalContacts}
+        isLoading={isLoadingMedicalId}
+      />
 
       {/* CHECK-IN "I'M OKAY" SUCCESS MODAL */}
       <Modal visible={checkInVisible} transparent={true} animationType="fade">
@@ -1017,8 +1031,9 @@ const styles = StyleSheet.create({
   medicalIdCard: {
     backgroundColor: ResQColors.cardSurface,
     padding: 20,
-    borderRadius: 20,
+    borderRadius: 24,
     width: "90%",
+    maxHeight: "85%",
     elevation: 10,
     gap: 12,
   },
@@ -1033,21 +1048,123 @@ const styles = StyleSheet.create({
     fontFamily: typography.bold,
     color: Colors.light.text,
   },
+  medicalIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: ResQColors.primaryRedLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  detailBoxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+  },
   medicalDetailBox: {
     backgroundColor: ResQColors.cardSurfaceSoft,
     padding: 12,
-    borderRadius: 12,
-    gap: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    gap: 2,
   },
   medicalLabel: {
     fontSize: 12,
-    fontFamily: typography.medium,
-    color: Colors.light.textMuted,
+    fontFamily: typography.semibold,
+    color: "#64748B",
   },
   medicalVal: {
     fontSize: 14,
     fontFamily: typography.bold,
-    color: Colors.light.text,
+    color: "#0F172A",
+    marginTop: 2,
+  },
+  emergencyContactsSection: {
+    backgroundColor: "#F8FAFC",
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 10,
+    marginTop: 4,
+  },
+  contactsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  contactsSectionTitle: {
+    fontSize: 13,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+  },
+  contactItemCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#FFFFFF",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  contactItemLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flex: 1,
+  },
+  contactInitialsCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  contactInitialsText: {
+    fontSize: 12,
+    fontFamily: typography.bold,
+    color: ResQColors.primaryRed,
+  },
+  contactCardName: {
+    fontSize: 13.5,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+  },
+  relationBadge: {
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  relationBadgeText: {
+    fontSize: 10,
+    fontFamily: typography.medium,
+    color: "#475569",
+  },
+  contactCardPhone: {
+    fontSize: 12,
+    fontFamily: typography.regular,
+    color: "#64748B",
+  },
+  contactCallBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#16A34A",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyContactsText: {
+    fontSize: 12.5,
+    fontFamily: typography.regular,
+    color: "#94A3B8",
+    fontStyle: "italic",
   },
   modalPrimaryBtn: {
     backgroundColor: Colors.light.primary,

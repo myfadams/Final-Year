@@ -17,6 +17,7 @@ interface MedicalFieldItemProps {
   onChangeText: (text: string) => void;
   icon?: React.ReactNode;
   multiline?: boolean;
+  disabled?: boolean;
 }
 
 export const MedicalFieldItem: React.FC<MedicalFieldItemProps> = ({
@@ -26,10 +27,12 @@ export const MedicalFieldItem: React.FC<MedicalFieldItemProps> = ({
   onChangeText,
   icon,
   multiline = false,
+  disabled = false,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
 
   const handleToggleEdit = () => {
+    if (disabled) return;
     setIsEditing((prev) => !prev);
   };
 
@@ -43,7 +46,8 @@ export const MedicalFieldItem: React.FC<MedicalFieldItemProps> = ({
         </View>
         <TouchableOpacity
           onPress={handleToggleEdit}
-          style={styles.editButton}
+          disabled={disabled}
+          style={[styles.editButton, disabled && { opacity: 0.5 }]}
           activeOpacity={0.7}
           accessibilityLabel={`Edit ${label}`}
         >
@@ -71,15 +75,19 @@ export const MedicalFieldItem: React.FC<MedicalFieldItemProps> = ({
             placeholderTextColor={ResQColors.textFaint}
             multiline={multiline}
             autoFocus={true}
+            editable={!disabled}
             onBlur={() => setIsEditing(false)}
             style={[styles.input, multiline && styles.multilineInput]}
           />
         </View>
       ) : (
         <TouchableOpacity
-          onPress={() => setIsEditing(true)}
-          style={styles.displayWrapper}
-          activeOpacity={0.85}
+          onPress={() => {
+            if (!disabled) setIsEditing(true);
+          }}
+          disabled={disabled}
+          style={[styles.displayWrapper, disabled && { opacity: 0.7 }]}
+          activeOpacity={disabled ? 1 : 0.85}
         >
           <Text
             style={[

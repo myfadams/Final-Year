@@ -1,473 +1,416 @@
-import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
+import { getTrustedContacts, TrustedContactRecord } from "@/backend/contacts";
+import { getMedicalInfo, MedicalRecord } from "@/backend/medical";
+import HeartBeatWave from "@/components/HeartBeatWave";
+import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import {
-    Activity,
-    AlertCircle,
-    FileText,
-    Heart,
-    Phone,
-    Pill,
-    ShieldAlert,
-    X
+  Activity,
+  AlertCircle,
+  Droplet,
+  FileText,
+  HeartPulse,
+  Phone,
+  PhoneCall,
+  Pill,
+  User,
+  X,
 } from "lucide-react-native";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
-    Image,
-    Modal,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Linking,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-export interface PatientMedicalProfile {
-  name: string;
-  age: number;
-  gender: string;
-  bloodType: string;
-  conditions: string[];
-  allergies: string[];
-  medications: string[];
-  emergencyContact: {
-    name: string;
-    relationship: string;
-    phone: string;
-  };
-  notes: string;
-  avatarUrl?: string;
-}
-
-interface MedicalInfoModalProps {
+export interface MedicalInfoModalProps {
   visible: boolean;
   onClose: () => void;
-  patientProfile?: PatientMedicalProfile;
+  userId?: string | null;
+  userName?: string | null;
+  medicalRecord?: MedicalRecord | null;
+  emergencyContacts?: TrustedContactRecord[];
+  isLoading?: boolean;
 }
-
-const DEFAULT_PATIENT: PatientMedicalProfile = {
-  name: "Jane Smith",
-  age: 28,
-  gender: "Female",
-  bloodType: "O+",
-  conditions: ["Severe Asthma", "Mild Anaphylaxis Risk"],
-  allergies: ["Penicillin", "Latex", "Peanuts"],
-  medications: ["Albuterol Inhaler (PRN)", "Montelukast 10mg"],
-  emergencyContact: {
-    name: "Dr. Mark Smith",
-    relationship: "Father / Physician",
-    phone: "+44 7911 123456",
-  },
-  notes:
-    "Patient carries emergency Epipen in right jacket pocket. History of sudden severe bronchospasm requiring nebulizer treatment.",
-  avatarUrl:
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80",
-};
 
 export default function MedicalInfoModal({
   visible,
   onClose,
-  patientProfile = DEFAULT_PATIENT,
+  userId,
+  userName,
+  medicalRecord: propMedicalRecord,
+  emergencyContacts: propEmergencyContacts,
+  isLoading: propIsLoading,
 }: MedicalInfoModalProps) {
-  const patient = patientProfile;
+  const [internalMedical, setInternalMedical] = useState<MedicalRecord | null>(null);
+  const [internalContacts, setInternalContacts] = useState<TrustedContactRecord[]>([]);
+  const [internalLoading, setInternalLoading] = useState<boolean>(false);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!visible || !userId) return;
+      if (propMedicalRecord !== undefined || propEmergencyContacts !== undefined) {
+        return;
+      }
+
+      setInternalLoading(true);
+      try {
+        const [medRes, contactsRes] = await Promise.all([
+          getMedicalInfo(userId),
+          getTrustedContacts(userId),
+        ]);
+        setInternalMedical(medRes.data || null);
+        setInternalContacts(contactsRes.data || []);
+      } catch (err) {
+        console.error("Error loading data in MedicalInfoModal:", err);
+      } finally {
+        setInternalLoading(false);
+      }
+    }
+
+    loadData();
+  }, [visible, userId, propMedicalRecord, propEmergencyContacts]);
+
+  const medicalData = propMedicalRecord !== undefined ? propMedicalRecord : internalMedical;
+  const contactsList = propEmergencyContacts !== undefined ? propEmergencyContacts : internalContacts;
+  const isLoading = propIsLoading !== undefined ? propIsLoading : internalLoading;
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <View style={styles.backdrop}>
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.modalCard}>
-            {/* Header */}
-            <View style={styles.headerRow}>
-              <View style={styles.headerBadgeRow}>
-                <ShieldAlert size={20} color={ResQColors.primaryRedText} />
-                <Text style={styles.headerTitle}>
-                  Emergency Medical Profile
-                </Text>
+    <Modal visible={visible} transparent={true} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.overlayBg}>
+        <View style={styles.medicalIdCard}>
+          {/* Header */}
+          <View style={styles.modalHeaderRow}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <View style={styles.medicalIconBadge}>
+                <HeartPulse size={22} color={ResQColors.primaryRedText} />
               </View>
-              <TouchableOpacity
-                onPress={onClose}
-                style={styles.closeBtn}
-                activeOpacity={0.7}
-              >
-                <X size={20} color={ResQColors.textMuted} />
-              </TouchableOpacity>
+              <View>
+                <Text style={styles.modalTitleText}>Emergency Medical ID</Text>
+                <Text style={styles.modalSubText}>Critical Health & Emergency Info</Text>
+              </View>
             </View>
+            <TouchableOpacity onPress={onClose} style={styles.closeBtn} activeOpacity={0.7}>
+              <X size={20} color={Colors.light.textMuted} />
+            </TouchableOpacity>
+          </View>
 
+          {isLoading ? (
+            <View style={{ paddingVertical: 40, alignItems: "center" }}>
+              <HeartBeatWave width={180} height={60} color={ResQColors.primaryRed} thickness={14} />
+              <Text style={{ marginTop: 12, fontSize: 13, fontFamily: typography.medium, color: "#64748B" }}>
+                Loading Medical Record...
+              </Text>
+            </View>
+          ) : (
             <ScrollView
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContent}
+              style={{ maxHeight: 420 }}
+              contentContainerStyle={{ gap: 10, paddingVertical: 6 }}
             >
-              {/* Patient Basic Card */}
-              <View style={styles.patientProfileCard}>
-                <Image
-                  source={{ uri: patient.avatarUrl }}
-                  style={styles.avatar}
-                />
-                <View style={styles.patientInfo}>
-                  <Text style={styles.patientName}>{patient.name}</Text>
-                  <Text style={styles.patientMeta}>
-                    {patient.age} yrs • {patient.gender}
-                  </Text>
-                  <View style={styles.bloodBadge}>
-                    <Heart
-                      size={12}
-                      color={ResQColors.primaryRedText}
-                      fill={ResQColors.primaryRedText}
-                    />
-                    <Text style={styles.bloodBadgeText}>
-                      Blood Type: {patient.bloodType}
-                    </Text>
-                  </View>
+              {/* Full Name */}
+              <View style={styles.medicalDetailBox}>
+                <View style={styles.detailBoxHeader}>
+                  <User size={14} color={Colors.light.primary} />
+                  <Text style={styles.medicalLabel}>Full Name</Text>
                 </View>
+                <Text style={styles.medicalVal}>{userName || "Not set"}</Text>
               </View>
 
-              {/* Critical Alert Warning Box */}
-              <View style={styles.alertBox}>
-                <AlertCircle
-                  size={18}
-                  color={ResQColors.primaryRedText}
-                  style={{ marginRight: 8, marginTop: 1 }}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.alertBoxTitle}>
-                    CRITICAL MEDICAL WARNING
-                  </Text>
-                  <Text style={styles.alertBoxText}>
-                    History of {patient.conditions.join(" & ")}. Ensure airway
-                    is clear.
-                  </Text>
+              {/* Blood Group / Type */}
+              <View style={styles.medicalDetailBox}>
+                <View style={styles.detailBoxHeader}>
+                  <Droplet size={14} color={ResQColors.primaryRed} />
+                  <Text style={styles.medicalLabel}>Blood Group / Type</Text>
                 </View>
+                <Text style={styles.medicalVal}>
+                  {medicalData?.blood_group || "Not specified"}
+                </Text>
               </View>
 
-              {/* Pre-Existing Conditions */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Activity
-                    size={16}
-                    color={ResQColors.primaryRedText}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.sectionTitle}>
-                    Pre-Existing Conditions
-                  </Text>
+              {/* Allergies */}
+              <View style={styles.medicalDetailBox}>
+                <View style={styles.detailBoxHeader}>
+                  <AlertCircle size={14} color={ResQColors.primaryRed} />
+                  <Text style={styles.medicalLabel}>Allergies</Text>
                 </View>
-                <View style={styles.chipRow}>
-                  {patient.conditions.map((cond, idx) => (
-                    <View key={idx} style={styles.conditionChip}>
-                      <Text style={styles.conditionChipText}>{cond}</Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-
-              {/* Known Allergies */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <AlertCircle
-                    size={16}
-                    color={ResQColors.orangeText}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.sectionTitle}>Allergies</Text>
-                </View>
-                <View style={styles.chipRow}>
-                  {patient.allergies.map((allergy, idx) => (
-                    <View key={idx} style={styles.allergyChip}>
-                      <Text style={styles.allergyChipText}>{allergy}</Text>
-                    </View>
-                  ))}
-                </View>
+                <Text style={styles.medicalVal}>
+                  {medicalData?.allergies || "None reported"}
+                </Text>
               </View>
 
               {/* Current Medications */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Pill
-                    size={16}
-                    color={DESIGN_COLORS.tertiary}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.sectionTitle}>Current Medications</Text>
+              <View style={styles.medicalDetailBox}>
+                <View style={styles.detailBoxHeader}>
+                  <Pill size={14} color={ResQColors.primaryRed} />
+                  <Text style={styles.medicalLabel}>Current Medications</Text>
                 </View>
-                {patient.medications.map((med, idx) => (
-                  <View key={idx} style={styles.medicationRow}>
-                    <Text style={styles.medicationBullet}>•</Text>
-                    <Text style={styles.medicationText}>{med}</Text>
-                  </View>
-                ))}
+                <Text style={styles.medicalVal}>
+                  {medicalData?.medications || "None reported"}
+                </Text>
               </View>
 
-              {/* Medical Notes */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <FileText
-                    size={16}
-                    color={ResQColors.textSecondary}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.sectionTitle}>
-                    Responders Field Notes
+              {/* Chronic Conditions & Health Notes */}
+              <View style={styles.medicalDetailBox}>
+                <View style={styles.detailBoxHeader}>
+                  <Activity size={14} color={ResQColors.primaryRed} />
+                  <Text style={styles.medicalLabel}>Chronic Conditions & Health Notes</Text>
+                </View>
+                <Text style={styles.medicalVal}>
+                  {medicalData?.chronic_conditions || "None reported"}
+                </Text>
+              </View>
+
+              {/* Emergency Notes for Responders */}
+              <View style={styles.medicalDetailBox}>
+                <View style={styles.detailBoxHeader}>
+                  <FileText size={14} color={ResQColors.primaryRed} />
+                  <Text style={styles.medicalLabel}>Emergency Notes for Responders</Text>
+                </View>
+                <Text style={styles.medicalVal}>
+                  {medicalData?.emergency_notes || "None reported"}
+                </Text>
+              </View>
+
+              {/* Emergency Contacts Section */}
+              <View style={styles.emergencyContactsSection}>
+                <View style={styles.contactsHeaderRow}>
+                  <Phone size={14} color={Colors.light.primary} />
+                  <Text style={styles.contactsSectionTitle}>
+                    Trusted Emergency Contacts ({contactsList.length})
                   </Text>
                 </View>
-                <View style={styles.notesBox}>
-                  <Text style={styles.notesText}>{patient.notes}</Text>
-                </View>
-              </View>
 
-              {/* Emergency Contact */}
-              <View style={styles.section}>
-                <View style={styles.sectionHeaderRow}>
-                  <Phone
-                    size={16}
-                    color={ResQColors.statusGreen}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={styles.sectionTitle}>Emergency Contact</Text>
-                </View>
-                <View style={styles.contactCard}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contactName}>
-                      {patient.emergencyContact.name}
-                    </Text>
-                    <Text style={styles.contactRelation}>
-                      {patient.emergencyContact.relationship}
-                    </Text>
-                  </View>
-                  <View style={styles.phoneChip}>
-                    <Text style={styles.phoneChipText}>
-                      {patient.emergencyContact.phone}
-                    </Text>
-                  </View>
-                </View>
+                {contactsList.length > 0 ? (
+                  contactsList.map((contact) => {
+                    const initials = contact.contact_name
+                      .trim()
+                      .split(" ")
+                      .filter(Boolean)
+                      .map((n) => n[0])
+                      .join("")
+                      .substring(0, 2)
+                      .toUpperCase();
+
+                    return (
+                      <View key={contact.id} style={styles.contactItemCard}>
+                        <View style={styles.contactItemLeft}>
+                          <View style={styles.contactInitialsCircle}>
+                            <Text style={styles.contactInitialsText}>{initials || "EC"}</Text>
+                          </View>
+                          <View style={{ gap: 2, flex: 1 }}>
+                            <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              <Text style={styles.contactCardName}>{contact.contact_name}</Text>
+                              {contact.relationship ? (
+                                <View style={styles.relationBadge}>
+                                  <Text style={styles.relationBadgeText}>{contact.relationship}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <Text style={styles.contactCardPhone}>{contact.contact_phone}</Text>
+                          </View>
+                        </View>
+                        <TouchableOpacity
+                          style={styles.contactCallBtn}
+                          onPress={() => {
+                            const phoneUrl = `tel:${contact.contact_phone.replace(/\s+/g, "")}`;
+                            Linking.openURL(phoneUrl).catch(() => {});
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <PhoneCall size={14} color="#FFFFFF" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.emptyContactsText}>No emergency contacts listed</Text>
+                )}
               </View>
             </ScrollView>
-          </View>
-        </SafeAreaView>
+          )}
+
+          <TouchableOpacity style={styles.modalPrimaryBtn} onPress={onClose} activeOpacity={0.85}>
+            <Text style={styles.modalPrimaryBtnText}>Close Medical ID</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
+  overlayBg: {
     flex: 1,
-    backgroundColor: "rgba(17, 24, 39, 0.65)",
-    justifyContent: "flex-end",
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  safeArea: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  modalCard: {
+  medicalIdCard: {
     backgroundColor: ResQColors.cardSurface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    maxHeight: "88%",
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 24,
+    padding: 20,
+    borderRadius: 24,
+    width: "90%",
+    maxHeight: "85%",
+    elevation: 10,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowRadius: 10,
+    gap: 12,
   },
-  headerRow: {
+  modalHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 6,
+  },
+  modalTitleText: {
+    fontSize: 18,
+    fontFamily: typography.bold,
+    color: Colors.light.text,
+  },
+  modalSubText: {
+    fontSize: 12,
+    fontFamily: typography.medium,
+    color: Colors.light.textMuted,
+    marginTop: 1,
+  },
+  medicalIconBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: ResQColors.primaryRedLight,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  closeBtn: {
+    padding: 4,
+  },
+  detailBoxHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 2,
+  },
+  medicalDetailBox: {
+    backgroundColor: ResQColors.cardSurfaceSoft,
+    padding: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+    gap: 2,
+  },
+  medicalLabel: {
+    fontSize: 12,
+    fontFamily: typography.semibold,
+    color: "#64748B",
+  },
+  medicalVal: {
+    fontSize: 14,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+    marginTop: 2,
+  },
+  emergencyContactsSection: {
+    backgroundColor: "#F8FAFC",
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 10,
+    marginTop: 4,
+  },
+  contactsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  contactsSectionTitle: {
+    fontSize: 13,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+  },
+  contactItemCard: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: ResQColors.borderSubtle,
+    backgroundColor: "#FFFFFF",
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
   },
-  headerBadgeRow: {
+  contactItemLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
+    flex: 1,
   },
-  headerTitle: {
-    fontSize: 17.5,
-    fontFamily: typography.bold,
-    color: ResQColors.textPrimary,
-  },
-  closeBtn: {
+  contactInitialsCircle: {
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: ResQColors.cardSurfaceSoft,
-    alignItems: "center",
+    backgroundColor: "#FEE2E2",
     justifyContent: "center",
-  },
-  scrollContent: {
-    paddingVertical: 16,
-  },
-  patientProfileCard: {
-    flexDirection: "row",
     alignItems: "center",
-    backgroundColor: ResQColors.cardSurfaceSoft,
-    borderRadius: 20,
-    padding: 14,
-    marginBottom: 14,
   },
-  avatar: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    marginRight: 14,
-  },
-  patientInfo: {
-    flex: 1,
-  },
-  patientName: {
-    fontSize: 18,
-    fontFamily: typography.bold,
-    color: ResQColors.textPrimary,
-  },
-  patientMeta: {
-    fontSize: 13,
-    fontFamily: typography.medium,
-    color: ResQColors.textMuted,
-    marginTop: 2,
-  },
-  bloodBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    marginTop: 6,
-    backgroundColor: ResQColors.primaryRedLight,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    alignSelf: "flex-start",
-  },
-  bloodBadgeText: {
+  contactInitialsText: {
     fontSize: 12,
     fontFamily: typography.bold,
-    color: ResQColors.primaryRedText,
-  },
-  alertBox: {
-    flexDirection: "row",
-    backgroundColor: ResQColors.primaryRedLight,
-    borderWidth: 1,
-    borderColor: ResQColors.primaryRedBorder,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 16,
-  },
-  alertBoxTitle: {
-    fontSize: 11.5,
-    fontFamily: typography.bold,
-    color: ResQColors.primaryRedText,
-    letterSpacing: 0.5,
-  },
-  alertBoxText: {
-    fontSize: 13,
-    fontFamily: typography.semibold,
     color: ResQColors.primaryRed,
-    marginTop: 2,
   },
-  section: {
-    marginBottom: 16,
-  },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    fontSize: 14.5,
-    fontFamily: typography.bold,
-    color: ResQColors.textPrimary,
-  },
-  chipRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  conditionChip: {
-    backgroundColor: ResQColors.primaryRedLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: ResQColors.primaryRedBorder,
-  },
-  conditionChipText: {
-    fontSize: 12.5,
-    fontFamily: typography.semibold,
-    color: ResQColors.primaryRedText,
-  },
-  allergyChip: {
-    backgroundColor: ResQColors.orangeBg,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  allergyChipText: {
-    fontSize: 12.5,
-    fontFamily: typography.semibold,
-    color: ResQColors.orangeText,
-  },
-  medicationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 4,
-  },
-  medicationBullet: {
-    fontSize: 16,
-    color: DESIGN_COLORS.tertiary,
-    marginRight: 8,
-  },
-  medicationText: {
+  contactCardName: {
     fontSize: 13.5,
-    fontFamily: typography.medium,
-    color: ResQColors.textSecondary,
+    fontFamily: typography.bold,
+    color: "#0F172A",
   },
-  notesBox: {
-    backgroundColor: ResQColors.inputSurface,
-    borderRadius: 14,
-    padding: 12,
+  relationBadge: {
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: ResQColors.borderSubtle,
+    borderColor: "#E2E8F0",
   },
-  notesText: {
-    fontSize: 13,
-    fontFamily: typography.regular,
-    color: ResQColors.textSecondary,
-    lineHeight: 19,
-  },
-  contactCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: ResQColors.cardSurfaceSoft,
-    borderRadius: 16,
-    padding: 12,
-  },
-  contactName: {
-    fontSize: 14,
-    fontFamily: typography.bold,
-    color: ResQColors.textPrimary,
-  },
-  contactRelation: {
-    fontSize: 12,
+  relationBadgeText: {
+    fontSize: 10,
     fontFamily: typography.medium,
-    color: ResQColors.textMuted,
-    marginTop: 2,
+    color: "#475569",
   },
-  phoneChip: {
-    backgroundColor: ResQColors.greenBg,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  phoneChipText: {
+  contactCardPhone: {
     fontSize: 12,
-    fontFamily: typography.bold,
-    color: ResQColors.greenText,
+    fontFamily: typography.regular,
+    color: "#64748B",
+  },
+  contactCallBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#16A34A",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyContactsText: {
+    fontSize: 12.5,
+    fontFamily: typography.regular,
+    color: "#94A3B8",
+    fontStyle: "italic",
+  },
+  modalPrimaryBtn: {
+    backgroundColor: Colors.light.primary,
+    borderRadius: 12,
+    width: "100%",
+    paddingVertical: 14,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  modalPrimaryBtnText: {
+    color: Colors.light.textInverse,
+    fontFamily: typography.semibold,
+    fontSize: 15,
   },
 });
