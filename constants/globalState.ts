@@ -1,3 +1,5 @@
+import { UserProfile } from "@/backend/auth";
+
 export interface SharedLocationPin {
   id: string;
   senderName: string;
@@ -20,4 +22,6 @@ export const globalState = {
   activeEmergencyId: null as string | null,
   activeSharedLocation: null as SharedLocationPin | null,
   isWalkSafeRoutingActive: false as boolean,
+  userProfile: null as UserProfile | null,
 };
+

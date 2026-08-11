@@ -30,7 +30,9 @@ import {
   UserPlus,
   X,
 } from "lucide-react-native";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import { globalState } from "@/constants/globalState";
 import {
   Animated,
   Modal,
@@ -47,6 +49,28 @@ const Home = () => {
   const router = useRouter();
   const [appContacts, setAppContacts] =
     useState<ContactsProp[]>(DEFAULT_CONTACTS);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(
+    globalState.userProfile
+  );
+
+  useEffect(() => {
+    async function fetchUserProfileOnHome() {
+      try {
+        const { user } = await getCurrentUser();
+        if (user) {
+          const { profile } = await getUserProfile(user.id);
+          if (profile) {
+            globalState.userProfile = profile;
+            setUserProfile(profile);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch user profile in Home:", err);
+      }
+    }
+    fetchUserProfileOnHome();
+  }, []);
+
 
   // SOS Countdown States
   const [isCountingDown, setIsCountingDown] = useState(false);
@@ -143,7 +167,13 @@ const Home = () => {
       >
         {/*  Greeting Header */}
         <View style={styles.greetingContainer}>
-          <Text style={styles.greetingTitle}>Hi George!</Text>
+          <Text style={styles.greetingTitle}>
+            Hi{" "}
+            {userProfile?.name?.split(" ")[0] ||
+              globalState.userProfile?.name?.split(" ")[0] ||
+              "Resident"}
+            !
+          </Text>
           <Text style={styles.greetingSubtitle}>
             You are protected. Your campus circle is active.
           </Text>

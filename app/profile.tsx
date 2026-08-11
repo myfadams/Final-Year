@@ -1,4 +1,6 @@
+import { signOutUser } from "@/backend/auth";
 import Colors from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
@@ -68,9 +70,10 @@ export default function ProfileScreen() {
       {
         text: "Sign Out",
         style: "destructive",
-        onPress: () => {
-          // Navigate back to login flow
-          router.replace("/login");
+        onPress: async () => {
+          await signOutUser();
+          globalState.userProfile = null;
+          router.replace("/(auth)/login");
         },
       },
     ]);

@@ -1,4 +1,3 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   getUserProfile,
   resendVerificationEmail,
@@ -9,20 +8,21 @@ import AlternativeLogin from "@/components/AlternativeLogin";
 import CustomButton from "@/components/CustomButton";
 import CustomInput from "@/components/CustomInput";
 import Colors from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { AlertCircle, KeyRound, Mail } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import SignUp from "./register";
@@ -186,6 +186,9 @@ export default function login() {
 
         // User email is verified: check student ID profile verification
         const { profile } = await getUserProfile(data.user.id);
+        if (profile) {
+          globalState.userProfile = profile;
+        }
         setIsLoading(false);
 
         if (profile && profile.is_verified) {
