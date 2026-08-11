@@ -1,4 +1,4 @@
-import { getCurrentUser, getUserProfile } from "@/backend/auth";
+import { getCachedUserProfile, getCurrentUser, getUserProfile } from "@/backend/auth";
 import AnimatedEmergencyLogo from "@/components/AnimatedEmergencyLogo";
 import { globalState } from "@/constants/globalState";
 import { useRouter } from "expo-router";
@@ -11,10 +11,13 @@ export default function Index() {
   useEffect(() => {
     async function checkAuthAndNavigate() {
       try {
+        // Pre-warm cache
+        const cachedProfile = await getCachedUserProfile();
+
         const { user } = await getCurrentUser();
 
         // Check if user is logged in and email is verified
-        if (user && user.email_confirmed_at) {
+        if (user && (user.email_confirmed_at || cachedProfile?.is_verified)) {
           const { profile } = await getUserProfile(user.id);
           if (profile) {
             globalState.userProfile = profile;

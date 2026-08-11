@@ -192,17 +192,114 @@ export async function resendVerificationEmail(email: string) {
 }
 
 
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { globalState } from "@/constants/globalState";
+
+const CACHE_KEY_USER_PROFILE = "@resq_cached_user_profile";
+
+/**
+ * Loads the user profile from AsyncStorage into memory (globalState) and returns it.
+ */
+export async function getCachedUserProfile(): Promise<UserProfile | null> {
+  try {
+    if (globalState.userProfile) {
+      return globalState.userProfile;
+    }
+    const jsonValue = await AsyncStorage.getItem(CACHE_KEY_USER_PROFILE);
+    if (jsonValue != null) {
+      const profile = JSON.parse(jsonValue) as UserProfile;
+      globalState.userProfile = profile;
+      return profile;
+    }
+  } catch (e) {
+    console.error("Failed to load cached user profile:", e);
+  }
+  return null;
+}
+
+/**
+ * Saves a user profile to memory (globalState) and AsyncStorage cache.
+ */
+export async function setCachedUserProfile(profile: UserProfile | null): Promise<void> {
+  try {
+    globalState.userProfile = profile;
+    if (profile) {
+      await AsyncStorage.setItem(CACHE_KEY_USER_PROFILE, JSON.stringify(profile));
+    } else {
+      await AsyncStorage.removeItem(CACHE_KEY_USER_PROFILE);
+    }
+  } catch (e) {
+    console.error("Failed to save cached user profile:", e);
+  }
+}
+
+/**
+ * Clears the cached user profile from memory and AsyncStorage.
+ */
+export async function clearCachedUserProfile(): Promise<void> {
+  try {
+    globalState.userProfile = null;
+    await AsyncStorage.removeItem(CACHE_KEY_USER_PROFILE);
+  } catch (e) {
+    console.error("Failed to clear cached user profile:", e);
+  }
+}
+
+/**
+ * Realtime subscription channel reference
+ */
+let realtimeProfileChannel: any = null;
+
+/**
+ * Subscribes to Supabase Realtime changes for the user's row in public.users table.
+ * Automatically updates globalState and AsyncStorage cache whenever user data changes.
+ */
+export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profile: UserProfile) => void) {
+  if (realtimeProfileChannel) {
+    try {
+      supabase.removeChannel(realtimeProfileChannel);
+    } catch (e) {}
+  }
+
+  realtimeProfileChannel = supabase
+    .channel(`public:users:id=${userId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "users",
+        filter: `id=eq.${userId}`,
+      },
+      (payload) => {
+        if (payload.new) {
+          console.log("⚡ Realtime user profile update received from DB:", payload.new);
+          const updatedProfile = payload.new as UserProfile;
+          setCachedUserProfile(updatedProfile);
+          if (onUpdate) {
+            onUpdate(updatedProfile);
+          }
+        }
+      }
+    )
+    .subscribe();
+
+  return realtimeProfileChannel;
+}
+
 /**
  * 3. Sign Out Current User
  */
 export async function signOutUser() {
   try {
     const { error } = await supabase.auth.signOut();
+    await clearCachedUserProfile();
     if (error) {
       return { error: error.message || "Sign out failed" };
     }
     return { error: null };
   } catch (error: any) {
+    await clearCachedUserProfile();
     console.error("Sign Out Error:", error);
     return { error: error?.message || (typeof error === "string" ? error : "Sign out failed") };
   }
@@ -228,10 +325,51 @@ export async function getCurrentUser() {
 }
 
 /**
- * 5. Fetch User Profile Details from public.users
+ * 5. Fetch User Profile Details with Cache Strategy:
+ * - Checks cache (AsyncStorage / globalState) first.
+ * - If cached data exists and matches userId, returns it immediately.
+ * - Checks database for updates in background or directly if no cache exists.
+ * - Refetches and updates cache if user data changed.
  */
-export async function getUserProfile(userId: string) {
+export async function getUserProfile(userId: string, forceRefetch = false) {
   try {
+    // 1. Check in-memory and AsyncStorage cache first
+    const cached = await getCachedUserProfile();
+    let cachedResult: UserProfile | null = null;
+    if (cached && cached.id === userId) {
+      cachedResult = cached;
+    }
+
+    // Subscribe to realtime database updates for this user
+    subscribeToUserProfileChanges(userId);
+
+    // If cache hit and not force refetching, return cached result immediately while checking in background
+    if (cachedResult && !forceRefetch) {
+      // Background verification: check if DB data has changed
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", userId)
+            .single();
+
+          if (!error && data) {
+            const fresh = data as UserProfile;
+            if (JSON.stringify(fresh) !== JSON.stringify(cachedResult)) {
+              console.log("🔄 Background user profile update detected, updating cache.");
+              setCachedUserProfile(fresh);
+            }
+          }
+        } catch (err) {
+          console.warn("Background profile check error:", err);
+        }
+      })();
+
+      return { profile: cachedResult, fromCache: true, error: null };
+    }
+
+    // 2. Fetch fresh data from Supabase
     const { data, error } = await supabase
       .from("users")
       .select("*")
@@ -239,12 +377,26 @@ export async function getUserProfile(userId: string) {
       .single();
 
     if (error) {
-      return { profile: null, error: error.message || "Failed to fetch user profile" };
+      if (cachedResult) {
+        return { profile: cachedResult, fromCache: true, error: null };
+      }
+      return { profile: null, fromCache: false, error: error.message || "Failed to fetch user profile" };
     }
-    return { profile: data as UserProfile, error: null };
+
+    const freshProfile = data as UserProfile;
+    await setCachedUserProfile(freshProfile);
+    return { profile: freshProfile, fromCache: false, error: null };
   } catch (error: any) {
     console.error("Get User Profile Error:", error);
-    return { profile: null, error: error?.message || (typeof error === "string" ? error : "Failed to fetch user profile") };
+    const cached = await getCachedUserProfile();
+    if (cached && cached.id === userId) {
+      return { profile: cached, fromCache: true, error: null };
+    }
+    return {
+      profile: null,
+      fromCache: false,
+      error: error?.message || (typeof error === "string" ? error : "Failed to fetch user profile"),
+    };
   }
 }
 
@@ -326,6 +478,7 @@ export async function updateUserVerification(
     }
 
     console.log("✅ Successfully saved user verification to Supabase users table:", data[0]);
+    await setCachedUserProfile(data[0] as UserProfile);
     return { data, error: null };
   } catch (error: any) {
     console.error("❌ Profile Verification Update Error:", error.message || error);

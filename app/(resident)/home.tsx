@@ -1,7 +1,7 @@
 // import EmergencyActionCard from "@/components/EmergencyActionCard";
 import HomeTabBar from "@/components/HomeTabBar";
 // import PrimaryModuleCard from "@/components/PrimaryModuleCard";
-import { getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import { getCachedUserProfile, getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import ProfileComponent from "@/components/ProfileComponent";
@@ -56,6 +56,11 @@ const Home = () => {
   useEffect(() => {
     async function fetchUserProfileOnHome() {
       try {
+        const cached = await getCachedUserProfile();
+        if (cached) {
+          setUserProfile(cached);
+        }
+
         const { user } = await getCurrentUser();
         if (user) {
           const { profile } = await getUserProfile(user.id);
