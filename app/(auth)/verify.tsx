@@ -3,6 +3,7 @@ import CustomInput from "@/components/CustomInput";
 import DropdownMenu from "@/components/DropdownMenu";
 
 import {
+  checkStudentIdAndRefExists,
   getCurrentUser,
   signInUser,
   signUpUser,
@@ -275,6 +276,37 @@ const Verify = () => {
           "Authentication Error",
           "Could not find active user session. Please sign in again."
         );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Step 2: Check if Student ID number or Reference number already exist for another account
+      const { idExists, refExists } = await checkStudentIdAndRefExists(
+        studentId.trim(),
+        studentRef.trim(),
+        activeUserId
+      );
+
+      if (idExists || refExists) {
+        const dupErrors: typeof errors = {};
+        if (idExists) {
+          dupErrors.studentId = "This Student ID number is already registered to another user.";
+        }
+        if (refExists) {
+          dupErrors.studentRef = "This Student Reference number is already registered to another user.";
+        }
+        setErrors((prev) => ({ ...prev, ...dupErrors }));
+
+        let dupMsg = "";
+        if (idExists && refExists) {
+          dupMsg = "Both the Student ID number and Reference number are already registered to another account.";
+        } else if (idExists) {
+          dupMsg = "The Student ID number is already registered to another user account.";
+        } else {
+          dupMsg = "The Student Reference number is already registered to another user account.";
+        }
+
+        Alert.alert("Duplicate Student Credentials", dupMsg);
         setIsSubmitting(false);
         return;
       }

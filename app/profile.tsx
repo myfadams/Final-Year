@@ -104,6 +104,8 @@ export default function ProfileScreen() {
     }
   };
 
+  const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
+
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out of ResQ?", [
       { text: "Cancel", style: "cancel" },
@@ -111,9 +113,23 @@ export default function ProfileScreen() {
         text: "Sign Out",
         style: "destructive",
         onPress: async () => {
-          await signOutUser();
-          globalState.userProfile = null;
-          router.replace("/(auth)/login");
+          try {
+            setIsSigningOut(true);
+            await signOutUser();
+            globalState.userProfile = null;
+            setUserProfile(null);
+
+            // Reset navigation stack completely so the user cannot swipe back
+            if (router.canDismiss()) {
+              router.dismissAll();
+            }
+            router.replace("/(auth)/login");
+          } catch (err: any) {
+            console.error("Error signing out:", err);
+            Alert.alert("Sign Out Error", err?.message || "Unable to sign out. Please try again.");
+          } finally {
+            setIsSigningOut(false);
+          }
         },
       },
     ]);
@@ -296,8 +312,9 @@ export default function ProfileScreen() {
             <View style={styles.divider} />
 
             <TouchableOpacity
-              style={styles.listItem}
+              style={[styles.listItem, isSigningOut && { opacity: 0.5 }]}
               onPress={handleSignOut}
+              disabled={isSigningOut}
               activeOpacity={0.7}
             >
               <View
@@ -306,7 +323,7 @@ export default function ProfileScreen() {
                 <LogOut size={18} color="#E53E3E" strokeWidth={2.2} />
               </View>
               <Text style={[styles.listItemText, styles.signOutText]}>
-                Sign Out
+                {isSigningOut ? "Signing Out..." : "Sign Out"}
               </Text>
             </TouchableOpacity>
           </View>

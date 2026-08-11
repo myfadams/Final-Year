@@ -292,10 +292,23 @@ export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profil
  */
 export async function signOutUser() {
   try {
+    if (realtimeProfileChannel) {
+      try {
+        supabase.removeChannel(realtimeProfileChannel);
+        realtimeProfileChannel = null;
+      } catch (e) {
+        console.warn("Could not remove realtime channel during signout:", e);
+      }
+    }
+
     const { error } = await supabase.auth.signOut();
     await clearCachedUserProfile();
+    try {
+      await AsyncStorage.removeItem("@pending_verify_credentials");
+    } catch (e) {}
+
     if (error) {
-      return { error: error.message || "Sign out failed" };
+      console.warn("Supabase signOut notice:", error.message);
     }
     return { error: null };
   } catch (error: any) {
@@ -420,6 +433,65 @@ export interface UserVerificationData {
 }
 
 /**
+ * Check if a student_id_number or student_reference_number already exists in the public users table.
+ * Excludes the given userId if provided (so a user updating their own info is not flagged as duplicate).
+ */
+export async function checkStudentIdAndRefExists(
+  studentIdNumber: string,
+  studentRefNumber: string,
+  excludeUserId?: string
+): Promise<{
+  idExists: boolean;
+  refExists: boolean;
+  error?: string;
+}> {
+  try {
+    const cleanId = studentIdNumber.trim();
+    const cleanRef = studentRefNumber.trim();
+
+    let idQuery = supabase
+      .from("users")
+      .select("id")
+      .ilike("student_id_number", cleanId);
+
+    if (excludeUserId) {
+      idQuery = idQuery.neq("id", excludeUserId);
+    }
+
+    const { data: idMatch, error: idError } = await idQuery.maybeSingle();
+    if (idError) {
+      console.warn("checkStudentIdAndRefExists ID check warning:", idError.message);
+    }
+
+    let refQuery = supabase
+      .from("users")
+      .select("id")
+      .ilike("student_reference_number", cleanRef);
+
+    if (excludeUserId) {
+      refQuery = refQuery.neq("id", excludeUserId);
+    }
+
+    const { data: refMatch, error: refError } = await refQuery.maybeSingle();
+    if (refError) {
+      console.warn("checkStudentIdAndRefExists Ref check warning:", refError.message);
+    }
+
+    return {
+      idExists: !!idMatch,
+      refExists: !!refMatch,
+    };
+  } catch (err: any) {
+    console.error("checkStudentIdAndRefExists error:", err);
+    return {
+      idExists: false,
+      refExists: false,
+      error: err?.message || "Error checking student credentials",
+    };
+  }
+}
+
+/**
  * 6. Update User Profile Verification Details
  * Upserts the public users table with student verification details.
  */
@@ -428,6 +500,25 @@ export async function updateUserVerification(
   verificationData: UserVerificationData,
 ) {
   try {
+    // Check if Student ID number or Reference number already exists for another account
+    const { idExists, refExists } = await checkStudentIdAndRefExists(
+      verificationData.student_id_number,
+      verificationData.student_reference_number,
+      userId
+    );
+
+    if (idExists || refExists) {
+      let duplicateMsg = "Verification information matches an existing account.";
+      if (idExists && refExists) {
+        duplicateMsg = "Both Student ID number and Reference number are already registered to another user.";
+      } else if (idExists) {
+        duplicateMsg = "Student ID number is already registered to another user.";
+      } else if (refExists) {
+        duplicateMsg = "Student Reference number is already registered to another user.";
+      }
+      return { data: null, error: duplicateMsg };
+    }
+
     const upsertPayload: Record<string, any> = {
       id: userId,
       student_id_number: verificationData.student_id_number,
