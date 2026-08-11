@@ -1,6 +1,6 @@
 import AlertCasesComponent from "@/components/AlertCasesComponent";
+import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import CaseComponent from "@/components/CaseComponent";
-import HomeTabBar from "@/components/HomeTabBar";
 import ResolvedCaseComponent from "@/components/ResolvedCaseComponent";
 import ScrollViewButton from "@/components/ScrollViewButton";
 import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
@@ -98,7 +98,8 @@ export default function AlertsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <HomeTabBar pageTitle="Alerts" />
+      {/* <HomeTabBar pageTitle="Alerts" /> */}
+      <AnotherNavBarHeader />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}

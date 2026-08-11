@@ -19,8 +19,8 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import CustomInput from "@/components/CustomInput";
-import HomeTabBar from "@/components/HomeTabBar";
 import NewsCard from "@/components/NewsCard";
 import NewsDetailModal from "@/components/NewsDetailModal";
 import { Article } from "@/constants/interfaces";
@@ -57,7 +57,8 @@ export default function NewsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Top Header Navigation */}
-      <HomeTabBar pageTitle="news" activePage="news" />
+      {/* <HomeTabBar pageTitle="news" activePage="news" /> */}
+      <AnotherNavBarHeader />
 
       {/* Search and Filters */}
       <View style={styles.searchFilterContainer}>
@@ -67,7 +68,7 @@ export default function NewsScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
             Icon={<Search size={20} color="#9CA3AF" />}
-            // borderColor="#E5E7EB"
+          // borderColor="#E5E7EB"
           />
         </View>
         <TouchableOpacity

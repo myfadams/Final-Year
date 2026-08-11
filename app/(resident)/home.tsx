@@ -1,7 +1,7 @@
 // import EmergencyActionCard from "@/components/EmergencyActionCard";
-import HomeTabBar from "@/components/HomeTabBar";
 // import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import { getCachedUserProfile, getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import ProfileComponent from "@/components/ProfileComponent";
@@ -165,7 +165,8 @@ const Home = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <HomeTabBar pageTitle="ResQ." />
+      {/* <HomeTabBar pageTitle="ResQ." /> */}
+      <AnotherNavBarHeader />
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}

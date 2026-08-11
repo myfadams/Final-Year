@@ -1,3 +1,4 @@
+import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import Contacts from "@/components/Contacts";
 import { ResQColors } from "@/constants/Colors";
 import { ContactsProp } from "@/constants/interfaces";
@@ -5,9 +6,7 @@ import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
-  Bell,
   Building2,
-  HelpCircle,
   Search,
   UserPlus,
   Users,
@@ -213,35 +212,8 @@ export default function ContactsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Top Header */}
-      <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() =>
-            Alert.alert("Help", "Opening support and help guide...")
-          }
-          style={styles.headerIconButton}
-          activeOpacity={0.7}
-        >
-          <HelpCircle
-            size={22}
-            color={ResQColors.primaryRed}
-            strokeWidth={2.2}
-          />
-        </TouchableOpacity>
-
-        <View style={styles.brandTitleContainer}>
-          <Text style={styles.brandTitleText}>ResQ</Text>
-          <Text style={styles.brandDot}>.</Text>
-        </View>
-
-        <TouchableOpacity
-          onPress={() => Alert.alert("Notifications", "No new notifications.")}
-          style={styles.headerIconButton}
-          activeOpacity={0.7}
-        >
-          <Bell size={22} color={ResQColors.primaryRed} strokeWidth={2.2} />
-        </TouchableOpacity>
-      </View>
+      {/* Top Header Navigation */}
+      <AnotherNavBarHeader />
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -485,39 +457,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: ResQColors.pageBg,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: ResQColors.pageBg,
-  },
-  headerIconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: ResQColors.primaryRedLight,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: ResQColors.primaryRedBorder,
-  },
-  brandTitleContainer: {
-    flexDirection: "row",
-    alignItems: "baseline",
-  },
-  brandTitleText: {
-    fontSize: 24,
-    fontFamily: typography.bold,
-    color: ResQColors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  brandDot: {
-    fontSize: 26,
-    fontFamily: typography.bold,
-    color: ResQColors.primaryRed,
   },
   scrollContent: {
     paddingHorizontal: 20,

@@ -1,27 +1,17 @@
 import { getCachedUserProfile, UserProfile } from "@/backend/auth";
-import Colors, { ResQColors } from "@/constants/Colors";
+import { ResQColors } from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { Bell, HelpCircle } from "lucide-react-native";
+import { Bell } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import {
-  Platform,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
-interface HomeTabBarProp {
-  activePage?: string;
-  userInfo?: {
-    name?: string;
-    avatarUrl?: string;
-    profile_image_url?: string;
-  };
-  pageTitle: string;
+interface AnotherNavBarHeaderProps {
+  onProfilePress?: () => void;
+  onNotificationPress?: () => void;
+  title?: string;
   avatarUrl?: string;
   name?: string;
   userProfile?: UserProfile | null;
@@ -36,10 +26,10 @@ const getInitials = (fullName?: string) => {
   return fullName.slice(0, 2).toUpperCase();
 };
 
-const HomeTabBar: React.FC<HomeTabBarProp> = ({
-  activePage,
-  userInfo,
-  pageTitle,
+export const AnotherNavBarHeader: React.FC<AnotherNavBarHeaderProps> = ({
+  onProfilePress,
+  onNotificationPress,
+  title = "ResQ",
   avatarUrl,
   name,
   userProfile,
@@ -72,16 +62,29 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
     avatarUrl ||
     userProfile?.profile_image_url ||
     profile?.profile_image_url ||
-    userInfo?.avatarUrl ||
-    userInfo?.profile_image_url ||
     null;
 
   const effectiveName =
     name ||
     userProfile?.name ||
     profile?.name ||
-    userInfo?.name ||
     "Resident";
+
+  const handleProfile = () => {
+    if (onProfilePress) {
+      onProfilePress();
+    } else {
+      router.push("/profile");
+    }
+  };
+
+  const handleNotification = () => {
+    if (onNotificationPress) {
+      onNotificationPress();
+    } else {
+      Alert.alert("Notifications", "No new notifications.");
+    }
+  };
 
   const renderAvatar = () => {
     if (effectiveAvatarUrl && effectiveAvatarUrl.trim().length > 0 && !imageError) {
@@ -103,84 +106,56 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.titleContainer}>
-        <Text style={styles.titleText}>{pageTitle}</Text>
-        <View style={styles.brandDot} />
+    <View style={styles.header}>
+      <TouchableOpacity
+        onPress={handleProfile}
+        style={styles.avatarButton}
+        activeOpacity={0.75}
+        accessibilityLabel="Profile"
+      >
+        {renderAvatar()}
+      </TouchableOpacity>
+
+      <View style={styles.brandTitleContainer}>
+        <Text style={styles.brandTitleText}>{title}</Text>
+        <Text style={styles.brandDot}>.</Text>
       </View>
 
-      <View style={styles.actionsRow}>
-        <TouchableOpacity
-          onPress={() => router.push("/(resident)/contacts")}
-          style={styles.actionButton}
-          activeOpacity={0.7}
-        >
-          <HelpCircle size={20} color={Colors.light.text} strokeWidth={2} />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
-          <Bell size={20} color={Colors.light.text} strokeWidth={2} />
-          <View style={styles.badge} />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => router.push("/profile")}
-          style={styles.avatarButton}
-          activeOpacity={0.8}
-        >
-          {renderAvatar()}
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        onPress={handleNotification}
+        style={styles.headerIconButton}
+        activeOpacity={0.7}
+        accessibilityLabel="Notifications"
+      >
+        <Bell size={22} color={ResQColors.primaryRed} strokeWidth={2.2} />
+      </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: "transparent",
+    backgroundColor: ResQColors.pageBg,
   },
-  titleContainer: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-  },
-  titleText: {
-    fontSize: 28,
-    color: Colors.light.text,
-    fontFamily: typography.bold,
-    lineHeight: 34,
-  },
-  brandDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.light.accent,
-    marginLeft: 3,
-    marginBottom: 6,
-  },
-  actionsRow: {
-    flexDirection: "row",
+  headerIconButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: ResQColors.primaryRedLight,
     alignItems: "center",
-    gap: 12,
-  },
-  actionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFFFFF",
     justifyContent: "center",
-    alignItems: "center",
     borderWidth: 1,
-    borderColor: "#EAE6DF",
+    borderColor: ResQColors.primaryRedBorder,
     ...Platform.select({
       ios: {
         shadowColor: "#000000",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
+        shadowOpacity: 0.04,
         shadowRadius: 4,
       },
       android: {
@@ -189,20 +164,20 @@ const styles = StyleSheet.create({
     }),
   },
   avatarButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: ResQColors.primaryRedLight,
-    borderWidth: 2,
-    borderColor: Colors.light.accent,
+    borderWidth: 1.5,
+    borderColor: ResQColors.primaryRedBorder,
     overflow: "hidden",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "center",
     ...Platform.select({
       ios: {
-        shadowColor: "#000000",
+        shadowColor: "#9E001C",
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
+        shadowOpacity: 0.08,
         shadowRadius: 4,
       },
       android: {
@@ -213,6 +188,7 @@ const styles = StyleSheet.create({
   avatarImage: {
     width: "100%",
     height: "100%",
+    borderRadius: 21,
   },
   initialsContainer: {
     width: "100%",
@@ -223,21 +199,25 @@ const styles = StyleSheet.create({
   },
   initialsText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: typography.bold,
     letterSpacing: 0.5,
   },
-  badge: {
-    position: "absolute",
-    top: 9,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#EF4444",
-    borderWidth: 1.5,
-    borderColor: "#FFFFFF",
+  brandTitleContainer: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  brandTitleText: {
+    fontSize: 24,
+    fontFamily: typography.bold,
+    color: ResQColors.textPrimary,
+    letterSpacing: -0.5,
+  },
+  brandDot: {
+    fontSize: 26,
+    fontFamily: typography.bold,
+    color: ResQColors.primaryRed,
   },
 });
 
-export default HomeTabBar;
+export default AnotherNavBarHeader;
