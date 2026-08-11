@@ -19,8 +19,6 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import Svg, { Path } from "react-native-svg";
-
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -52,22 +50,26 @@ export default function WaitingVerify() {
       } else {
         Alert.alert(
           "Email Resent",
-          `A new verification link has been sent to ${targetEmail}. Please check your inbox and spam folder.`
+          `A new verification link has been sent to ${targetEmail}. Please check your inbox and spam folder.`,
         );
       }
     } catch (err: any) {
-      Alert.alert("Error", err?.message || "Failed to resend verification email.");
+      Alert.alert(
+        "Error",
+        err?.message || "Failed to resend verification email.",
+      );
     } finally {
       setIsResendingEmail(false);
     }
   };
 
-
   // Load saved credentials from AsyncStorage if params were not passed
   useEffect(() => {
     async function loadStoredCredentials() {
       try {
-        const stored = await AsyncStorage.getItem("@pending_verify_credentials");
+        const stored = await AsyncStorage.getItem(
+          "@pending_verify_credentials",
+        );
         if (stored) {
           const parsed = JSON.parse(stored);
           if (!email && parsed.email) setEmail(parsed.email);
@@ -137,7 +139,8 @@ export default function WaitingVerify() {
       const parsed = Linking.parse(url);
       if (!accessToken && parsed.queryParams) {
         accessToken = (parsed.queryParams.access_token as string) || undefined;
-        refreshToken = (parsed.queryParams.refresh_token as string) || undefined;
+        refreshToken =
+          (parsed.queryParams.refresh_token as string) || undefined;
         code = (parsed.queryParams.code as string) || undefined;
       }
 
@@ -151,7 +154,8 @@ export default function WaitingVerify() {
           return;
         }
       } else if (code) {
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        const { data, error } =
+          await supabase.auth.exchangeCodeForSession(code);
         if (!error && data.session?.user) {
           await navigateToVerify();
           return;
@@ -210,7 +214,7 @@ export default function WaitingVerify() {
         Alert.alert(
           "Verification Pending",
           `We could not confirm your email verification yet. Please tap the verification link sent to ${activeEmail || "your email"} and try again.`,
-          [{ text: "OK" }]
+          [{ text: "OK" }],
         );
       }
     } finally {
@@ -231,7 +235,10 @@ export default function WaitingVerify() {
 
     // Check immediately on mount, then on an interval.
     checkVerified();
-    const intervalId = setInterval(() => checkVerified(false), POLL_INTERVAL_MS);
+    const intervalId = setInterval(
+      () => checkVerified(false),
+      POLL_INTERVAL_MS,
+    );
 
     // Listen for auth state changes (e.g. session update after email confirmation)
     const { data: authListener } = supabase.auth.onAuthStateChange(
@@ -239,7 +246,7 @@ export default function WaitingVerify() {
         if (session?.user?.email_confirmed_at && !hasNavigatedRef.current) {
           navigateToVerify();
         }
-      }
+      },
     );
 
     // Also check right away whenever the app comes back to the foreground
@@ -314,7 +321,6 @@ export default function WaitingVerify() {
             </Text>
           </TouchableOpacity>
         </View>
-
 
         {/* Back action at the bottom */}
         <View style={styles.footer}>
