@@ -1,25 +1,30 @@
+import { getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import CustomButton from "@/components/CustomButton";
+import MedicalFieldItem from "@/components/MedicalFieldItem";
 import NavHeader from "@/components/NavHeader";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
-import { getCurrentUser, getUserProfile, UserProfile, signOutUser } from "@/backend/auth";
 import { useRouter } from "expo-router";
 import {
-  ChevronRight,
+  Activity,
+  AlertCircle,
+  Droplet,
+  FileText,
   GraduationCap,
-  Heart,
+  Hash,
   IdCard,
-  LogOut,
   Mail,
   MapPin,
-  Phone
+  Phone,
+  Pill,
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -40,15 +45,29 @@ const ProfileItem: React.FC<ProfileItemProps> = ({ icon, label, value }) => (
   </View>
 );
 
+interface MedicalData {
+  bloodGroup: string;
+  allergies: string;
+  medications: string;
+  chronicConditions: string;
+  emergencyNotes: string;
+}
+
 const settingsPage = () => {
   const router = useRouter();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(
     globalState.userProfile
   );
-  const [contacts, setContacts] = useState([
-    { name: "Meme (Mother)", phone: "+233 24 999 8888", color: "#FF6B6B" },
-    { name: "Here (Roommate)", phone: "+233 50 111 2222", color: "#3B7597" },
-  ]);
+  const [isSavingMedical, setIsSavingMedical] = useState(false);
+
+  // Medical data stored as an object
+  const [medicalData, setMedicalData] = useState<MedicalData>({
+    bloodGroup: "O+",
+    allergies: "Penicillin, Peanuts",
+    medications: "Asthma Inhaler (Ventolin)",
+    chronicConditions: "Mild Asthma",
+    emergencyNotes: "Primary Emergency Contact: Mother (+233 24 999 8888)",
+  });
 
   useEffect(() => {
     async function loadUserProfile() {
@@ -72,19 +91,20 @@ const settingsPage = () => {
     loadUserProfile();
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await signOutUser();
-    } catch (e) {
-      console.error("Error signing out:", e);
-    }
-    globalState.userProfile = null;
-    router.replace("/(auth)/login");
+  const handleSaveMedicalInfo = () => {
+    setIsSavingMedical(true);
+    setTimeout(() => {
+      setIsSavingMedical(false);
+      Alert.alert(
+        "Saved",
+        "Medical information has been saved successfully!"
+      );
+    }, 500);
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <NavHeader title="Settings" />
+      <NavHeader title="Personal & Medical Information" />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Safety Stats Section */}
         <View style={styles.statsCard}>
@@ -106,16 +126,22 @@ const settingsPage = () => {
           </View>
         </View>
 
-        {/* Personal Information */}
+        {/* Personal Information Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {userProfile?.name ? `${userProfile.name}'s Information` : "Student Information"}
+            {userProfile?.name ? `${userProfile.name}'s Personal Info` : "Personal Information"}
           </Text>
           <View style={styles.card}>
             <ProfileItem
               icon={<IdCard size={20} color={Colors.light.primary} />}
               label="Student ID"
               value={userProfile?.student_id_number || "Not set"}
+            />
+            <View style={styles.rowDivider} />
+            <ProfileItem
+              icon={<Hash size={20} color={Colors.light.primary} />}
+              label="Reference Number"
+              value={userProfile?.student_reference_number || "Not set"}
             />
             <View style={styles.rowDivider} />
             <ProfileItem
@@ -126,7 +152,7 @@ const settingsPage = () => {
             <View style={styles.rowDivider} />
             <ProfileItem
               icon={<Mail size={20} color={Colors.light.primary} />}
-              label="Email"
+              label="Email Address"
               value={userProfile?.email || "Not set"}
             />
             <View style={styles.rowDivider} />
@@ -144,46 +170,74 @@ const settingsPage = () => {
           </View>
         </View>
 
-        {/* Emergency Contacts */}
+        {/* Medical Information Section */}
         <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>Trusted Responders</Text>
-            <TouchableOpacity
-              onPress={() => router.navigate("/(resident)/home")}
-            >
-              <Text style={styles.sectionLink}>Manage</Text>
-            </TouchableOpacity>
-          </View>
-          <View style={styles.contactsContainer}>
-            {contacts.map((contact, idx) => (
-              <View key={idx} style={styles.contactCard}>
-                <View style={styles.contactLeft}>
-                  <View
-                    style={[
-                      styles.contactAvatar,
-                      { backgroundColor: contact.color },
-                    ]}
-                  >
-                    <Heart size={16} color="#fff" fill="#fff" />
-                  </View>
-                  <View>
-                    <Text style={styles.contactName}>{contact.name}</Text>
-                    <Text style={styles.contactPhone}>{contact.phone}</Text>
-                  </View>
-                </View>
-                <ChevronRight size={18} color={Colors.light.textMuted} />
-              </View>
-            ))}
+          <Text style={styles.sectionTitle}>Medical Information</Text>
+
+          <MedicalFieldItem
+            label="Blood Group / Type"
+            value={medicalData.bloodGroup}
+            placeholder="e.g. O+, A-, B+"
+            icon={<Droplet size={16} color={ResQColors.primaryRed} />}
+            onChangeText={(text) =>
+              setMedicalData((prev) => ({ ...prev, bloodGroup: text }))
+            }
+          />
+
+          <MedicalFieldItem
+            label="Allergies"
+            value={medicalData.allergies}
+            placeholder="e.g. Penicillin, Peanuts, Latex"
+            icon={<AlertCircle size={16} color={ResQColors.primaryRed} />}
+            onChangeText={(text) =>
+              setMedicalData((prev) => ({ ...prev, allergies: text }))
+            }
+          />
+
+          <MedicalFieldItem
+            label="Current Medications"
+            value={medicalData.medications}
+            placeholder="e.g. Inhaler, Insulin, Antihistamines"
+            icon={<Pill size={16} color={ResQColors.primaryRed} />}
+            onChangeText={(text) =>
+              setMedicalData((prev) => ({ ...prev, medications: text }))
+            }
+          />
+
+          <MedicalFieldItem
+            label="Chronic Conditions & Health Notes"
+            value={medicalData.chronicConditions}
+            placeholder="e.g. Asthma, Diabetes, Epilepsy"
+            icon={<Activity size={16} color={ResQColors.primaryRed} />}
+            onChangeText={(text) =>
+              setMedicalData((prev) => ({ ...prev, chronicConditions: text }))
+            }
+            multiline={true}
+          />
+
+          <MedicalFieldItem
+            label="Emergency Notes for Responders"
+            value={medicalData.emergencyNotes}
+            placeholder="e.g. Special emergency medical instructions"
+            icon={<FileText size={16} color={ResQColors.primaryRed} />}
+            onChangeText={(text) =>
+              setMedicalData((prev) => ({ ...prev, emergencyNotes: text }))
+            }
+            multiline={true}
+          />
+
+          {/* Save Medical Info Button */}
+          <View style={{ marginTop: 14, marginBottom: 12 }}>
+            <CustomButton
+              text="Save Medical Info"
+              onPress={handleSaveMedicalInfo}
+              isLoading={isSavingMedical}
+              color={ResQColors.primaryRed}
+              textColor="#FFFFFF"
+            />
           </View>
         </View>
 
-        {/* Actions / Settings */}
-        <View style={styles.actionContainer}>
-          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <LogOut size={20} color="#fff" />
-            <Text style={styles.logoutButtonText}>Sign Out</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -196,69 +250,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 40,
-  },
-  header: {
-    alignItems: "center",
-    paddingVertical: 24,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: ResQColors.border,
-  },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: 12,
-  },
-  avatar: {
-    width: 90,
-    height: 90,
-    borderRadius: 45,
-    backgroundColor: Colors.light.primary,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: Colors.light.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  avatarText: {
-    color: "#fff",
-    fontSize: 28,
-    fontFamily: typography.bold,
-  },
-  badge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    backgroundColor: Colors.light.success,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-  userName: {
-    fontSize: 22,
-    fontFamily: typography.bold,
-    color: Colors.light.text,
-    marginBottom: 4,
-  },
-  verifiedRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: ResQColors.greenLight,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: ResQColors.greenBorder,
-  },
-  verifiedText: {
-    fontSize: 12,
-    fontFamily: typography.medium,
-    color: ResQColors.greenDark,
   },
   statsCard: {
     flexDirection: "row",
@@ -300,22 +291,11 @@ const styles = StyleSheet.create({
     marginTop: 24,
     paddingHorizontal: 16,
   },
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
   sectionTitle: {
     fontSize: 16,
     fontFamily: typography.bold,
     color: Colors.light.text,
-    marginBottom: 8,
-  },
-  sectionLink: {
-    fontSize: 14,
-    fontFamily: typography.medium,
-    color: Colors.light.accent,
+    marginBottom: 12,
   },
   card: {
     backgroundColor: "#fff",
@@ -356,64 +336,6 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: ResQColors.border,
     marginLeft: 48,
-  },
-  contactsContainer: {
-    gap: 8,
-  },
-  contactCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: ResQColors.border,
-  },
-  contactLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  contactAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  contactName: {
-    fontSize: 14,
-    fontFamily: typography.semibold,
-    color: Colors.light.text,
-  },
-  contactPhone: {
-    fontSize: 12,
-    fontFamily: typography.regular,
-    color: Colors.light.textMuted,
-  },
-  actionContainer: {
-    marginTop: 32,
-    paddingHorizontal: 16,
-  },
-  logoutButton: {
-    flexDirection: "row",
-    backgroundColor: Colors.light.error,
-    borderRadius: 16,
-    height: 52,
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 8,
-    elevation: 2,
-    shadowColor: Colors.light.error,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  logoutButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontFamily: typography.semibold,
   },
 });
 

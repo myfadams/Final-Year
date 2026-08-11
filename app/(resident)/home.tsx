@@ -190,7 +190,7 @@ const Home = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.networkHeaderRow}>
             <Text style={styles.sectionTitle}>Trusted Network</Text>
-            <TouchableOpacity onPress={() => setManageModalVisible(true)}>
+            <TouchableOpacity onPress={() => router.push("/safetyCirclesPage")}>
               <Text style={styles.manageLink}>Manage</Text>
             </TouchableOpacity>
           </View>
@@ -199,18 +199,6 @@ const Home = () => {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.contactsScroll}
           >
-            {/* Add Contact Button */}
-            <View style={{ alignItems: "center", gap: 6, marginRight: 4 }}>
-              <TouchableOpacity
-                style={styles.addContactCircle}
-                onPress={() => setAddResponderVisible(true)}
-                activeOpacity={0.8}
-              >
-                <Plus size={22} color={ResQColors.textMuted} />
-              </TouchableOpacity>
-              <Text style={styles.addContactText}>Add</Text>
-            </View>
-
             {/* Trusted Contacts List */}
             {trustedNetworkContacts.map((contact) => (
               <ProfileComponent

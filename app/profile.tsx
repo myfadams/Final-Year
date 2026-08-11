@@ -1,5 +1,5 @@
+import { getCurrentUser, getUserProfile, signOutUser, UserProfile } from "@/backend/auth";
 import NavHeader from "@/components/NavHeader";
-import { getCurrentUser, getUserProfile, UserProfile, signOutUser } from "@/backend/auth";
 import Colors from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
@@ -9,14 +9,13 @@ import { useRouter } from "expo-router";
 import {
   Bell,
   ChevronRight,
-  HelpCircle,
+  FileUser,
   LifeBuoy,
   LogOut,
   Pen,
-  Settings,
   Shield,
   User,
-  Users,
+  Users
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -196,7 +195,7 @@ export default function ProfileScreen() {
           <View style={styles.cardContainer}>
             <TouchableOpacity
               style={styles.listItem}
-              onPress={() => router.push("/(resident)/contacts")}
+              onPress={() => router.push("/emergencyContactsPage")}
               activeOpacity={0.7}
             >
               <View
@@ -213,19 +212,16 @@ export default function ProfileScreen() {
             <TouchableOpacity
               style={styles.listItem}
               onPress={() =>
-                Alert.alert(
-                  "Personal Information",
-                  `Name: ${userProfile?.name || "N/A"}\nEmail: ${userProfile?.email || "N/A"}\nPhone: ${userProfile?.phone || "N/A"}\nStudent ID: ${userProfile?.student_id_number || "N/A"}\nAddress: ${userProfile?.address || "N/A"}`
-                )
+                router.navigate("/settingsPage")
               }
               activeOpacity={0.7}
             >
               <View
                 style={[styles.iconWrapper, { backgroundColor: "#E6F0FA" }]}
               >
-                <User size={18} color="#1E50A2" strokeWidth={2.2} />
+                <FileUser size={18} color="#1E50A2" strokeWidth={2.2} />
               </View>
-              <Text style={styles.listItemText}>Personal Information</Text>
+              <Text style={styles.listItemText}>Personal & Medical Info</Text>
               <ChevronRight size={18} color="#A0AEC0" />
             </TouchableOpacity>
 
@@ -233,12 +229,7 @@ export default function ProfileScreen() {
 
             <TouchableOpacity
               style={styles.listItem}
-              onPress={() =>
-                Alert.alert(
-                  "Safety Circles",
-                  "You are sharing live emergency coordinates with 3 trusted active Safety Circles.",
-                )
-              }
+              onPress={() => router.push("/safetyCirclesPage")}
               activeOpacity={0.7}
             >
               <View
@@ -272,7 +263,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>ACCOUNT</Text>
           <View style={styles.cardContainer}>
-            <TouchableOpacity
+            {/* <TouchableOpacity
               style={styles.listItem}
               onPress={() => router.push("/settingsPage")}
               activeOpacity={0.7}
@@ -284,7 +275,7 @@ export default function ProfileScreen() {
               </View>
               <Text style={styles.listItemText}>App Settings</Text>
               <ChevronRight size={18} color="#A0AEC0" />
-            </TouchableOpacity>
+            </TouchableOpacity> */}
 
             <View style={styles.divider} />
 
