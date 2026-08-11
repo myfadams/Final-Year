@@ -1,5 +1,6 @@
 import { resendVerificationEmail } from "@/backend/auth";
 import { supabase } from "@/backend/supabaseConfig";
+import AnimatedEmergencyLogo from "@/components/AnimatedEmergencyLogo";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -91,7 +92,7 @@ export default function WaitingVerify() {
     hasNavigatedRef.current = true;
     try {
       await AsyncStorage.removeItem("@pending_verify_credentials");
-    } catch (e) {}
+    } catch (e) { }
     router.replace({
       pathname: "/(auth)/verify",
       params: {
@@ -174,7 +175,7 @@ export default function WaitingVerify() {
           await navigateToVerify();
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // 2. Try getUser() directly
       try {
@@ -183,7 +184,7 @@ export default function WaitingVerify() {
           await navigateToVerify();
           return;
         }
-      } catch (e) {}
+      } catch (e) { }
 
       // 3. Attempt signInWithPassword with credentials.
       // Supabase will allow sign-in as soon as the email is verified.
@@ -202,7 +203,7 @@ export default function WaitingVerify() {
             await navigateToVerify();
             return;
           }
-        } catch (e) {}
+        } catch (e) { }
       }
 
       if (isManual) {
@@ -262,31 +263,9 @@ export default function WaitingVerify() {
       <StatusBar style="dark" backgroundColor={Colors.light.background} />
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
-          {/* Concentric Circles & Shield Icon */}
-          <View style={styles.outerRing}>
-            {/* Spinning Ring */}
-            <Animated.View
-              style={[styles.middleRing, { transform: [{ rotate: spin }] }]}
-            />
-            {/* Static Inner Circle with Shield */}
-            <View style={styles.innerCircle}>
-              <Svg width={44} height={44} viewBox="0 0 24 24">
-                {/* Left half of the shield filled with deep red */}
-                <Path
-                  d="M12 2L3 5v6c0 5.55 3.84 10.74 9 12V2z"
-                  fill="#af101a"
-                  stroke="#af101a"
-                  strokeWidth={1}
-                />
-                {/* Right half of the shield filled with white and outline in deep red */}
-                <Path
-                  d="M12 2v21c5.16-1.26 9-6.45 9-12V5l-9-3z"
-                  fill="#ffffff"
-                  stroke="#af101a"
-                  strokeWidth={2}
-                />
-              </Svg>
-            </View>
+          {/* Animated Emergency Logo Loading */}
+          <View style={styles.logoContainer}>
+            <AnimatedEmergencyLogo size={220} />
           </View>
 
           {/* Heading */}
@@ -362,41 +341,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 24,
   },
-  outerRing: {
-    width: 172,
-    height: 172,
-    borderRadius: 86,
-    borderWidth: 2,
-    borderColor: "#ffccd0",
-    justifyContent: "center",
+  logoContainer: {
+    marginBottom: 24,
     alignItems: "center",
-    marginBottom: 40,
-    position: "relative",
-  },
-  middleRing: {
-    position: "absolute",
-    width: 148,
-    height: 148,
-    borderRadius: 74,
-    borderWidth: 6,
-    borderColor: "rgba(175, 16, 26, 0.12)",
-    borderTopColor: "#af101a",
-    borderRightColor: "#af101a",
-  },
-  innerCircle: {
-    position: "absolute",
-    width: 108,
-    height: 108,
-    borderRadius: 54,
-    backgroundColor: "#ffffff",
     justifyContent: "center",
-    alignItems: "center",
-    // Subtle shadow for 3D depth effect
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 4,
   },
   title: {
     fontFamily: typography.bold,

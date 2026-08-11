@@ -1,9 +1,9 @@
 import { getCurrentUser, getUserProfile } from "@/backend/auth";
-import Colors from "@/constants/Colors";
+import AnimatedEmergencyLogo from "@/components/AnimatedEmergencyLogo";
 import { globalState } from "@/constants/globalState";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 export default function Index() {
   const router = useRouter();
@@ -34,7 +34,7 @@ export default function Index() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={Colors.light.primary} />
+      <AnimatedEmergencyLogo size={220} />
     </View>
   );
 }
