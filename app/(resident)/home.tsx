@@ -1,11 +1,13 @@
 // import EmergencyActionCard from "@/components/EmergencyActionCard";
 import HomeTabBar from "@/components/HomeTabBar";
 // import PrimaryModuleCard from "@/components/PrimaryModuleCard";
+import { getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import ProfileComponent from "@/components/ProfileComponent";
 import PulsatingButton from "@/components/PulsatingButton";
 import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import { ContactsProp } from "@/constants/interfaces";
 import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
@@ -31,8 +33,6 @@ import {
   X,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
-import { getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
-import { globalState } from "@/constants/globalState";
 import {
   Animated,
   Modal,
@@ -177,6 +177,7 @@ const Home = () => {
           <Text style={styles.greetingSubtitle}>
             You are protected. Your campus circle is active.
           </Text>
+          {/* <CustomButton text="Call 911" isLoading={true} /> */}
         </View>
 
         {/* Trusted Network Section */}

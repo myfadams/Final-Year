@@ -1,12 +1,9 @@
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import React from "react";
-import {
-  ActivityIndicator,
-  Text,
-  TouchableOpacity,
-  View
-} from "react-native";
+import { Text, TouchableOpacity, View } from "react-native";
+import HeartBeatWave from "./HeartBeatWave";
+
 interface CustomButtonProps {
   text: String;
   onPress?: (...args: any[]) => void;
@@ -17,6 +14,7 @@ interface CustomButtonProps {
   textColor?: string;
   borderColor?: string;
 }
+
 const CustomButton: React.FC<CustomButtonProps> = ({
   text,
   onPress,
@@ -27,6 +25,12 @@ const CustomButton: React.FC<CustomButtonProps> = ({
   textColor,
   borderColor,
 }) => {
+  const loaderColor =
+    textColor ||
+    (color === "#fff" || color === "transparent"
+      ? Colors.light.accent
+      : "#fff");
+
   return (
     <View style={{ flexDirection: "row", height: 50 }}>
       <TouchableOpacity
@@ -54,7 +58,7 @@ const CustomButton: React.FC<CustomButtonProps> = ({
         }}
       >
         {isLoading ? (
-          <ActivityIndicator size="small" color="#fff" />
+          <HeartBeatWave width={84} height={29} color={loaderColor} thickness={14.5} />
         ) : (
           <>
             {Icon && <View style={{}}>{Icon}</View>}
