@@ -285,3 +285,190 @@ export async function removeFriendRequest(
     return { error: msg };
   }
 }
+
+// ── Get Accepted Friends (Contacts) ───────────────────────────────────────────
+
+export interface FriendContact {
+  friendshipId: string;   // friends.id — used for updates/deletes
+  userId: string;         // the other person's public.users id
+  name: string;
+  profile_img_url: string | null;
+  role: string | null;
+  program_of_study: string | null;
+  phone: string | null;
+  relationship: string;   // friends.relationship label
+  is_in_trusted_network: boolean;
+}
+
+/**
+ * Fetches all accepted friends for the current user.
+ * Returns records from both directions of the friendship.
+ *
+ * Strategy (no RPC needed):
+ *  1a. friendships where user_id = me, status = accepted  → get friend_id list
+ *  1b. friendships where friend_id = me, status = accepted → get user_id list
+ *  2.  Query public.users for all those IDs at once
+ */
+export async function getFriends(): Promise<{
+  data: FriendContact[];
+  error: string | null;
+}> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { data: [], error: "Not authenticated" };
+    }
+
+    // 1a: rows where I am the initiator
+    const { data: outRows, error: outErr } = await supabase
+      .from("friends")
+      .select("id, friend_id, relationship, is_in_trusted_network")
+      .eq("user_id", user.id)
+      .eq("status", "accepted");
+
+    if (outErr) {
+      console.error("getFriends outgoing query error:", outErr.message);
+      return { data: [], error: outErr.message };
+    }
+
+    // 1b: rows where they were the initiator
+    const { data: inRows, error: inErr } = await supabase
+      .from("friends")
+      .select("id, user_id, relationship, is_in_trusted_network")
+      .eq("friend_id", user.id)
+      .eq("status", "accepted");
+
+    if (inErr) {
+      console.error("getFriends incoming query error:", inErr.message);
+      return { data: [], error: inErr.message };
+    }
+
+    // Merge: normalise so "otherId" is always the person who isn't me
+    type RawRow = {
+      friendshipId: string;
+      otherId: string;
+      relationship: string;
+      is_in_trusted_network: boolean;
+    };
+
+    const merged: RawRow[] = [
+      ...(outRows ?? []).map((r) => ({
+        friendshipId: r.id,
+        otherId: r.friend_id as string,
+        relationship: (r.relationship as string) ?? "Friend",
+        is_in_trusted_network: r.is_in_trusted_network as boolean,
+      })),
+      ...(inRows ?? []).map((r) => ({
+        friendshipId: r.id,
+        otherId: r.user_id as string,
+        relationship: (r.relationship as string) ?? "Friend",
+        is_in_trusted_network: r.is_in_trusted_network as boolean,
+      })),
+    ];
+
+    if (merged.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const otherIds = [...new Set(merged.map((r) => r.otherId))];
+
+    // 2: fetch profiles
+    const { data: userRows, error: usersErr } = await supabase
+      .from("users")
+      .select("id, name, profile_img_url, role, program_of_study, phone")
+      .in("id", otherIds);
+
+    if (usersErr) {
+      console.error("getFriends users query error:", usersErr.message);
+      return { data: [], error: usersErr.message };
+    }
+
+    const userMap = new Map(
+      (userRows ?? []).map((u) => [u.id, u]),
+    );
+
+    const contacts: FriendContact[] = merged
+      .map((row) => {
+        const u = userMap.get(row.otherId);
+        if (!u) return null;
+        return {
+          friendshipId: row.friendshipId,
+          userId: u.id,
+          name: u.name,
+          profile_img_url: u.profile_img_url ?? null,
+          role: u.role ?? null,
+          program_of_study: u.program_of_study ?? null,
+          phone: u.phone ?? null,
+          relationship: row.relationship,
+          is_in_trusted_network: row.is_in_trusted_network,
+        } satisfies FriendContact;
+      })
+      .filter(Boolean) as FriendContact[];
+
+    return { data: contacts, error: null };
+  } catch (err: any) {
+    const msg =
+      err?.message ?? (typeof err === "string" ? err : "Failed to load friends");
+    console.error("getFriends exception:", msg);
+    return { data: [], error: msg };
+  }
+}
+
+// ── Update Friend Relationship Label ─────────────────────────────────────────
+
+/**
+ * Updates the `relationship` label on a specific friendship row.
+ * @param friendshipId  friends.id (primary key)
+ * @param relationship  new label, e.g. "Classmate"
+ */
+export async function updateFriendRelationship(
+  friendshipId: string,
+  relationship: string,
+): Promise<FriendActionResult> {
+  try {
+    const { error } = await supabase
+      .from("friends")
+      .update({ relationship, updated_at: new Date().toISOString() })
+      .eq("id", friendshipId);
+
+    if (error) {
+      console.error("updateFriendRelationship error:", error.message);
+      return { error: error.message };
+    }
+    return { error: null };
+  } catch (err: any) {
+    const msg = err?.message ?? "Failed to update relationship";
+    console.error("updateFriendRelationship exception:", msg);
+    return { error: msg };
+  }
+}
+
+// ── Remove an Accepted Friend ─────────────────────────────────────────────────
+
+/**
+ * Deletes a friendship row entirely (both users lose the connection).
+ * @param friendshipId  friends.id (primary key)
+ */
+export async function removeFriend(
+  friendshipId: string,
+): Promise<FriendActionResult> {
+  try {
+    const { error } = await supabase
+      .from("friends")
+      .delete()
+      .eq("id", friendshipId);
+
+    if (error) {
+      console.error("removeFriend error:", error.message);
+      return { error: error.message };
+    }
+    return { error: null };
+  } catch (err: any) {
+    const msg = err?.message ?? "Failed to remove friend";
+    console.error("removeFriend exception:", msg);
+    return { error: msg };
+  }
+}

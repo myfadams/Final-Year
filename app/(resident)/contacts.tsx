@@ -1,22 +1,27 @@
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
+import ContactActionModal from "@/components/ContactActionModal";
 import Contacts from "@/components/Contacts";
+import HeartBeatWave from "@/components/HeartBeatWave";
+import {
+  FriendContact,
+  getFriends,
+  removeFriend,
+  updateFriendRelationship,
+} from "@/backend/friends";
 import { ResQColors } from "@/constants/Colors";
-import { ContactsProp } from "@/constants/interfaces";
-import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
-  Building2,
+  GraduationCap,
   Search,
   UserPlus,
   Users,
-  X,
+  UsersRound,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,25 +34,87 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getAvatarColor(name: string) {
+  const code = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
+// Map a FriendContact to the shape the Contacts component & community helpers expect
+function toContactsProp(fc: FriendContact) {
+  const ac = getAvatarColor(fc.name);
+  return {
+    id: fc.friendshipId,          // use friendshipId so we can delete/update
+    userId: fc.userId,
+    initials: getInitials(fc.name),
+    name: fc.name,
+    phone: fc.phone ?? "",
+    avatarUrl: fc.profile_img_url ?? undefined,
+    relationship: fc.relationship,
+    badgeType: fc.relationship,
+    status: "",
+    statusColor: ResQColors.statusGreen,
+    avatarColor: ac.bg,
+    avatarTextColor: ac.text,
+    verified: false,
+    program_of_study: fc.program_of_study,
+    // keep original FriendContact ref for the modal
+    _raw: fc,
+  };
+}
+
 export default function ContactsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // Category and Search filter states
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
 
-  // Contacts list initialized from centralized tempData
-  const [contacts, setContacts] = useState<ContactsProp[]>(DEFAULT_CONTACTS);
+  // Real friends from Supabase
+  const [friends, setFriends] = useState<FriendContact[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Add Contact Modal State
-  const [addModalVisible, setAddModalVisible] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newPhone, setNewPhone] = useState("");
-  const [newCategory, setNewCategory] = useState<
-    "Family" | "Office" | "Friend" | "Campus"
-  >("Family");
+  // Contact-action modal
+  const [modalContact, setModalContact] = useState<FriendContact | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
+  // ── Load friends on mount ───────────────────────────────────────────────────
+  const loadFriends = useCallback(async () => {
+    setIsLoading(true);
+    const { data, error } = await getFriends();
+    setIsLoading(false);
+    if (error) {
+      console.warn("loadFriends error:", error);
+    } else {
+      setFriends(data);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFriends();
+  }, [loadFriends]);
+
+  // ── Action handlers ─────────────────────────────────────────────────────────
   const handleCallPress = (name: string) => {
     Alert.alert("Emergency Call", `Initiating direct call to ${name}...`);
   };
@@ -57,111 +124,106 @@ export default function ContactsScreen() {
       pathname: "/contactChat",
       params: {
         mode: "contact",
-        contactId: contactObj?.id || "1",
+        contactId: contactObj?.userId || contactObj?.id || "1",
         name: contactObj?.name || name,
         relationship: contactObj?.relationship || "Contact",
-        phone: contactObj?.phone || "+44 999 999 999",
+        phone: contactObj?.phone || "",
         avatarUrl: contactObj?.avatarUrl,
       },
     });
   };
 
-  const getInitials = (fullName: string) => {
-    const parts = fullName.trim().split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
+  // Long-press → open modal
+  const handleLongPress = (friendshipId: string | number) => {
+    const fc = friends.find((f) => f.friendshipId === String(friendshipId));
+    if (fc) {
+      setModalContact(fc);
+      setModalVisible(true);
     }
-    return fullName.slice(0, 2).toUpperCase();
   };
 
-  const handleAddContact = () => {
-    if (!newName.trim()) {
-      Alert.alert("Input Required", "Please enter a contact name.");
-      return;
-    }
-
-    const newContact: ContactsProp = {
-      id: Date.now().toString(),
-      initials: getInitials(newName),
-      name: newName,
-      phone: newPhone.trim() || "+44 999 999 999",
-      relationship: newCategory,
-      badgeType: newCategory,
-      status: "Available",
-      statusColor: ResQColors.statusGreen,
-      avatarColor: ResQColors.primaryRed,
-      avatarTextColor: "#FFFFFF",
-      category:
-        newCategory === "Office" || newCategory === "Campus"
-          ? "Campus & Professional"
-          : "Family & Friends",
-    };
-
-    setContacts((prev) => [...prev, newContact]);
-    setNewName("");
-    setNewPhone("");
-    setNewCategory("Family");
-    setAddModalVisible(false);
-    Alert.alert("Success", `${newName} has been added to your contacts.`);
-  };
-
-  const handleDeleteContact = (id: string | number, name: string) => {
-    Alert.alert("Remove Contact", `Are you sure you want to remove ${name}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () => {
-          setContacts((prev) => prev.filter((c) => c.id !== id));
-        },
-      },
-    ]);
-  };
-
-  // Derive category specific lists dynamically from contacts state
-  const familyContacts = contacts.filter(
-    (c) =>
-      (c.badgeType && c.badgeType.toLowerCase() === "family") ||
-      (c.relationship && c.relationship.toLowerCase().includes("family")),
+  // Save relationship label
+  const handleSaveRelationship = useCallback(
+    async (friendshipId: string, relationship: string) => {
+      // Optimistic update
+      setFriends((prev) =>
+        prev.map((f) =>
+          f.friendshipId === friendshipId ? { ...f, relationship } : f,
+        ),
+      );
+      const { error } = await updateFriendRelationship(friendshipId, relationship);
+      if (error) {
+        Alert.alert("Error", error);
+        loadFriends(); // restore on failure
+      }
+    },
+    [loadFriends],
   );
 
-  const officeContacts = contacts.filter(
-    (c) =>
-      (c.badgeType &&
-        (c.badgeType.toLowerCase() === "office" ||
-          c.badgeType.toLowerCase() === "work")) ||
-      (c.relationship &&
-        (c.relationship.toLowerCase().includes("office") ||
-          c.relationship.toLowerCase().includes("work") ||
-          c.relationship.toLowerCase().includes("academic") ||
-          c.relationship.toLowerCase().includes("ra"))),
+  // Remove friend
+  const handleRemove = useCallback(
+    (friendshipId: string, name: string) => {
+      setModalVisible(false);
+      Alert.alert(
+        "Remove Contact",
+        `Remove ${name} from your contacts?`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Remove",
+            style: "destructive",
+            onPress: async () => {
+              // Optimistic
+              setFriends((prev) =>
+                prev.filter((f) => f.friendshipId !== friendshipId),
+              );
+              const { error } = await removeFriend(friendshipId);
+              if (error) {
+                Alert.alert("Error", error);
+                loadFriends();
+              }
+            },
+          },
+        ],
+      );
+    },
+    [loadFriends],
   );
 
-  // Filter contacts by selected category and search query
-  const filteredContacts = contacts.filter((c) => {
+  // ── Derived lists ───────────────────────────────────────────────────────────
+  const familyFriends = friends.filter((f) =>
+    f.relationship.toLowerCase().includes("family"),
+  );
+
+  const classmatesFriends = friends.filter((f) =>
+    ["classmate", "colleague", "roommate"].some((kw) =>
+      f.relationship.toLowerCase().includes(kw),
+    ),
+  );
+
+  const mapped = friends.map(toContactsProp);
+
+  const filteredContacts = mapped.filter((c) => {
+    const q = searchQuery.toLowerCase();
     const matchesSearch =
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.relationship.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.phone && c.phone.includes(searchQuery));
+      c.name.toLowerCase().includes(q) ||
+      c.relationship.toLowerCase().includes(q) ||
+      (c.phone && c.phone.includes(q));
 
     const matchesCategory =
       selectedCategory === "All" ||
-      (c.badgeType &&
-        c.badgeType.toLowerCase() === selectedCategory.toLowerCase()) ||
-      (c.relationship &&
-        c.relationship.toLowerCase().includes(selectedCategory.toLowerCase()));
+      c.relationship.toLowerCase().includes(selectedCategory.toLowerCase());
 
     return matchesSearch && matchesCategory;
   });
 
-  // Helper to render dynamic mini avatar stack for a community section
-  const renderAvatarStack = (categoryContacts: ContactsProp[]) => {
-    const totalCount = categoryContacts.length;
-    const maxVisible = 2;
-    const visibleContacts = categoryContacts.slice(0, maxVisible);
-    const overflowCount = totalCount > maxVisible ? totalCount - maxVisible : 0;
+  // ── Mini avatar stack helper ────────────────────────────────────────────────
+  const renderAvatarStack = (subset: FriendContact[]) => {
+    const total = subset.length;
+    const visible = subset.slice(0, 2);
+    const overflow = total > 2 ? total - 2 : 0;
 
-    if (totalCount === 0) {
+    if (total === 0) {
       return (
         <View style={styles.avatarStackRow}>
           <View style={styles.miniAvatarBadge}>
@@ -173,46 +235,43 @@ export default function ContactsScreen() {
 
     return (
       <View style={styles.avatarStackRow}>
-        {visibleContacts.map((contact, i) => (
-          <React.Fragment key={contact.id}>
-            {contact.avatarUrl ? (
-              <Image
-                source={{ uri: contact.avatarUrl }}
-                style={[styles.miniAvatarImage, i > 0 && { marginLeft: -8 }]}
-              />
-            ) : (
-              <View
-                style={[
-                  styles.miniAvatarBox,
-                  { backgroundColor: contact.avatarColor || ResQColors.pinkBg },
-                  i > 0 && { marginLeft: -8 },
-                ]}
-              >
-                <Text
+        {visible.map((f, i) => {
+          const ac = getAvatarColor(f.name);
+          return (
+            <React.Fragment key={f.friendshipId}>
+              {f.profile_img_url ? (
+                <Image
+                  source={{ uri: f.profile_img_url }}
+                  style={[styles.miniAvatarImage, i > 0 && { marginLeft: -8 }]}
+                />
+              ) : (
+                <View
                   style={[
-                    styles.miniAvatarText,
-                    { color: contact.avatarTextColor || ResQColors.pinkText },
+                    styles.miniAvatarBox,
+                    { backgroundColor: ac.bg },
+                    i > 0 && { marginLeft: -8 },
                   ]}
                 >
-                  {contact.initials}
-                </Text>
-              </View>
-            )}
-          </React.Fragment>
-        ))}
-
-        {overflowCount > 0 && (
+                  <Text style={[styles.miniAvatarText, { color: ac.text }]}>
+                    {getInitials(f.name)}
+                  </Text>
+                </View>
+              )}
+            </React.Fragment>
+          );
+        })}
+        {overflow > 0 && (
           <View style={[styles.miniAvatarBadge, { marginLeft: -8 }]}>
-            <Text style={styles.miniBadgeText}>+{overflowCount}</Text>
+            <Text style={styles.miniBadgeText}>+{overflow}</Text>
           </View>
         )}
       </View>
     );
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Top Header Navigation */}
       <AnotherNavBarHeader />
 
       <ScrollView
@@ -222,7 +281,7 @@ export default function ContactsScreen() {
           { paddingBottom: 120 + insets.bottom },
         ]}
       >
-        {/* Page Title Section */}
+        {/* Page Title */}
         <View style={styles.titleSection}>
           <Text style={styles.subTitleText}>Address Book</Text>
           <Text style={styles.mainTitleText}>Contacts</Text>
@@ -240,7 +299,7 @@ export default function ContactsScreen() {
           />
         </View>
 
-        {/* My Communities Section */}
+        {/* MY COMMUNITIES */}
         <View style={styles.sectionHeaderRow}>
           <Text style={styles.sectionTitleText}>MY COMMUNITIES</Text>
           <TouchableOpacity
@@ -255,7 +314,7 @@ export default function ContactsScreen() {
         </View>
 
         <View style={styles.communitiesRow}>
-          {/* Family Card */}
+          {/* Family */}
           <TouchableOpacity
             style={[
               styles.communityCard,
@@ -284,30 +343,28 @@ export default function ContactsScreen() {
             </View>
             <Text style={styles.communityCardTitle}>Family</Text>
             <Text style={styles.communityCountSubtext}>
-              {familyContacts.length}{" "}
-              {familyContacts.length === 1 ? "contact" : "contacts"}
+              {familyFriends.length}{" "}
+              {familyFriends.length === 1 ? "contact" : "contacts"}
             </Text>
-
-            {/* Dynamic Avatar Stack */}
-            {renderAvatarStack(familyContacts)}
+            {renderAvatarStack(familyFriends)}
           </TouchableOpacity>
 
-          {/* Office Staff Card */}
+          {/* Classmates (was "Office Staff") */}
           <TouchableOpacity
             style={[
               styles.communityCard,
               {
                 borderColor:
-                  selectedCategory === "Office"
+                  selectedCategory === "Classmate"
                     ? ResQColors.orangeText
                     : ResQColors.orangeBg,
               },
-              selectedCategory === "Office" && styles.communityCardActive,
+              selectedCategory === "Classmate" && styles.communityCardActive,
             ]}
             activeOpacity={0.8}
             onPress={() =>
               setSelectedCategory((prev) =>
-                prev === "Office" ? "All" : "Office",
+                prev === "Classmate" ? "All" : "Classmate",
               )
             }
           >
@@ -317,20 +374,18 @@ export default function ContactsScreen() {
                 { backgroundColor: ResQColors.orangeBg },
               ]}
             >
-              <Building2 size={22} color={ResQColors.orangeText} />
+              <GraduationCap size={22} color={ResQColors.orangeText} />
             </View>
-            <Text style={styles.communityCardTitle}>Office Staff</Text>
+            <Text style={styles.communityCardTitle}>Classmates</Text>
             <Text style={styles.communityCountSubtext}>
-              {officeContacts.length}{" "}
-              {officeContacts.length === 1 ? "contact" : "contacts"}
+              {classmatesFriends.length}{" "}
+              {classmatesFriends.length === 1 ? "contact" : "contacts"}
             </Text>
-
-            {/* Dynamic Avatar Stack */}
-            {renderAvatarStack(officeContacts)}
+            {renderAvatarStack(classmatesFriends)}
           </TouchableOpacity>
         </View>
 
-        {/* All Contacts Section */}
+        {/* ALL CONTACTS */}
         <View style={[styles.sectionHeaderRow, { marginTop: 24 }]}>
           <Text style={styles.sectionTitleText}>ALL CONTACTS</Text>
           <Text style={styles.contactCountText}>
@@ -339,31 +394,62 @@ export default function ContactsScreen() {
         </View>
 
         <View style={styles.contactsListContainer}>
-          {filteredContacts.map((contact, idx) => (
-            <Contacts
-              key={contact.id}
-              id={contact.id}
-              idx={idx}
-              name={contact.name}
-              initials={contact.initials}
-              phone={contact.phone}
-              avatarUrl={contact.avatarUrl}
-              badgeType={contact.badgeType}
-              relationship={contact.relationship}
-              status={contact.status}
-              statusColor={contact.statusColor}
-              avatarColor={contact.avatarColor}
-              avatarTextColor={contact.avatarTextColor}
-              verified={contact.verified}
-              handleCallPress={handleCallPress}
-              handleChatPress={handleChatPress}
-              handleDeleteContact={handleDeleteContact}
-            />
-          ))}
+          {isLoading ? (
+            /* ── Loading state ── */
+            <View style={styles.centerState}>
+              <HeartBeatWave
+                width={180}
+                color={ResQColors.primaryRed}
+                thickness={5}
+              />
+              <Text style={styles.loadingText}>Loading contacts…</Text>
+            </View>
+          ) : filteredContacts.length === 0 ? (
+            /* ── Empty state ── */
+            <View style={styles.centerState}>
+              <View style={styles.emptyIconWrap}>
+                <UsersRound size={38} color={ResQColors.textFaint} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {searchQuery.trim()
+                  ? "No contacts match your search"
+                  : "No contacts yet"}
+              </Text>
+              <Text style={styles.emptySubtext}>
+                {searchQuery.trim()
+                  ? `We couldn't find anyone matching "${searchQuery}".`
+                  : "People you connect with will appear here. Tap the + button to find friends."}
+              </Text>
+            </View>
+          ) : (
+            filteredContacts.map((contact) => (
+              <Contacts
+                key={contact.id}
+                id={contact.id}
+                idx={0}
+                name={contact.name}
+                initials={contact.initials}
+                phone={contact.phone}
+                avatarUrl={contact.avatarUrl}
+                badgeType={contact.badgeType}
+                relationship={contact.relationship}
+                status={contact.status}
+                statusColor={contact.statusColor}
+                avatarColor={contact.avatarColor}
+                avatarTextColor={contact.avatarTextColor}
+                verified={contact.verified}
+                handleCallPress={handleCallPress}
+                handleChatPress={(name, obj) =>
+                  handleChatPress(name, { ...obj, userId: contact.userId })
+                }
+                onLongPress={handleLongPress}
+              />
+            ))
+          )}
         </View>
       </ScrollView>
 
-      {/* Floating Add Contact Button (Navigates to Connect screen) */}
+      {/* FAB */}
       <TouchableOpacity
         onPress={() => router.push("/connect")}
         style={[styles.fabButton, { bottom: 90 + insets.bottom }]}
@@ -372,83 +458,14 @@ export default function ContactsScreen() {
         <UserPlus size={26} color="#FFFFFF" strokeWidth={2.3} />
       </TouchableOpacity>
 
-      {/* Add Contact Modal Form */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={addModalVisible}
-        onRequestClose={() => setAddModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Add Contact</Text>
-              <TouchableOpacity
-                onPress={() => setAddModalVisible(false)}
-                style={{ padding: 4 }}
-              >
-                <X size={22} color={ResQColors.textPrimary} />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalForm}>
-              <Text style={styles.inputLabel}>Full Name</Text>
-              <TextInput
-                placeholder="e.g. Austin Arthur, Lawrence"
-                value={newName}
-                onChangeText={setNewName}
-                style={styles.input}
-                placeholderTextColor={ResQColors.textFaint}
-              />
-
-              <Text style={styles.inputLabel}>Phone Number</Text>
-              <TextInput
-                placeholder="e.g. +44 999 999 999"
-                value={newPhone}
-                onChangeText={setNewPhone}
-                keyboardType="phone-pad"
-                style={styles.input}
-                placeholderTextColor={ResQColors.textFaint}
-              />
-
-              <Text style={styles.inputLabel}>Category / Badge</Text>
-              <View style={styles.categoryPickerRow}>
-                {(["Family", "Office", "Friend", "Campus"] as const).map(
-                  (cat) => (
-                    <TouchableOpacity
-                      key={cat}
-                      style={[
-                        styles.categoryOptionButton,
-                        newCategory === cat &&
-                          styles.categoryOptionButtonSelected,
-                      ]}
-                      onPress={() => setNewCategory(cat)}
-                    >
-                      <Text
-                        style={[
-                          styles.categoryOptionText,
-                          newCategory === cat &&
-                            styles.categoryOptionTextSelected,
-                        ]}
-                      >
-                        {cat}
-                      </Text>
-                    </TouchableOpacity>
-                  ),
-                )}
-              </View>
-
-              <TouchableOpacity
-                onPress={handleAddContact}
-                style={styles.saveButton}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.saveButtonText}>Save Contact</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Contact Action Modal */}
+      <ContactActionModal
+        contact={modalContact}
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        onSaveRelationship={handleSaveRelationship}
+        onRemove={handleRemove}
+      />
     </SafeAreaView>
   );
 }
@@ -582,7 +599,6 @@ const styles = StyleSheet.create({
   miniAvatarText: {
     fontSize: 10.5,
     fontFamily: typography.bold,
-    color: "#991B1B",
   },
   miniAvatarImage: {
     width: 28,
@@ -610,6 +626,42 @@ const styles = StyleSheet.create({
   contactsListContainer: {
     gap: 2,
   },
+  // ── Loading / Empty ───────────────────────────────────────────────
+  centerState: {
+    alignItems: "center",
+    paddingVertical: 52,
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    fontFamily: typography.medium,
+    fontSize: 14,
+    color: ResQColors.textMuted,
+    marginTop: 8,
+  },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: ResQColors.cardSurfaceSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 18,
+  },
+  emptyTitle: {
+    fontFamily: typography.bold,
+    fontSize: 17,
+    color: ResQColors.textPrimary,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  emptySubtext: {
+    fontFamily: typography.regular,
+    fontSize: 14,
+    color: ResQColors.textMuted,
+    textAlign: "center",
+    lineHeight: 21,
+  },
+  // ── FAB ───────────────────────────────────────────────────────────
   fabButton: {
     position: "absolute",
     right: 20,
@@ -625,96 +677,5 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 6,
     zIndex: 20,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: ResQColors.cardSurface,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 40,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderColor: ResQColors.borderSubtle,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontFamily: typography.bold,
-    color: ResQColors.textPrimary,
-  },
-  modalForm: {
-    paddingTop: 20,
-  },
-  inputLabel: {
-    fontSize: 13.5,
-    fontFamily: typography.semibold,
-    color: ResQColors.textSecondary,
-    marginBottom: 8,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: ResQColors.border,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 15,
-    fontFamily: typography.regular,
-    color: ResQColors.textPrimary,
-    marginBottom: 18,
-    backgroundColor: "#F9FAFB",
-  },
-  categoryPickerRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 24,
-  },
-  categoryOptionButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: ResQColors.border,
-    borderRadius: 12,
-    paddingVertical: 10,
-    alignItems: "center",
-    backgroundColor: ResQColors.cardSurface,
-  },
-  categoryOptionButtonSelected: {
-    borderColor: ResQColors.primaryRed,
-    backgroundColor: ResQColors.primaryRedLight,
-  },
-  categoryOptionText: {
-    fontSize: 13,
-    fontFamily: typography.medium,
-    color: ResQColors.textMuted,
-  },
-  categoryOptionTextSelected: {
-    color: ResQColors.primaryRed,
-    fontFamily: typography.bold,
-  },
-  saveButton: {
-    backgroundColor: ResQColors.primaryRed,
-    borderRadius: 16,
-    paddingVertical: 15,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: ResQColors.primaryRed,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontFamily: typography.semibold,
-    color: "#FFFFFF",
   },
 });

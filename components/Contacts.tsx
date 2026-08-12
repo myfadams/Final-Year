@@ -1,13 +1,20 @@
 import Colors from "@/constants/Colors";
 import { ContactsProp } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
+import { Image } from "expo-image";
 import { BadgeCheck, MessageSquare, Phone } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
+/** Returns only the first two whitespace-separated words of a full name. */
+function firstTwoNames(fullName: string): string {
+  return fullName.trim().split(/\s+/).slice(0, 2).join(" ");
+}
+
 interface specifiedProp {
   handleChatPress?: (...args: any[]) => void;
-  handleDeleteContact?: (...args: any[]) => void;
+  /** Called with (id, name) when the card is long-pressed. The parent decides what to show. */
+  onLongPress?: (id: string | number, name: string) => void;
   handleCallPress?: (...args: any[]) => void;
   idx: number;
 }
@@ -23,7 +30,7 @@ const Contacts: React.FC<ContactsProp & specifiedProp> = ({
   avatarTextColor,
   handleCallPress,
   handleChatPress,
-  handleDeleteContact,
+  onLongPress,
   verified,
   hasLeftAccent,
   hasMessage = true,
@@ -33,6 +40,7 @@ const Contacts: React.FC<ContactsProp & specifiedProp> = ({
 }) => {
   const isOffline = status === "Offline";
   const categoryLabel = badgeType || relationship || "Contact";
+
   // Determine avatar background and text color based on design spec
   const isSolid =
     avatarTextColor === "#FFFFFF" ||
@@ -57,27 +65,40 @@ const Contacts: React.FC<ContactsProp & specifiedProp> = ({
   return (
     <TouchableOpacity
       activeOpacity={0.9}
-      onLongPress={() => handleDeleteContact?.(id, name)}
+      onLongPress={() => onLongPress?.(id, name)}
       style={[styles.contactCard, hasLeftAccent && styles.leftAccentCard]}
     >
       {hasLeftAccent && <View style={styles.leftAccentBar} />}
 
-      {/* Avatar */}
-      <View
-        style={[
-          styles.avatarBox,
-          { backgroundColor: avatarBg, borderColor: avatarBorder },
-        ]}
-      >
-        <Text style={[styles.avatarText, { color: initialsColor }]}>
-          {initials}
-        </Text>
-      </View>
+      {/* Avatar — prefer real photo, fallback to initials */}
+      {avatarUrl ? (
+        <Image
+          source={{ uri: avatarUrl }}
+          style={[
+            styles.avatarBox,
+            styles.avatarImage,
+            { borderColor: avatarBorder ?? "#E5E7EB" },
+          ]}
+          contentFit="cover"
+          transition={200}
+        />
+      ) : (
+        <View
+          style={[
+            styles.avatarBox,
+            { backgroundColor: avatarBg, borderColor: avatarBorder },
+          ]}
+        >
+          <Text style={[styles.avatarText, { color: initialsColor }]}>
+            {initials}
+          </Text>
+        </View>
+      )}
 
       {/* Info */}
       <View style={styles.contactInfo}>
         <View style={styles.nameRow}>
-          <Text style={styles.contactName}>{name}</Text>
+          <Text style={styles.contactName} numberOfLines={2}>{firstTwoNames(name)}</Text>
           {verified && (
             <BadgeCheck
               size={16}
@@ -132,7 +153,7 @@ const Contacts: React.FC<ContactsProp & specifiedProp> = ({
           onPress={() => !isOffline && handleCallPress?.(name)}
           style={[
             styles.actionButton,
-            { backgroundColor: isOffline ? "#F3F4F6" : "#FEE2E2" }, // light pink for active, light grey for offline
+            { backgroundColor: isOffline ? "#F3F4F6" : "#FEE2E2" },
           ]}
           activeOpacity={0.7}
         >
@@ -168,7 +189,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   leftAccentCard: {
-    paddingLeft: 20, // add a bit more padding on the left to clear the bar
+    paddingLeft: 20,
   },
   leftAccentBar: {
     position: "absolute",
@@ -185,6 +206,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     alignItems: "center",
     justifyContent: "center",
+  },
+  avatarImage: {
+    backgroundColor: "#E5E7EB",
   },
   avatarText: {
     fontSize: 15,
