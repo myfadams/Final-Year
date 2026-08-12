@@ -40,9 +40,7 @@ export default function ContactChatScreen() {
   // Contact Details
   const headerName = params.name || "Contact User";
   const headerSubtitle = params.relationship || "Trusted Contact";
-  const headerAvatar =
-    params.avatarUrl ||
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80";
+  const headerAvatar = params.avatarUrl || undefined;
 
   // State Management
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -743,6 +741,7 @@ export default function ContactChatScreen() {
             <ChatMessageItem
               key={msg.id}
               msg={msg}
+              headerName={headerName}
               headerAvatar={headerAvatar}
               playingMessageId={playingMessageId}
               pausedMessageId={pausedMessageId}

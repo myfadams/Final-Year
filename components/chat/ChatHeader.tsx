@@ -6,10 +6,34 @@ import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name: string) {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
+function getAvatarColor(name: string) {
+  const code = (name || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
 interface ChatHeaderProps {
   headerName: string;
   headerSubtitle: string;
-  headerAvatar: string;
+  headerAvatar?: string;
   showSceneBadge?: boolean;
   sceneBadgeText?: string;
   showCallButton?: boolean;
@@ -34,6 +58,8 @@ export default function ChatHeader({
   onImOkayPress,
 }: ChatHeaderProps) {
   const insets = useSafeAreaInsets();
+  const avatarColor = getAvatarColor(headerName);
+  const initials = getInitials(headerName);
 
   return (
     <View style={[styles.navHeaderWrapper, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -49,7 +75,21 @@ export default function ChatHeader({
           onPress={onOptionsPress}
         >
           <View style={styles.avatarWrapper}>
-            <Image source={{ uri: headerAvatar }} style={styles.headerAvatar} />
+            {headerAvatar ? (
+              <Image source={{ uri: headerAvatar }} style={styles.headerAvatar} contentFit="cover" />
+            ) : (
+              <View
+                style={[
+                  styles.headerAvatar,
+                  styles.initialsAvatar,
+                  { backgroundColor: avatarColor.bg },
+                ]}
+              >
+                <Text style={[styles.initialsText, { color: avatarColor.text }]}>
+                  {initials}
+                </Text>
+              </View>
+            )}
             <View style={styles.onlineBadgeDot} />
           </View>
           <View style={{ flex: 1, marginRight: 6 }}>
@@ -138,6 +178,14 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     backgroundColor: "#F1F5F9",
+  },
+  initialsAvatar: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  initialsText: {
+    fontFamily: typography.bold,
+    fontSize: 14,
   },
   onlineBadgeDot: {
     position: "absolute",

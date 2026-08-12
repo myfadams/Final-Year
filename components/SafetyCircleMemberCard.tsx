@@ -1,4 +1,4 @@
-import Colors, { ResQColors } from "@/constants/Colors";
+import Colors from "@/constants/Colors";
 import { ContactsProp } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
@@ -6,8 +6,7 @@ import {
   MessageSquare,
   Phone,
   ShieldCheck,
-  Trash2,
-  User,
+  Trash2
 } from "lucide-react-native";
 import React from "react";
 import {

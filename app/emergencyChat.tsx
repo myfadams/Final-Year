@@ -690,6 +690,7 @@ export default function EmergencyChatScreen() {
             <ChatMessageItem
               key={msg.id}
               msg={msg}
+              headerName={headerName}
               headerAvatar={headerAvatar}
               playingMessageId={playingMessageId}
               pausedMessageId={pausedMessageId}

@@ -21,9 +21,34 @@ import {
 
 const RECORDING_WAVEFORM_BARS = [8, 16, 24, 12, 28, 18, 30, 22, 14, 26, 16, 28, 20, 10, 22, 14, 8];
 
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name?: string) {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
+function getAvatarColor(name?: string) {
+  const code = (name || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
 interface ChatMessageItemProps {
   msg: ChatMessage;
-  headerAvatar: string;
+  headerAvatar?: string;
+  headerName?: string;
   playingMessageId: string | null;
   pausedMessageId?: string | null;
   loadingMessageId?: string | null;
@@ -38,6 +63,7 @@ interface ChatMessageItemProps {
 export default function ChatMessageItem({
   msg,
   headerAvatar,
+  headerName,
   playingMessageId,
   pausedMessageId,
   loadingMessageId,
@@ -63,10 +89,38 @@ export default function ChatMessageItem({
   const isAnyLoading = !!loadingMessageId && loadingMessageId !== msg.id;
   const isPlayingOrPausedThis = playingMessageId === msg.id || pausedMessageId === msg.id;
 
+  const avatarUri = msg.senderAvatar || headerAvatar;
+  const displayName = msg.senderName || headerName || "Contact";
+  const avatarColor = getAvatarColor(displayName);
+  const initials = getInitials(displayName);
+
   return (
     <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
       {!isMe && (
-        <Image source={{ uri: msg.senderAvatar || headerAvatar }} style={styles.messageAvatar} />
+        avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={styles.messageAvatar} />
+        ) : (
+          <View
+            style={[
+              styles.messageAvatar,
+              {
+                backgroundColor: avatarColor.bg,
+                justifyContent: "center",
+                alignItems: "center",
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontFamily: typography.bold,
+                fontSize: 11,
+                color: avatarColor.text,
+              }}
+            >
+              {initials}
+            </Text>
+          </View>
+        )
       )}
 
       <View style={{ maxWidth: "80%" }}>

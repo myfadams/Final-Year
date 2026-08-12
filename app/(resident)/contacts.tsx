@@ -1,7 +1,3 @@
-import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
-import ContactActionModal from "@/components/ContactActionModal";
-import Contacts from "@/components/Contacts";
-import HeartBeatWave from "@/components/HeartBeatWave";
 import {
   FriendContact,
   getFriends,
@@ -9,6 +5,10 @@ import {
   updateFriendRelationship,
 } from "@/backend/friends";
 import { supabase } from "@/backend/supabaseConfig";
+import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
+import ContactActionModal from "@/components/ContactActionModal";
+import Contacts from "@/components/Contacts";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useFocusEffect, useRouter } from "expo-router";
