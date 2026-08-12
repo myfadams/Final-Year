@@ -2,9 +2,35 @@ import { ResQColors } from "@/constants/Colors";
 import { PendingRequest } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
-import { MapPin, X } from "lucide-react-native";
+import { GraduationCap, X } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getAvatarColor(name: string) {
+  const code = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
 
 interface PendingRequestCardProps {
   item: PendingRequest;
@@ -18,16 +44,32 @@ export const PendingRequestCard: React.FC<PendingRequestCardProps> = ({
   onReject,
 }) => {
   const isMedic = item.role.toLowerCase().includes("medic");
+  const avatarColor = getAvatarColor(item.name);
+  const initials = getInitials(item.name);
 
   return (
     <View style={styles.card}>
       <View style={styles.contentRow}>
-        <Image
-          source={{ uri: item.avatarUrl }}
-          style={styles.avatar}
-          contentFit="cover"
-          transition={200}
-        />
+        {item.avatarUrl ? (
+          <Image
+            source={{ uri: item.avatarUrl }}
+            style={styles.avatar}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              styles.initialsAvatar,
+              { backgroundColor: avatarColor.bg },
+            ]}
+          >
+            <Text style={[styles.initialsText, { color: avatarColor.text }]}>
+              {initials}
+            </Text>
+          </View>
+        )}
         <View style={styles.infoContainer}>
           <Text style={styles.name}>{item.name}</Text>
 
@@ -59,7 +101,7 @@ export const PendingRequestCard: React.FC<PendingRequestCardProps> = ({
 
             {/* Distance */}
             <View style={styles.distanceRow}>
-              <MapPin size={12} color={ResQColors.textSubtle} style={styles.pinIcon} />
+              <GraduationCap size={12} color={ResQColors.textSubtle} style={styles.pinIcon} />
               <Text style={styles.distanceText}>{item.distance}</Text>
             </View>
           </View>
@@ -130,6 +172,14 @@ const styles = StyleSheet.create({
   roleText: {
     fontFamily: typography.semibold,
     fontSize: 11.5,
+  },
+  initialsAvatar: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  initialsText: {
+    fontFamily: typography.bold,
+    fontSize: 18,
   },
   distanceRow: {
     flexDirection: "row",

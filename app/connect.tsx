@@ -4,11 +4,13 @@ import FriendSearchResultCard from "@/components/connect/FriendSearchResultCard"
 import PendingRequestCard from "@/components/connect/PendingRequestCard";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import { ResQColors } from "@/constants/Colors";
-import { FriendSearchResult, PendingRequest } from "@/constants/interfaces";
+import { FriendSearchResult } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
 import {
   acceptFriendRequest,
+  getPendingRequests,
   getSuggestedUsers,
+  IncomingFriendRequest,
   removeFriendRequest,
   searchUsers,
   sendFriendRequest,
@@ -39,19 +41,25 @@ export default function ConnectScreen() {
   const searchRequestId = useRef(0);
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Pending requests (still temp data – separate task) ──────────────────────
-  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
+  // ── Pending requests – loaded from Supabase ────────────────────────────────
+  const [pendingRequests, setPendingRequests] = useState<IncomingFriendRequest[]>([]);
+  const [isPendingLoading, setIsPendingLoading] = useState(true);
 
   // ── Suggested responders ────────────────────────────────────────────────────
   const [suggestedUsers, setSuggestedUsers] = useState<FriendSearchResult[]>(
     [],
   );
 
-  // Load suggested users on mount
+  // Load pending requests and suggested users on mount
   useEffect(() => {
     (async () => {
-      const { data } = await getSuggestedUsers(2);
-      setSuggestedUsers(data);
+      const [pendingResult, suggestedResult] = await Promise.all([
+        getPendingRequests(),
+        getSuggestedUsers(2),
+      ]);
+      setPendingRequests(pendingResult.data);
+      setIsPendingLoading(false);
+      setSuggestedUsers(suggestedResult.data);
     })();
   }, []);
 
@@ -194,21 +202,32 @@ export default function ConnectScreen() {
     [],
   );
 
-  // ── Legacy temp-data handlers ───────────────────────────────────────────────
-  const handleAcceptRequest = (id: string) => {
-    const accepted = pendingRequests.find((r) => r.id === id);
-    setPendingRequests((prev) => prev.filter((r) => r.id !== id));
-    if (accepted) {
-      Alert.alert(
-        "Request Accepted",
-        `You are now connected with ${accepted.name}.`,
-      );
-    }
-  };
+  // ── Pending request handlers (Supabase-backed) ─────────────────────────────
+  const handleAcceptRequest = useCallback(async (requesterId: string) => {
+    // Optimistic: remove from list immediately
+    setPendingRequests((prev) => prev.filter((r) => r.id !== requesterId));
 
-  const handleRejectRequest = (id: string) => {
-    setPendingRequests((prev) => prev.filter((r) => r.id !== id));
-  };
+    const { error } = await acceptFriendRequest(requesterId);
+    if (error) {
+      // Rollback: re-fetch to restore the list
+      const { data } = await getPendingRequests();
+      setPendingRequests(data);
+      Alert.alert("Error", error);
+    }
+  }, []);
+
+  const handleRejectRequest = useCallback(async (requesterId: string) => {
+    // Optimistic: remove from list immediately
+    setPendingRequests((prev) => prev.filter((r) => r.id !== requesterId));
+
+    const { error } = await removeFriendRequest(requesterId);
+    if (error) {
+      // Rollback: re-fetch to restore the list
+      const { data } = await getPendingRequests();
+      setPendingRequests(data);
+      Alert.alert("Error", error);
+    }
+  }, []);
 
   // ── Derived state ───────────────────────────────────────────────────────────
   const isSearching = searchQuery.trim().length > 0;

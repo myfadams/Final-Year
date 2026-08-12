@@ -77,6 +77,86 @@ export async function getSuggestedUsers(
   }
 }
 
+// ── Get Pending Requests ──────────────────────────────────────────────────────
+
+/**
+ * Shape consumed by PendingRequestCard (matches PendingRequest interface).
+ */
+export interface IncomingFriendRequest {
+  id: string;        // requester's public.users id
+  name: string;
+  role: string;      // mapped from public.users.role
+  distance: string;  // mapped from program_of_study (no live distance available)
+  avatarUrl: string;
+}
+
+/**
+ * Fetches all pending incoming friend requests for the current user.
+ * Uses direct table queries (no RPC needed) to avoid PostgREST schema cache issues.
+ *
+ * Step 1: query `friends` where friend_id = me AND status = 'pending'
+ * Step 2: query `public.users` for those IDs to get display info
+ */
+export async function getPendingRequests(): Promise<{
+  data: IncomingFriendRequest[];
+  error: string | null;
+}> {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { data: [], error: "Not authenticated" };
+    }
+
+    // Step 1: get the user_ids of people who sent me a pending request
+    const { data: friendRows, error: friendsError } = await supabase
+      .from("friends")
+      .select("user_id")
+      .eq("friend_id", user.id)
+      .eq("status", "pending");
+
+    if (friendsError) {
+      console.error("getPendingRequests friends query error:", friendsError.message);
+      return { data: [], error: friendsError.message };
+    }
+
+    if (!friendRows || friendRows.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const requesterIds = friendRows.map((r) => r.user_id as string);
+
+    // Step 2: fetch their public user profiles
+    const { data: userRows, error: usersError } = await supabase
+      .from("users")
+      .select("id, name, profile_img_url, role, program_of_study")
+      .in("id", requesterIds);
+
+    if (usersError) {
+      console.error("getPendingRequests users query error:", usersError.message);
+      return { data: [], error: usersError.message };
+    }
+
+    const mapped: IncomingFriendRequest[] = (userRows ?? []).map((u) => ({
+      id: u.id,
+      name: u.name,
+      role: u.role ?? "Student",
+      distance: u.program_of_study ?? "",
+      avatarUrl: u.profile_img_url ?? "",
+    }));
+
+    return { data: mapped, error: null };
+  } catch (err: any) {
+    const msg =
+      err?.message ??
+      (typeof err === "string" ? err : "Failed to load pending requests");
+    console.error("getPendingRequests exception:", msg);
+    return { data: [], error: msg };
+  }
+}
+
 // ── Send Friend Request ───────────────────────────────────────────────────────
 
 /**
