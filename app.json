@@ -29,6 +29,7 @@
       "predictiveBackGestureEnabled": false,
       "softwareKeyboardLayoutMode": "adjustResize",
       "permissions": [
+        "android.permission.RECORD_AUDIO",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -63,6 +64,12 @@
       "eas": {
         "projectId": "d71780ce-e633-44a6-96ca-0c28d2d58417"
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/d71780ce-e633-44a6-96ca-0c28d2d58417"
     }
   }
 }
