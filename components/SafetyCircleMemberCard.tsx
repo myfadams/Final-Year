@@ -24,6 +24,11 @@ interface SafetyCircleMemberCardProps {
   onRemove: (id: string | number) => void;
 }
 
+function firstTwoNames(fullName: string): string {
+  if (!fullName) return "";
+  return fullName.trim().split(/\s+/).slice(0, 2).join(" ");
+}
+
 export const SafetyCircleMemberCard: React.FC<SafetyCircleMemberCardProps> = ({
   member,
   onRemove,
@@ -119,7 +124,9 @@ export const SafetyCircleMemberCard: React.FC<SafetyCircleMemberCardProps> = ({
 
           <View style={styles.infoContainer}>
             <View style={styles.nameRow}>
-              <Text style={styles.memberName}>{member.name}</Text>
+              <Text style={styles.memberName} numberOfLines={2}>
+                {firstTwoNames(member.name)}
+              </Text>
             </View>
 
             {/* Relationship Badge & Status */}

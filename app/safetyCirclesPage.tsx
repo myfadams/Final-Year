@@ -1,10 +1,16 @@
 import AddNetworkMemberModal from "@/components/AddNetworkMemberModal";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
 import SafetyCircleMemberCard from "@/components/SafetyCircleMemberCard";
-import Colors, { ResQColors } from "@/constants/Colors";
+import {
+  FriendContact,
+  getFriends,
+  updateTrustedNetworkStatus,
+} from "@/backend/friends";
+import { ResQColors } from "@/constants/Colors";
 import { ContactsProp } from "@/constants/interfaces";
-import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
+import { useFocusEffect } from "expo-router";
 import {
   AlertCircle,
   Plus,
@@ -12,7 +18,7 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -23,38 +29,93 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getAvatarColor(name: string) {
+  const code = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
+function toMemberProp(fc: FriendContact): ContactsProp {
+  const ac = getAvatarColor(fc.name);
+  return {
+    id: fc.friendshipId,
+    name: fc.name,
+    phone: fc.phone ?? "",
+    relationship: fc.relationship ?? "Friend",
+    badgeType: fc.relationship ?? "Friend",
+    initials: getInitials(fc.name),
+    avatarUrl: fc.profile_img_url ?? undefined,
+    avatarColor: ac.bg,
+    avatarTextColor: ac.text,
+    status: "Active Circle",
+    statusColor: "#22C55E",
+    isTrustedNetwork: fc.is_in_trusted_network,
+  };
+}
+
 const SafetyCirclesPage = () => {
-  const [appContacts, setAppContacts] =
-    useState<ContactsProp[]>(DEFAULT_CONTACTS);
+  const [networkMembers, setNetworkMembers] = useState<FriendContact[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
 
-  // Active Safety Circle members derived from app contacts
-  const activeCircleMembers = appContacts.filter((c) => c.isTrustedNetwork);
+  // Fetch accepted friends with is_in_trusted_network === true
+  const fetchNetworkMembers = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
+    const { data, error } = await getFriends();
+    setIsLoading(false);
 
-  // Toggle member's trusted network status (adds or removes)
-  const handleToggleMember = (id: string | number) => {
-    setAppContacts((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, isTrustedNetwork: !c.isTrustedNetwork } : c))
-    );
+    if (error) {
+      console.warn("Error fetching network members:", error);
+    } else {
+      const active = data.filter((f) => f.is_in_trusted_network);
+      setNetworkMembers(active);
+    }
+  }, []);
 
-    // Sync in global DEFAULT_CONTACTS array
-    const target = DEFAULT_CONTACTS.find((c) => c.id === id);
-    if (target) {
-      target.isTrustedNetwork = !target.isTrustedNetwork;
+  useEffect(() => {
+    fetchNetworkMembers(true);
+  }, [fetchNetworkMembers]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchNetworkMembers(false);
+    }, [fetchNetworkMembers])
+  );
+
+  // Remove member from trusted network (sets is_in_trusted_network to false in Supabase)
+  const handleRemoveMember = async (friendshipId: string | number) => {
+    const idStr = String(friendshipId);
+
+    // Optimistic removal
+    setNetworkMembers((prev) => prev.filter((m) => m.friendshipId !== idStr));
+
+    const { error } = await updateTrustedNetworkStatus(idStr, false);
+
+    if (error) {
+      Alert.alert("Error", error);
+      fetchNetworkMembers(false); // rollback on error
     }
   };
 
-  // Remove member directly from active list
-  const handleRemoveMember = (id: string | number) => {
-    setAppContacts((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, isTrustedNetwork: false } : c))
-    );
-
-    const target = DEFAULT_CONTACTS.find((c) => c.id === id);
-    if (target) {
-      target.isTrustedNetwork = false;
-    }
-  };
+  const activeCircleProps = networkMembers.map(toMemberProp);
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
@@ -93,8 +154,8 @@ const SafetyCirclesPage = () => {
           </View>
 
           <Text style={styles.overviewTitle}>
-            {activeCircleMembers.length} Active Circle{" "}
-            {activeCircleMembers.length === 1 ? "Member" : "Members"}
+            {networkMembers.length} Active Circle{" "}
+            {networkMembers.length === 1 ? "Member" : "Members"}
           </Text>
           <Text style={styles.overviewSubtitle}>
             Your emergency beacon is broadcast live to all members in your
@@ -107,7 +168,7 @@ const SafetyCirclesPage = () => {
           <View style={styles.sectionHeaderLeft}>
             <ShieldCheck size={18} color="#0F172A" />
             <Text style={styles.sectionTitle}>
-              Network Members ({activeCircleMembers.length})
+              Network Members ({networkMembers.length})
             </Text>
           </View>
 
@@ -122,9 +183,18 @@ const SafetyCirclesPage = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Member List or Empty State */}
-        {activeCircleMembers.length > 0 ? (
-          activeCircleMembers.map((item) => (
+        {/* Member List or Loading State or Empty State */}
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <HeartBeatWave
+              width={180}
+              color={ResQColors.primaryRed}
+              thickness={5}
+            />
+            <Text style={styles.loadingText}>Loading network members...</Text>
+          </View>
+        ) : activeCircleProps.length > 0 ? (
+          activeCircleProps.map((item) => (
             <SafetyCircleMemberCard
               key={item.id}
               member={item}
@@ -155,12 +225,11 @@ const SafetyCirclesPage = () => {
         )}
       </ScrollView>
 
-      {/* Add Member Modal Component (Connected Contacts Picker) */}
+      {/* Add Member Modal Component */}
       <AddNetworkMemberModal
         visible={isAddModalVisible}
         onClose={() => setIsAddModalVisible(false)}
-        allContacts={appContacts}
-        onToggleMember={handleToggleMember}
+        onNetworkUpdated={() => fetchNetworkMembers(false)}
       />
     </SafeAreaView>
   );
@@ -321,6 +390,22 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
     borderStyle: "dashed",
     marginTop: 10,
+  },
+  loadingContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginTop: 10,
+  },
+  loadingText: {
+    fontFamily: typography.medium,
+    fontSize: 13.5,
+    color: "#64748B",
+    marginTop: 8,
   },
   emptyIconCircle: {
     width: 56,

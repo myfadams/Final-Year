@@ -16,6 +16,15 @@ interface ProfileProp {
   size?: number;
 }
 
+function getInitials(name: string) {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
 const ProfileComponent: React.FC<ProfileProp> = ({
   borderR,
   userInfo,
@@ -74,9 +83,7 @@ const ProfileComponent: React.FC<ProfileProp> = ({
                   fontSize: Math.round(imageSize * 0.35),
                 }}
               >
-                {userInfo.name
-                  ? userInfo.name.substring(0, 1).toUpperCase()
-                  : "U"}
+                {getInitials(userInfo.name)}
               </Text>
             </View>
           )}

@@ -2,6 +2,7 @@
 // import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import { getCachedUserProfile, getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
 import { getTrustedContacts, TrustedContactRecord } from "@/backend/contacts";
+import { FriendContact, getFriends } from "@/backend/friends";
 import { getMedicalInfo, MedicalRecord } from "@/backend/medical";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
@@ -15,39 +16,30 @@ import { globalState } from "@/constants/globalState";
 import { ContactsProp } from "@/constants/interfaces";
 import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
-  Activity,
-  AlertCircle,
   AlertTriangle,
   ArrowRight,
   BriefcaseMedical,
   Check,
   CheckCircle2,
-  Droplet,
-  FileText,
   Footprints,
-  Heart,
-  HeartPulse,
   MapPin,
   Phone,
-  PhoneCall,
-  Pill,
   Plus,
   Radio,
   Search,
   ShieldAlert,
   Siren,
-  User,
   UserCheck,
   UserMinus,
   UserPlus,
-  X,
+  Users,
+  X
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
-  Linking,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -55,8 +47,24 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
+
+const AVATAR_COLORS = [
+  "#FEE2E2",
+  "#DBEAFE",
+  "#D1FAE5",
+  "#FEF3C7",
+  "#EDE9FE",
+  "#FCE7F3",
+  "#CCFBF1",
+];
+
+function getAvatarColor(name: string) {
+  if (!name) return AVATAR_COLORS[0];
+  const code = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
 
 const Home = () => {
   const router = useRouter();
@@ -89,6 +97,31 @@ const Home = () => {
     fetchUserProfileOnHome();
   }, []);
 
+  // Trusted Network Fetched Data States
+  const [trustedFriends, setTrustedFriends] = useState<FriendContact[]>([]);
+  const [isLoadingTrusted, setIsLoadingTrusted] = useState<boolean>(true);
+
+  const fetchTrustedNetwork = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoadingTrusted(true);
+    const { data, error } = await getFriends();
+    setIsLoadingTrusted(false);
+    if (error) {
+      console.warn("Error fetching trusted network on Home:", error);
+    } else {
+      const active = data.filter((f) => f.is_in_trusted_network);
+      setTrustedFriends(active);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTrustedNetwork(true);
+  }, [fetchTrustedNetwork]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchTrustedNetwork(false);
+    }, [fetchTrustedNetwork])
+  );
 
   // SOS Countdown States
   const [isCountingDown, setIsCountingDown] = useState(false);
@@ -241,27 +274,46 @@ const Home = () => {
               <Text style={styles.manageLink}>Manage</Text>
             </TouchableOpacity>
           </View>
-          <ScrollView
-            horizontal={true}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.contactsScroll}
-          >
-            {/* Trusted Contacts List */}
-            {trustedNetworkContacts.map((contact) => (
-              <ProfileComponent
-                userInfo={{
-                  name: contact.name,
-                  emergencyContact: true,
-                  profileColor: contact.avatarColor || Colors.light.primary,
-                  avatarUrl: contact.avatarUrl,
-                  statusColor: contact.statusColor || ResQColors.statusGreen,
-                }}
-                borderR={true}
-                size={64}
-                key={contact.id}
+
+          {isLoadingTrusted ? (
+            <View style={styles.trustedLoadingContainer}>
+              <HeartBeatWave
+                width={140}
+                color={ResQColors.primaryRed}
+                thickness={4}
               />
-            ))}
-          </ScrollView>
+              <Text style={styles.trustedLoadingText}>Loading network...</Text>
+            </View>
+          ) : trustedFriends.length > 0 ? (
+            <ScrollView
+              horizontal={true}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.contactsScroll}
+            >
+              {trustedFriends.map((contact) => (
+                <ProfileComponent
+                  userInfo={{
+                    name: contact.name,
+                    emergencyContact: true,
+                    profileColor: getAvatarColor(contact.name),
+                    avatarUrl: contact.profile_img_url ?? undefined,
+                    statusColor: ResQColors.statusGreen,
+                  }}
+                  borderR={true}
+                  size={64}
+                  key={contact.friendshipId}
+                />
+              ))}
+            </ScrollView>
+          ) : (
+            <View style={styles.trustedEmptyContainer}>
+              <Users size={28} color="#94A3B8" />
+              <Text style={styles.trustedEmptyTitle}>No Trusted Contacts</Text>
+              <Text style={styles.trustedEmptySubtext}>
+                Add connected friends to your trusted safety circle so they get notified during emergencies.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* SOS BUTTON PANEL */}
@@ -1315,6 +1367,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: typography.semibold,
     color: Colors.light.primary,
+  },
+  trustedLoadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+  },
+  trustedLoadingText: {
+    fontFamily: typography.medium,
+    fontSize: 12.5,
+    color: Colors.light.textMuted,
+    marginTop: 6,
+  },
+  trustedEmptyContainer: {
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: ResQColors.border,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  trustedEmptyTitle: {
+    fontSize: 14,
+    fontFamily: typography.bold,
+    color: Colors.light.text,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  trustedEmptySubtext: {
+    fontSize: 12,
+    fontFamily: typography.regular,
+    color: Colors.light.textMuted,
+    textAlign: "center",
+    lineHeight: 17,
   },
 });
 

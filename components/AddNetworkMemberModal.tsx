@@ -1,9 +1,16 @@
-import Colors, { ResQColors } from "@/constants/Colors";
-import { ContactsProp } from "@/constants/interfaces";
-import { typography } from "@/constants/typograyph";
-import { Check, Plus, Search, UserPlus, X } from "lucide-react-native";
-import React, { useState } from "react";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import {
+  FriendContact,
+  getFriends,
+  updateTrustedNetworkStatus,
+} from "@/backend/friends";
+import Colors, { ResQColors } from "@/constants/Colors";
+import { typography } from "@/constants/typograyph";
+import { Image } from "expo-image";
+import { Check, Plus, Search, UserPlus, X } from "lucide-react-native";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,27 +23,94 @@ import {
   View,
 } from "react-native";
 
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function getAvatarColor(name: string) {
+  const code = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
 interface AddNetworkMemberModalProps {
   visible: boolean;
   onClose: () => void;
-  allContacts: ContactsProp[];
-  onToggleMember: (id: string | number) => void;
+  onNetworkUpdated?: () => void;
 }
 
 export const AddNetworkMemberModal: React.FC<AddNetworkMemberModalProps> = ({
   visible,
   onClose,
-  allContacts,
-  onToggleMember,
+  onNetworkUpdated,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [friends, setFriends] = useState<FriendContact[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch friends list from friends table when modal opens
+  const loadFriendsList = useCallback(async () => {
+    setIsLoading(true);
+    const { data, error } = await getFriends();
+    setIsLoading(false);
+    if (error) {
+      console.warn("Error fetching friends for network modal:", error);
+    } else {
+      setFriends(data);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (visible) {
+      loadFriendsList();
+    }
+  }, [visible, loadFriendsList]);
 
   const handleClose = () => {
     setSearchQuery("");
     onClose();
   };
 
-  const filteredContacts = allContacts.filter(
+  const handleToggleTrustedNetwork = async (item: FriendContact) => {
+    const newStatus = !item.is_in_trusted_network;
+
+    // Optimistic update
+    setFriends((prev) =>
+      prev.map((f) =>
+        f.friendshipId === item.friendshipId
+          ? { ...f, is_in_trusted_network: newStatus }
+          : f
+      )
+    );
+
+    const { error } = await updateTrustedNetworkStatus(
+      item.friendshipId,
+      newStatus
+    );
+
+    if (error) {
+      Alert.alert("Error", error);
+      loadFriendsList(); // rollback on error
+    } else {
+      onNetworkUpdated?.();
+    }
+  };
+
+  const filteredContacts = friends.filter(
     (c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.relationship.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -66,7 +140,7 @@ export const AddNetworkMemberModal: React.FC<AddNetworkMemberModalProps> = ({
                   <View>
                     <Text style={styles.title}>Add to Safety Circle</Text>
                     <Text style={styles.subtitle}>
-                      Select connected contacts from your app directory
+                      Select connected friends from your network
                     </Text>
                   </View>
                 </View>
@@ -84,7 +158,7 @@ export const AddNetworkMemberModal: React.FC<AddNetworkMemberModalProps> = ({
                 <Search size={18} color="#64748B" />
                 <TextInput
                   style={styles.searchInput}
-                  placeholder="Search connected contacts..."
+                  placeholder="Search connected friends..."
                   placeholderTextColor="#94A3B8"
                   value={searchQuery}
                   onChangeText={setSearchQuery}
@@ -96,87 +170,94 @@ export const AddNetworkMemberModal: React.FC<AddNetworkMemberModalProps> = ({
                 ) : null}
               </View>
 
-              {/* Contacts List */}
-              <ScrollView
-                showsVerticalScrollIndicator={false}
-                style={styles.contactListScroll}
-                contentContainerStyle={styles.contactListContent}
-              >
-                {filteredContacts.length > 0 ? (
-                  filteredContacts.map((item) => {
-                    const isAdded = !!item.isTrustedNetwork;
-                    const initials =
-                      item.initials ||
-                      item.name
-                        .trim()
-                        .split(" ")
-                        .filter(Boolean)
-                        .map((n) => n[0])
-                        .join("")
-                        .substring(0, 2)
-                        .toUpperCase();
+              {/* Contacts List or Loading Loader */}
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <HeartBeatWave
+                    width={180}
+                    color={ResQColors.primaryRed}
+                    thickness={5}
+                  />
+                  <Text style={styles.loadingText}>Fetching friends...</Text>
+                </View>
+              ) : (
+                <ScrollView
+                  showsVerticalScrollIndicator={false}
+                  style={styles.contactListScroll}
+                  contentContainerStyle={styles.contactListContent}
+                >
+                  {filteredContacts.length > 0 ? (
+                    filteredContacts.map((item) => {
+                      const isAdded = item.is_in_trusted_network;
+                      const initials = getInitials(item.name);
+                      const ac = getAvatarColor(item.name);
 
-                    return (
-                      <View key={item.id} style={styles.contactListItem}>
-                        <View style={styles.contactItemLeft}>
-                          <View
+                      return (
+                        <View key={item.friendshipId} style={styles.contactListItem}>
+                          <View style={styles.contactItemLeft}>
+                            {item.profile_img_url ? (
+                              <Image
+                                source={{ uri: item.profile_img_url }}
+                                style={styles.avatarImage}
+                              />
+                            ) : (
+                              <View
+                                style={[
+                                  styles.avatar,
+                                  { backgroundColor: ac.bg },
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.avatarText,
+                                    { color: ac.text },
+                                  ]}
+                                >
+                                  {initials}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={styles.contactTextWrapper}>
+                              <Text style={styles.contactName}>{item.name}</Text>
+                              <Text style={styles.contactSubText}>
+                                {item.relationship} •{" "}
+                                {item.phone || item.program_of_study || "Connected"}
+                              </Text>
+                            </View>
+                          </View>
+
+                          <TouchableOpacity
                             style={[
-                              styles.avatar,
-                              {
-                                backgroundColor:
-                                  item.avatarColor || Colors.light.primary,
-                              },
+                              styles.actionBtn,
+                              isAdded ? styles.addedBtn : styles.addBtn,
                             ]}
+                            onPress={() => handleToggleTrustedNetwork(item)}
+                            activeOpacity={0.8}
                           >
-                            <Text
-                              style={[
-                                styles.avatarText,
-                                { color: item.avatarTextColor || "#FFFFFF" },
-                              ]}
-                            >
-                              {initials}
-                            </Text>
-                          </View>
-                          <View style={styles.contactTextWrapper}>
-                            <Text style={styles.contactName}>{item.name}</Text>
-                            <Text style={styles.contactSubText}>
-                              {item.relationship} •{" "}
-                              {item.phone || "+233 24 000 0000"}
-                            </Text>
-                          </View>
+                            {isAdded ? (
+                              <View style={styles.btnRow}>
+                                <Check size={14} color="#15803D" />
+                                <Text style={styles.addedBtnText}>In Network</Text>
+                              </View>
+                            ) : (
+                              <View style={styles.btnRow}>
+                                <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
+                                <Text style={styles.addBtnText}>Add</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
                         </View>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.actionBtn,
-                            isAdded ? styles.addedBtn : styles.addBtn,
-                          ]}
-                          onPress={() => onToggleMember(item.id)}
-                          activeOpacity={0.8}
-                        >
-                          {isAdded ? (
-                            <View style={styles.btnRow}>
-                              <Check size={14} color="#15803D" />
-                              <Text style={styles.addedBtnText}>In Network</Text>
-                            </View>
-                          ) : (
-                            <View style={styles.btnRow}>
-                              <Plus size={14} color="#FFFFFF" strokeWidth={2.5} />
-                              <Text style={styles.addBtnText}>Add</Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    );
-                  })
-                ) : (
-                  <View style={styles.emptySearchContainer}>
-                    <Text style={styles.emptySearchText}>
-                      No matching contacts found.
-                    </Text>
-                  </View>
-                )}
-              </ScrollView>
+                      );
+                    })
+                  ) : (
+                    <View style={styles.emptySearchContainer}>
+                      <Text style={styles.emptySearchText}>
+                        No matching friends found.
+                      </Text>
+                    </View>
+                  )}
+                </ScrollView>
+              )}
 
               {/* Modal Footer */}
               <View style={styles.footerContainer}>
@@ -197,6 +278,23 @@ export const AddNetworkMemberModal: React.FC<AddNetworkMemberModalProps> = ({
 };
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    paddingVertical: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingText: {
+    fontFamily: typography.medium,
+    fontSize: 13,
+    color: "#64748B",
+    marginTop: 8,
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#E2E8F0",
+  },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.55)",

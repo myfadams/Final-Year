@@ -1,4 +1,4 @@
-import { FriendSearchResult, RelationshipStatus } from "@/constants/interfaces";
+import { FriendSearchResult } from "@/constants/interfaces";
 import { supabase } from "./supabaseConfig";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -472,3 +472,36 @@ export async function removeFriend(
     return { error: msg };
   }
 }
+
+// ── Update Trusted Network Status ──────────────────────────────────────────────
+
+/**
+ * Updates `is_in_trusted_network` column for a given friendship.
+ * @param friendshipId  friends.id (primary key)
+ * @param isInTrustedNetwork  boolean
+ */
+export async function updateTrustedNetworkStatus(
+  friendshipId: string,
+  isInTrustedNetwork: boolean,
+): Promise<FriendActionResult> {
+  try {
+    const { error } = await supabase
+      .from("friends")
+      .update({
+        is_in_trusted_network: isInTrustedNetwork,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", friendshipId);
+
+    if (error) {
+      console.error("updateTrustedNetworkStatus error:", error.message);
+      return { error: error.message };
+    }
+    return { error: null };
+  } catch (err: any) {
+    const msg = err?.message ?? "Failed to update trusted network status";
+    console.error("updateTrustedNetworkStatus exception:", msg);
+    return { error: msg };
+  }
+}
+
