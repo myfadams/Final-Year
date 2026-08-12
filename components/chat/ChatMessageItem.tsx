@@ -32,6 +32,7 @@ interface ChatMessageItemProps {
   onPlayAudio: (msg: ChatMessage) => void;
   onOpenMedia: (media: { uri: string; type: "image" | "video" }) => void;
   onNavigateToMap?: (msg: ChatMessage) => void;
+  showSenderName?: boolean;
 }
 
 export default function ChatMessageItem({
@@ -45,6 +46,7 @@ export default function ChatMessageItem({
   onPlayAudio,
   onOpenMedia,
   onNavigateToMap,
+  showSenderName = true,
 }: ChatMessageItemProps) {
   if (msg.sender === "system") {
     return (
@@ -68,11 +70,10 @@ export default function ChatMessageItem({
       )}
 
       <View style={{ maxWidth: "80%" }}>
-        {!isMe && (
+        {!isMe && showSenderName && (
           <View style={styles.senderMetaRow}>
             <Text style={styles.senderName}>{msg.senderName}</Text>
             {msg.senderRole && <Text style={styles.senderRole}>• {msg.senderRole}</Text>}
-            <Text style={styles.messageTime}>{msg.timestamp}</Text>
           </View>
         )}
 
@@ -82,7 +83,7 @@ export default function ChatMessageItem({
             <Text style={[styles.messageText, isMe ? styles.messageTextMe : styles.messageTextOther]}>
               {msg.text}
             </Text>
-            {isMe && <Text style={styles.timeStampMe}>{msg.timestamp}</Text>}
+            <Text style={isMe ? styles.timeStampMe : styles.timeStampOther}>{msg.timestamp}</Text>
           </View>
         )}
 
@@ -158,7 +159,7 @@ export default function ChatMessageItem({
             </View>
 
             <View style={styles.audioFooterRow}>
-              <Text style={[styles.audioLabel, isMe ? styles.timeStampMe : { color: ResQColors.textMuted, fontSize: 10 }]}>
+              <Text style={[styles.audioLabel, isMe ? styles.timeStampMe : styles.timeStampOther]}>
                 {msg.isUploading ? "Uploading Audio..." : `Voice Note • ${msg.timestamp}`}
               </Text>
             </View>
@@ -189,6 +190,9 @@ export default function ChatMessageItem({
                 {msg.text}
               </Text>
             )}
+            <Text style={[isMe ? styles.timeStampMe : styles.timeStampOther, { paddingHorizontal: 4, marginTop: 2 }]}>
+              {msg.timestamp}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -208,6 +212,7 @@ export default function ChatMessageItem({
               <Text style={styles.locationClickBadgeText}>View Location on Map</Text>
               <ChevronRight size={14} color="#FFFFFF" />
             </View>
+            <Text style={[styles.timeStampOther, { marginTop: 4 }]}>{msg.timestamp}</Text>
           </TouchableOpacity>
         )}
 
@@ -231,6 +236,7 @@ export default function ChatMessageItem({
               <Text style={styles.locationClickBadgeText}>Track Live Movement on Map</Text>
               <ChevronRight size={14} color="#FFFFFF" />
             </View>
+            <Text style={[styles.timeStampOther, { marginTop: 4 }]}>{msg.timestamp}</Text>
           </TouchableOpacity>
         )}
 
@@ -246,6 +252,7 @@ export default function ChatMessageItem({
             <Text style={[styles.locationCardText, { color: ResQColors.greenText }]}>
               {msg.text}
             </Text>
+            <Text style={[styles.timeStampOther, { marginTop: 4 }]}>{msg.timestamp}</Text>
           </View>
         )}
       </View>
@@ -351,6 +358,13 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontFamily: typography.regular,
     color: "rgba(255, 255, 255, 0.8)",
+    alignSelf: "flex-end",
+    marginTop: 4,
+  },
+  timeStampOther: {
+    fontSize: 9.5,
+    fontFamily: typography.regular,
+    color: "#94A3B8",
     alignSelf: "flex-end",
     marginTop: 4,
   },

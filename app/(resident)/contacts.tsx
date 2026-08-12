@@ -8,9 +8,10 @@ import {
   removeFriend,
   updateFriendRelationship,
 } from "@/backend/friends";
+import { supabase } from "@/backend/supabaseConfig";
 import { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   GraduationCap,
   Search,
@@ -98,9 +99,9 @@ export default function ContactsScreen() {
   const [modalContact, setModalContact] = useState<FriendContact | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // ── Load friends on mount ───────────────────────────────────────────────────
-  const loadFriends = useCallback(async () => {
-    setIsLoading(true);
+  // ── Load friends ─────────────────────────────────────────────────────────────
+  const loadFriends = useCallback(async (showLoading = true) => {
+    if (showLoading) setIsLoading(true);
     const { data, error } = await getFriends();
     setIsLoading(false);
     if (error) {
@@ -110,8 +111,31 @@ export default function ContactsScreen() {
     }
   }, []);
 
+  // 1. Refetch when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadFriends(false);
+    }, [loadFriends])
+  );
+
+  // 2. Initial load and Realtime listener for immediate updates on friends changes
   useEffect(() => {
-    loadFriends();
+    loadFriends(true);
+
+    const channel = supabase
+      .channel("friends-realtime-contacts")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "friends" },
+        () => {
+          loadFriends(false);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [loadFriends]);
 
   // ── Action handlers ─────────────────────────────────────────────────────────

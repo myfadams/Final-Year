@@ -755,6 +755,7 @@ export default function ContactChatScreen() {
                 setMediaViewerVisible(true);
               }}
               onNavigateToMap={handleNavigateToMap}
+              showSenderName={false}
             />
           ))}
         </ScrollView>
