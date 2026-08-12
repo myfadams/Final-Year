@@ -17,6 +17,25 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    // Suppress redbox popups for network connection errors when offline
+    if (typeof global !== "undefined" && (global as any).ErrorUtils) {
+      const defaultHandler = (global as any).ErrorUtils.getGlobalHandler?.();
+      (global as any).ErrorUtils.setGlobalHandler((error: any, isFatal?: boolean) => {
+        const msg = String(error?.message || error);
+        if (
+          msg.includes("Network request failed") ||
+          msg.includes("Failed to fetch") ||
+          msg.includes("TypeError: Network request failed")
+        ) {
+          console.warn("⚡ Network offline notice:", msg);
+          return;
+        }
+        if (defaultHandler) {
+          defaultHandler(error, isFatal);
+        }
+      });
+    }
+
     if (fontsLoaded) {
       SplashScreen.hideAsync();
     }

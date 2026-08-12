@@ -1,4 +1,5 @@
 import { ChatMessage } from "@/constants/interfaces";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { getCurrentUser, getUserProfile } from "./auth";
@@ -71,6 +72,51 @@ export function mapDbMessageToChatMessage(row: any, currentUserId: string): Chat
   };
 }
 
+// ── Local Storage & Offline Message Caching ──────────────────────────────────
+
+const CHAT_MESSAGES_CACHE_PREFIX = "@resq_chat_messages_";
+const PRIVATE_CHAT_CACHE_PREFIX = "@resq_private_chat_";
+
+export async function getCachedChatMessages(chatId: string): Promise<ChatMessage[]> {
+  try {
+    if (!chatId) return [];
+    const raw = await AsyncStorage.getItem(`${CHAT_MESSAGES_CACHE_PREFIX}${chatId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn("getCachedChatMessages notice:", err);
+    return [];
+  }
+}
+
+export async function setCachedChatMessages(chatId: string, messages: ChatMessage[]): Promise<void> {
+  try {
+    if (!chatId || !messages) return;
+    const toCache = messages.slice(-100);
+    await AsyncStorage.setItem(`${CHAT_MESSAGES_CACHE_PREFIX}${chatId}`, JSON.stringify(toCache));
+  } catch (err) {
+    console.warn("setCachedChatMessages notice:", err);
+  }
+}
+
+export async function getCachedPrivateChat(otherUserId: string): Promise<PrivateChat | null> {
+  try {
+    if (!otherUserId) return null;
+    const raw = await AsyncStorage.getItem(`${PRIVATE_CHAT_CACHE_PREFIX}${otherUserId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCachedPrivateChat(otherUserId: string, chat: PrivateChat): Promise<void> {
+  try {
+    if (!otherUserId || !chat) return;
+    await AsyncStorage.setItem(`${PRIVATE_CHAT_CACHE_PREFIX}${otherUserId}`, JSON.stringify(chat));
+  } catch {}
+}
+
 /**
  * Finds an existing private chat between current user and target contact user,
  * or creates a new row if one does not exist yet.
@@ -80,8 +126,11 @@ export async function getOrCreatePrivateChat(
   contactInfo?: { name?: string; relationship?: string; avatarUrl?: string }
 ): Promise<{ chat: PrivateChat | null; error: string | null }> {
   try {
+    const cached = await getCachedPrivateChat(otherUserId);
+
     const { user: currentUser, error: userError } = await getCurrentUser();
     if (userError || !currentUser) {
+      if (cached) return { chat: cached, error: null };
       return { chat: null, error: userError || "User not authenticated" };
     }
 
@@ -99,12 +148,15 @@ export async function getOrCreatePrivateChat(
       .limit(1);
 
     if (queryError) {
-      console.error("Error querying private chat:", queryError);
+      console.warn("Error querying private chat (checking local cache):", queryError.message);
+      if (cached) return { chat: cached, error: null };
       return { chat: null, error: queryError.message };
     }
 
     if (existingChats && existingChats.length > 0) {
-      return { chat: existingChats[0] as PrivateChat, error: null };
+      const found = existingChats[0] as PrivateChat;
+      await setCachedPrivateChat(otherUserId, found);
+      return { chat: found, error: null };
     }
 
     // Insert new private chat pairing
@@ -121,14 +173,19 @@ export async function getOrCreatePrivateChat(
       .single();
 
     if (insertError) {
-      console.error("Error creating private chat:", insertError);
+      console.warn("Error creating private chat (checking local cache):", insertError.message);
+      if (cached) return { chat: cached, error: null };
       return { chat: null, error: insertError.message };
     }
 
-    return { chat: newChat as PrivateChat, error: null };
+    const created = newChat as PrivateChat;
+    await setCachedPrivateChat(otherUserId, created);
+    return { chat: created, error: null };
   } catch (err: any) {
-    console.error("getOrCreatePrivateChat exception:", err);
-    return { chat: null, error: err.message || "Failed to initialize private chat" };
+    console.warn("getOrCreatePrivateChat exception (checking local cache):", err?.message || err);
+    const cached = await getCachedPrivateChat(otherUserId);
+    if (cached) return { chat: cached, error: null };
+    return { chat: null, error: err?.message || "Failed to initialize private chat" };
   }
 }
 
@@ -157,12 +214,14 @@ export async function fetchChatMessages(
     const { data, error } = await query;
 
     if (error) {
-      console.error("Error fetching chat messages:", error);
-      return { messages: [], hasMore: false, error: error.message };
+      console.warn("Fetch chat messages notice (falling back to cache):", error.message);
+      const cached = await getCachedChatMessages(chatId);
+      return { messages: cached, hasMore: false, error: null };
     }
 
     if (!data) {
-      return { messages: [], hasMore: false, error: null };
+      const cached = await getCachedChatMessages(chatId);
+      return { messages: cached, hasMore: false, error: null };
     }
 
     const hasMore = data.length === limit;
@@ -171,10 +230,16 @@ export async function fetchChatMessages(
     // Reverse to get chronological order (oldest -> newest)
     const sorted = mapped.reverse();
 
+    // Store in cache for offline fallback
+    if (!beforeCreatedAt) {
+      await setCachedChatMessages(chatId, sorted);
+    }
+
     return { messages: sorted, hasMore, error: null };
   } catch (err: any) {
-    console.error("fetchChatMessages exception:", err);
-    return { messages: [], hasMore: false, error: err.message || "Failed to fetch messages" };
+    console.warn("fetchChatMessages notice (falling back to cache):", err?.message || err);
+    const cached = await getCachedChatMessages(chatId);
+    return { messages: cached, hasMore: false, error: null };
   }
 }
 
@@ -331,39 +396,50 @@ export function subscribeToChatMessages(
   onNewMessage: (rawMsg: any) => void,
   onChatUpdated?: (chat: any) => void
 ): () => void {
-  const channel = supabase
-    .channel(`private_chat_${chatId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "INSERT",
-        schema: "public",
-        table: "private_chat_messages",
-        filter: `chat_id=eq.${chatId}`,
-      },
-      (payload) => {
-        if (payload.new) {
-          onNewMessage(payload.new);
+  try {
+    const channel = supabase
+      .channel(`private_chat_${chatId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "private_chat_messages",
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            onNewMessage(payload.new);
+          }
         }
-      }
-    )
-    .on(
-      "postgres_changes",
-      {
-        event: "UPDATE",
-        schema: "public",
-        table: "private_chat",
-        filter: `id=eq.${chatId}`,
-      },
-      (payload) => {
-        if (payload.new) {
-          onChatUpdated?.(payload.new);
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "private_chat",
+          filter: `id=eq.${chatId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            onChatUpdated?.(payload.new);
+          }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(`Realtime chat channel notice [${status}]:`, err?.message || "Network offline");
+        }
+      });
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch (e) {}
+    };
+  } catch (err: any) {
+    console.warn("subscribeToChatMessages setup notice:", err?.message || err);
+    return () => {};
+  }
 }

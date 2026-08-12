@@ -5,7 +5,6 @@ import ChatPillsRow, { PillItem } from "@/components/chat/ChatPillsRow";
 import MediaViewerModal from "@/components/chat/MediaViewerModal";
 import MedicalInfoModal from "@/components/MedicalInfoModal";
 import { ChatMessage } from "@/constants/interfaces";
-import { getEmergencyChatMessages } from "@/constants/tempData";
 import { Audio, AVPlaybackStatus } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
@@ -120,8 +119,7 @@ export default function EmergencyChatScreen() {
 
   // Initial Seed Emergency Messages
   useEffect(() => {
-    const emergencyMsgs = getEmergencyChatMessages();
-    setMessages(emergencyMsgs);
+    setMessages([]);
   }, []);
 
   // Auto-scroll to latest message whenever messages update

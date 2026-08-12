@@ -7,9 +7,11 @@ import MediaViewerModal from "@/components/chat/MediaViewerModal";
 import ContactDetailsModal from "@/components/chat/ContactDetailsModal";
 import {
   fetchChatMessages,
+  getCachedChatMessages,
   getOrCreatePrivateChat,
   mapDbMessageToChatMessage,
   sendChatMessage,
+  setCachedChatMessages,
   subscribeToChatMessages,
   uploadChatAudio,
   uploadChatMedia,
@@ -17,7 +19,6 @@ import {
 import { getCurrentUser, getUserProfile } from "@/backend/auth";
 import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { ChatMessage } from "@/constants/interfaces";
-import { getContactChatMessages } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { Audio } from "expo-av";
 import { Image } from "expo-image";
@@ -129,17 +130,26 @@ export default function ContactChatScreen() {
     const initChat = async () => {
       setIsLoadingMessages(true);
       try {
+        const targetContactId = params.contactId || params.id;
+        const initialChatId = params.chatId || null;
+
+        // Load cached messages immediately if available for instant offline display
+        if (initialChatId) {
+          const cached = await getCachedChatMessages(initialChatId);
+          if (cached.length > 0 && isSubscribed) {
+            setMessages(cached);
+            setIsLoadingMessages(false);
+          }
+        }
+
         const { user: currentUser, error: userErr } = await getCurrentUser();
         if (userErr || !currentUser) {
-          console.warn("User not logged in, using local fallback mode");
-          const initialMsgs = getContactChatMessages(
-            params.contactId || params.id,
-            params.name,
-            params.relationship,
-            headerAvatar
-          );
+          console.warn("User not logged in or offline");
           if (isSubscribed) {
-            setMessages(initialMsgs);
+            if (initialChatId) {
+              const cached = await getCachedChatMessages(initialChatId);
+              if (cached.length > 0) setMessages(cached);
+            }
             setIsLoadingMessages(false);
           }
           return;
@@ -157,8 +167,7 @@ export default function ContactChatScreen() {
           setCurrentUserAvatar(profile.profile_image_url || undefined);
         }
 
-        const targetContactId = params.contactId || params.id;
-        let resolvedChatId = params.chatId || null;
+        let resolvedChatId = initialChatId;
 
         if (!resolvedChatId && targetContactId) {
           const { chat, error: chatErr } = await getOrCreatePrivateChat(targetContactId, {
@@ -175,15 +184,7 @@ export default function ContactChatScreen() {
         }
 
         if (!resolvedChatId) {
-          // Fallback to local mock data if no chat pairing exists in Supabase
-          const initialMsgs = getContactChatMessages(
-            targetContactId,
-            params.name,
-            params.relationship,
-            headerAvatar
-          );
           if (isSubscribed) {
-            setMessages(initialMsgs);
             setIsLoadingMessages(false);
           }
           return;
@@ -193,7 +194,14 @@ export default function ContactChatScreen() {
           setActiveChatId(resolvedChatId);
         }
 
-        // Fetch paginated initial messages
+        // If not loaded yet, fetch cached messages for resolvedChatId
+        const cached = await getCachedChatMessages(resolvedChatId);
+        if (cached.length > 0 && isSubscribed) {
+          setMessages(cached);
+          setIsLoadingMessages(false);
+        }
+
+        // Fetch initial messages from network
         const { messages: fetchedMsgs, hasMore, error: fetchErr } = await fetchChatMessages(
           resolvedChatId,
           currentUser.id,
@@ -201,11 +209,14 @@ export default function ContactChatScreen() {
         );
 
         if (fetchErr) {
-          console.error("Fetch initial messages error:", fetchErr);
+          console.warn("Fetch initial messages notice (offline mode):", fetchErr);
         }
 
         if (isSubscribed) {
-          setMessages(fetchedMsgs.length > 0 ? fetchedMsgs : []);
+          if (fetchedMsgs.length > 0) {
+            setMessages(fetchedMsgs);
+            await setCachedChatMessages(resolvedChatId, fetchedMsgs);
+          }
           setHasMoreMessages(hasMore);
           setIsLoadingMessages(false);
 
@@ -216,31 +227,32 @@ export default function ContactChatScreen() {
               const newMsg = mapDbMessageToChatMessage(rawMsg, currentUser.id);
 
               setMessages((prev) => {
-                // Prevent duplicate message rendering
                 if (prev.some((m) => m.id === newMsg.id)) {
                   return prev;
                 }
-                // Match optimistic temporary messages
                 const tempIndex = prev.findIndex(
                   (m) =>
                     m.isUploading &&
                     m.type === newMsg.type &&
                     (m.text === newMsg.text || m.audioDuration === newMsg.audioDuration)
                 );
+                let updated: ChatMessage[];
                 if (tempIndex !== -1) {
-                  const copy = [...prev];
-                  copy[tempIndex] = newMsg;
-                  return copy;
+                  updated = [...prev];
+                  updated[tempIndex] = newMsg;
+                } else {
+                  updated = [...prev, newMsg];
                 }
-                return [...prev, newMsg];
+                setCachedChatMessages(resolvedChatId, updated);
+                return updated;
               });
 
               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
             }
           );
         }
-      } catch (err) {
-        console.error("Chat setup failed:", err);
+      } catch (err: any) {
+        console.warn("initChat exception (offline mode active):", err?.message || err);
         if (isSubscribed) {
           setIsLoadingMessages(false);
         }
@@ -411,16 +423,22 @@ export default function ContactChatScreen() {
     });
 
     if (error) {
-      Alert.alert("Sending Failed", error);
+      const isNetworkErr = error?.includes("Network request failed") || error?.includes("fetch");
+      Alert.alert(
+        isNetworkErr ? "Connection Error" : "Sending Failed",
+        isNetworkErr ? "No internet connection. Please check your network and try again." : error
+      );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInputText(textToSend);
     } else if (message) {
       const realMsg = mapDbMessageToChatMessage(message, currentUserId);
-      setMessages((prev) =>
-        prev.some((m) => m.id === realMsg.id)
+      setMessages((prev) => {
+        const updated = prev.some((m) => m.id === realMsg.id)
           ? prev.filter((m) => m.id !== tempId)
-          : prev.map((m) => (m.id === tempId ? realMsg : m))
-      );
+          : prev.map((m) => (m.id === tempId ? realMsg : m));
+        if (activeChatId) setCachedChatMessages(activeChatId, updated);
+        return updated;
+      });
     }
   };
 
@@ -645,8 +663,14 @@ export default function ContactChatScreen() {
           );
         }
       } catch (uploadError: any) {
-        console.error("Audio note upload failed:", uploadError);
-        Alert.alert("Upload Failed", "Could not upload voice note. Please try again.");
+        const isNetworkErr = String(uploadError?.message || uploadError).includes("Network request failed");
+        console.warn("Audio note upload notice:", uploadError?.message || uploadError);
+        Alert.alert(
+          isNetworkErr ? "Connection Error" : "Upload Failed",
+          isNetworkErr
+            ? "No internet connection. Please check your network and try again."
+            : "Could not upload voice note. Please try again."
+        );
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     } catch (error) {
@@ -924,8 +948,14 @@ export default function ContactChatScreen() {
         );
       }
     } catch (uploadError: any) {
-      console.error("Media upload failed:", uploadError);
-      Alert.alert("Upload Failed", "Could not upload media attachment.");
+      const isNetworkErr = String(uploadError?.message || uploadError).includes("Network request failed");
+      console.warn("Media upload notice:", uploadError?.message || uploadError);
+      Alert.alert(
+        isNetworkErr ? "Connection Error" : "Upload Failed",
+        isNetworkErr
+          ? "No internet connection. Please check your network and try again."
+          : "Could not upload media attachment."
+      );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     }
   };

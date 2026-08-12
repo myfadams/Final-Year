@@ -255,34 +255,45 @@ let realtimeProfileChannel: any = null;
  * Automatically updates globalState and AsyncStorage cache whenever user data changes.
  */
 export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profile: UserProfile) => void) {
+  if (!userId) return null;
+
   if (realtimeProfileChannel) {
     try {
       supabase.removeChannel(realtimeProfileChannel);
+      realtimeProfileChannel = null;
     } catch (e) {}
   }
 
-  realtimeProfileChannel = supabase
-    .channel(`public:users:id=${userId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "users",
-        filter: `id=eq.${userId}`,
-      },
-      (payload) => {
-        if (payload.new) {
-          console.log("⚡ Realtime user profile update received from DB:", payload.new);
-          const updatedProfile = payload.new as UserProfile;
-          setCachedUserProfile(updatedProfile);
-          if (onUpdate) {
-            onUpdate(updatedProfile);
+  try {
+    realtimeProfileChannel = supabase
+      .channel(`public:users:id=${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "users",
+          filter: `id=eq.${userId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            console.log("⚡ Realtime user profile update received from DB:", payload.new);
+            const updatedProfile = payload.new as UserProfile;
+            setCachedUserProfile(updatedProfile);
+            if (onUpdate) {
+              onUpdate(updatedProfile);
+            }
           }
         }
-      }
-    )
-    .subscribe();
+      )
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(`Realtime user profile channel notice [${status}]:`, err?.message || "Network offline");
+        }
+      });
+  } catch (err: any) {
+    console.warn("subscribeToUserProfileChanges setup notice:", err?.message || err);
+  }
 
   return realtimeProfileChannel;
 }
@@ -328,11 +339,29 @@ export async function getCurrentUser() {
       error,
     } = await supabase.auth.getUser();
     if (error) {
+      if (
+        error.message?.includes("Network request failed") ||
+        error.message?.includes("fetch") ||
+        error.message?.includes("Failed to fetch")
+      ) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user) {
+          return { user: sessionData.session.user, error: null };
+        }
+      }
       return { user: null, error: error.message || "Failed to get current user" };
     }
     return { user, error: null };
   } catch (error: any) {
-    console.error("Get Current User Error:", error);
+    console.warn("getCurrentUser notice (attempting session fallback):", error?.message || error);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData?.session?.user) {
+        return { user: sessionData.session.user, error: null };
+      }
+    } catch {
+      // ignore
+    }
     return { user: null, error: error?.message || (typeof error === "string" ? error : "Failed to get current user") };
   }
 }
