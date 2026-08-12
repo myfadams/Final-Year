@@ -58,6 +58,7 @@ interface ChatMessageItemProps {
   onOpenMedia: (media: { uri: string; type: "image" | "video" }) => void;
   onNavigateToMap?: (msg: ChatMessage) => void;
   showSenderName?: boolean;
+  showAvatar?: boolean;
 }
 
 export default function ChatMessageItem({
@@ -73,6 +74,7 @@ export default function ChatMessageItem({
   onOpenMedia,
   onNavigateToMap,
   showSenderName = true,
+  showAvatar = false,
 }: ChatMessageItemProps) {
   if (msg.sender === "system") {
     return (
@@ -96,7 +98,7 @@ export default function ChatMessageItem({
 
   return (
     <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
-      {!isMe && (
+      {!isMe && showAvatar && (
         avatarUri ? (
           <Image source={{ uri: avatarUri }} style={styles.messageAvatar} />
         ) : (

@@ -91,6 +91,8 @@ export interface Article {
 
 export interface ChatMessage {
   id: string;
+  chatId?: string;
+  senderId?: string;
   sender: "me" | "other" | "system";
   senderName?: string;
   senderRole?: string;
@@ -106,6 +108,7 @@ export interface ChatMessage {
   locationCoords?: { latitude: number; longitude: number };
   locationTimestampText?: string;
   createdTimestamp?: number;
+  createdAtIso?: string;
 }
 
 // ── Friend Search ─────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@ import MedicalInfoModal from "@/components/MedicalInfoModal";
 import { ChatMessage } from "@/constants/interfaces";
 import { getEmergencyChatMessages } from "@/constants/tempData";
 import { Audio, AVPlaybackStatus } from "expo-av";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";

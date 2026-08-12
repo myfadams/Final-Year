@@ -51,14 +51,16 @@ export default function ChatInputBar({
         { paddingBottom: Math.max(Platform.OS === "ios" ? 10 : 8, insets.bottom) },
       ]}
     >
-      {/* Camera Button */}
-      <TouchableOpacity
-        onPress={onOpenCamera}
-        style={styles.cameraIconBtn}
-        activeOpacity={0.8}
-      >
-        <Camera size={20} color={ResQColors.primaryRedText} />
-      </TouchableOpacity>
+      {/* Camera Button (hidden when typing to expand input horizontally) */}
+      {inputText.length === 0 && (
+        <TouchableOpacity
+          onPress={onOpenCamera}
+          style={styles.cameraIconBtn}
+          activeOpacity={0.8}
+        >
+          <Camera size={20} color={ResQColors.primaryRedText} />
+        </TouchableOpacity>
+      )}
 
       {/* Attachment Button */}
       <TouchableOpacity
@@ -87,6 +89,7 @@ export default function ChatInputBar({
             value={inputText}
             onChangeText={setInputText}
             onFocus={onFocusInput}
+            multiline
           />
         )}
       </View>
@@ -115,7 +118,7 @@ export default function ChatInputBar({
 const styles = StyleSheet.create({
   inputBarContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     paddingHorizontal: 12,
     paddingTop: 8,
     backgroundColor: "#FFFFFF",
@@ -146,8 +149,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#F1F5F9",
     borderRadius: 22,
     paddingHorizontal: 14,
-    paddingVertical: Platform.OS === "ios" ? 10 : 6,
+    paddingVertical: Platform.OS === "ios" ? 6 : 2,
     minHeight: 42,
+    maxHeight: 120,
     justifyContent: "center",
   },
   textInputWrapperRecording: {
@@ -159,6 +163,9 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     fontFamily: typography.regular,
     color: "#0F172A",
+    maxHeight: 100,
+    paddingTop: Platform.OS === "ios" ? 4 : 2,
+    paddingBottom: Platform.OS === "ios" ? 4 : 2,
   },
   recordingPillContainer: {
     flexDirection: "row",
