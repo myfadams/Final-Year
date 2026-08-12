@@ -14,7 +14,6 @@ import {
   LogOut,
   Pen,
   Shield,
-  User,
   Users
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
@@ -439,6 +438,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.bold,
     color: "#0F172A",
     marginBottom: 4,
+    textAlign: "center"
   },
   profilePhone: {
     fontSize: 14.5,

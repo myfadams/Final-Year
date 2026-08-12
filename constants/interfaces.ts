@@ -107,3 +107,23 @@ export interface ChatMessage {
   locationTimestampText?: string;
   createdTimestamp?: number;
 }
+
+// ── Friend Search ─────────────────────────────────────────────────────────────
+
+export type RelationshipStatus =
+  | "none"
+  | "pending_sent"
+  | "pending_received"
+  | "accepted"
+  | "blocked";
+
+export interface FriendSearchResult {
+  id: string;
+  name: string;
+  profile_img_url: string | null;
+  student_id_number: string | null;
+  student_reference_number: string | null;
+  program_of_study: string | null;
+  relationship: RelationshipStatus;
+  relevance_score: number;
+}
