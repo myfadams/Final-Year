@@ -1,4 +1,8 @@
-import ImageUpload from "@/components/ImageUpload";
+import {
+  createEmergencyReport,
+  EmergencyRecord,
+} from "@/backend/emergencies";
+import CustomButton from "@/components/CustomButton";
 import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { emergencyAlerts } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
@@ -14,13 +18,13 @@ import {
   BriefcaseMedical,
   Camera,
   Car,
+  CheckCircle2,
   Flame,
   Locate,
   MapPin,
   Mic,
   Pause,
   Play,
-  Send,
   Shield,
   X,
 } from "lucide-react-native";
@@ -29,6 +33,7 @@ import {
   Alert,
   Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -45,10 +50,17 @@ type IncidentType = "Medical" | "Fire" | "Security" | "Accident";
 export default function ReportScreen() {
   const router = useRouter();
 
+  // Submission & Modal States
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
+  const [submittedEmergency, setSubmittedEmergency] =
+    useState<EmergencyRecord | null>(null);
+
   // State
   const [selectedType, setSelectedType] = useState<IncidentType>("Medical");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [landmark, setLandmark] = useState("");
 
   // Set default placeholder items matching image and video types
   const [photos, setPhotos] = useState<
@@ -86,23 +98,6 @@ export default function ReportScreen() {
     };
   }, []);
 
-  // States for the active upload progress bar component
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadingUri, setUploadingUri] = useState<string | null>(null);
-  const [uploadingType, setUploadingType] = useState<"image" | "video">(
-    "image",
-  );
-
-  // Monitor when the upload simulation finishes to add it to the list
-  React.useEffect(() => {
-    if (!isUploading && uploadingUri) {
-      setPhotos((prev) => [
-        ...prev,
-        { uri: uploadingUri, type: uploadingType },
-      ]);
-      setUploadingUri(null);
-    }
-  }, [isUploading, uploadingUri]);
 
   // Default coordinate (KNUST Science block area, matches mock data coordinates)
   const [locationCoords, setLocationCoords] = useState({
@@ -187,21 +182,38 @@ export default function ReportScreen() {
     }
   };
 
-  // Upload Photo from camera roll (allowing images and videos)
-  const handleAddPhoto = async () => {
-    if (isUploading) {
-      Alert.alert(
-        "Upload in progress",
-        "Please wait until the current media upload is complete.",
-      );
-      return;
+  // Auto-request current GPS location on screen mount
+  React.useEffect(() => {
+    async function autoFetchLocation() {
+      try {
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          let location = await Location.getCurrentPositionAsync({});
+          setLocationCoords({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.004,
+            longitudeDelta: 0.004,
+          });
+          setAddress({
+            line1: `GPS (${location.coords.latitude.toFixed(4)}, ${location.coords.longitude.toFixed(4)})`,
+            line2: "KNUST Campus, Kumasi",
+          });
+        }
+      } catch (e) {
+        console.warn("Could not auto-fetch position on mount:", e);
+      }
     }
+    autoFetchLocation();
+  }, []);
 
+  // Select photo/video and queue locally — uploads happen on submit
+  const handleAddPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
       Alert.alert(
         "Permission Denied",
-        "Permission to access media library is required to upload images.",
+        "Permission to access media library is required to add images.",
       );
       return;
     }
@@ -220,13 +232,10 @@ export default function ReportScreen() {
           asset.uri.toLowerCase().endsWith(".mp4") ||
           asset.uri.toLowerCase().endsWith(".mov");
 
-        // Start simulated upload inside the parent screen
-        setUploadingType(isVideo ? "video" : "image");
-        setUploadingUri(asset.uri);
-        setIsUploading(true);
+        setPhotos((prev) => [...prev, { uri: asset.uri, type: isVideo ? "video" : "image" }]);
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to select image.");
+      Alert.alert("Error", "Failed to select media.");
     }
   };
 
@@ -371,54 +380,99 @@ export default function ReportScreen() {
     setVoiceNotes(voiceNotes.filter((note) => note.id !== idToRemove));
   };
 
-  // Submit Incident Report
-  const handleSubmit = () => {
+  // Submit Incident Report to Supabase
+  const handleSubmit = async () => {
+    if (isSubmitting) return;
+
     if (!title.trim()) {
-      Alert.alert("Error", "Please provide a title for the incident report.");
+      Alert.alert("Validation Error", "Please provide a title for the incident report.");
       return;
     }
     if (!description.trim()) {
       Alert.alert(
-        "Error",
+        "Validation Error",
         "Please provide details in the incident description.",
       );
       return;
     }
+    if (!landmark.trim()) {
+      Alert.alert(
+        "Validation Error",
+        "Please provide the nearest landmark to help responders locate the incident.",
+      );
+      return;
+    }
+    if (
+      !locationCoords ||
+      typeof locationCoords.latitude !== "number" ||
+      typeof locationCoords.longitude !== "number" ||
+      isNaN(locationCoords.latitude) ||
+      isNaN(locationCoords.longitude)
+    ) {
+      Alert.alert(
+        "Validation Error",
+        "Valid location coordinates are required. Please use the Update button to capture your GPS location.",
+      );
+      return;
+    }
 
-    // Create a new incident matching caseProp
-    const newIncident = {
-      id: (emergencyAlerts.length + 1).toString(),
-      title: title.trim(),
-      description: description,
-      location: `${address.line1}, ${address.line2}`,
-      distance: 120, // meters away
-      time: 0, // 0 mins ago
-      responseTime: 240, // 4 mins
-      severity: severity,
-      responders: 0,
-      isResolved: false,
-      action: "Details" as const,
-      creatorID: "George",
-      falseAlarm: false,
-      photos: photos,
-    };
+    setIsSubmitting(true);
 
-    // Add to global temporary data list
-    emergencyAlerts.unshift(newIncident);
+    try {
+      const locationText = `${address.line1}, ${address.line2}`;
+      const voiceNoteUris = voiceNotes.map((v) => v.uri);
 
-    Alert.alert(
-      "Report Submitted",
-      "Thank you. Your incident report has been dispatched to campus security and emergency teams. You can track this in the Alerts tab.",
-      [
-        {
-          text: "Done",
-          onPress: () => {
-            // Navigate back to the home screen
-            router.back();
-          },
-        },
-      ],
-    );
+      const { data, error } = await createEmergencyReport({
+        title: title.trim(),
+        description: description.trim(),
+        location_text: locationText,
+        latitude: locationCoords.latitude,
+        longitude: locationCoords.longitude,
+        severity,
+        nearest_landmark: landmark.trim(),
+        voiceNotesUris: voiceNoteUris,
+        visualMediaFiles: photos,
+      });
+
+      if (error || !data) {
+        Alert.alert(
+          "Submission Failed",
+          error?.message || "Could not record emergency report. Please try again.",
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Map returned database record to local caseProp & unshift for immediate UI responsiveness
+      const newIncident: any = {
+        id: data.id,
+        title: data.title,
+        description: data.description || "",
+        location: data.location_text,
+        distance: 120,
+        time: 0,
+        responseTime: 240,
+        severity: (data.severity as any) || severity,
+        responders: data.responders_count || 0,
+        isResolved: data.is_resolved || false,
+        action: "Details" as const,
+        creatorID: data.creator_id || "You",
+        falseAlarm: data.false_alarm || false,
+        photos: photos,
+      };
+
+      emergencyAlerts.unshift(newIncident);
+      setSubmittedEmergency(data);
+      setIsSubmitting(false);
+      setSuccessModalVisible(true);
+    } catch (err: any) {
+      console.error("Failed to submit emergency report:", err);
+      Alert.alert(
+        "Submission Error",
+        err?.message || "An unexpected error occurred during submission.",
+      );
+      setIsSubmitting(false);
+    }
   };
 
   const getSeverityColors = (level: "Critical" | "Moderate" | "Low") => {
@@ -692,6 +746,26 @@ export default function ReportScreen() {
             </View>
           </View>
 
+          {/* Nearest Landmark */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Nearest Landmark</Text>
+            <View
+              style={[
+                styles.titleInputContainer,
+                { borderColor: themeBgColor },
+              ]}
+            >
+              <TextInput
+                style={styles.titleInput}
+                placeholder="e.g. Near the Science Block gate, Opposite ATM..."
+                placeholderTextColor={ResQColors.textFaint}
+                value={landmark}
+                onChangeText={setLandmark}
+                maxLength={80}
+              />
+            </View>
+          </View>
+
           {/* Incident Description */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Incident Description</Text>
@@ -880,52 +954,95 @@ export default function ReportScreen() {
                 </View>
               ))}
             </ScrollView>
-
-            {/* Display simulating upload bar for the active upload */}
-            {uploadingUri && (
-              <View style={styles.activeUploadWrapper}>
-                <Text style={styles.uploadingLabelText}>
-                  Uploading media assets...
-                </Text>
-                <ImageUpload imageUri={uploadingUri} setDone={setIsUploading} />
-              </View>
-            )}
           </View>
         </ScrollView>
 
         {/* Bottom CTA Submit Area */}
         <View style={styles.bottomBar}>
-          <TouchableOpacity
-            style={[
-              styles.submitButton,
-              { backgroundColor: themeColor },
-              isUploading && {
-                backgroundColor: ResQColors.badgeGrayBg,
-                shadowOpacity: 0,
-              },
-            ]}
+          <CustomButton
+            text={isSubmitting ? "Submitting Report..." : "Submit Report"}
             onPress={handleSubmit}
-            disabled={isUploading}
-            activeOpacity={0.85}
-          >
-            <Send
-              size={18}
-              color={
-                isUploading ? ResQColors.textSubtle : ResQColors.cardSurface
-              }
-              style={{ marginRight: 8 }}
-            />
-            <Text
-              style={[
-                styles.submitButtonText,
-                isUploading && { color: ResQColors.textSubtle },
-              ]}
-            >
-              {isUploading ? "Uploading Attachments..." : "Submit Report"}
-            </Text>
-          </TouchableOpacity>
+            isLoading={isSubmitting}
+            disabled={isSubmitting}
+            color={themeColor}
+          />
         </View>
       </KeyboardAvoidingView>
+
+      {/* Success Pop-up Modal */}
+      <Modal
+        visible={successModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setSuccessModalVisible(false);
+          router.back();
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View
+              style={[
+                styles.modalIconCircle,
+                { backgroundColor: activeSeverityColors.bg },
+              ]}
+            >
+              <CheckCircle2 size={38} color={activeSeverityColors.color} />
+            </View>
+
+            <Text style={styles.modalTitle}>Report Submitted Successfully</Text>
+
+            <Text style={styles.modalSubtitle}>
+              Your emergency report has been recorded and dispatched to campus
+              security and emergency response teams.
+            </Text>
+
+            <View style={styles.modalInfoContainer}>
+              <View style={styles.modalInfoRow}>
+                <Text style={styles.modalInfoLabel}>Incident Title:</Text>
+                <Text style={styles.modalInfoValue} numberOfLines={1}>
+                  {submittedEmergency?.title || title}
+                </Text>
+              </View>
+              <View style={styles.modalInfoRow}>
+                <Text style={styles.modalInfoLabel}>Severity:</Text>
+                <Text
+                  style={[
+                    styles.modalInfoValue,
+                    {
+                      color: activeSeverityColors.color,
+                      fontFamily: typography.bold,
+                    },
+                  ]}
+                >
+                  {submittedEmergency?.severity || severity}
+                </Text>
+              </View>
+              <View style={styles.modalInfoRow}>
+                <Text style={styles.modalInfoLabel}>Location:</Text>
+                <Text style={styles.modalInfoValue} numberOfLines={1}>
+                  {submittedEmergency?.location_text ||
+                    `${address.line1}, ${address.line2}`}
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.modalDoneButton,
+                { backgroundColor: activeSeverityColors.color },
+              ]}
+              activeOpacity={0.85}
+              onPress={() => {
+                setSuccessModalVisible(false);
+                router.back();
+              }}
+            >
+              <Text style={styles.modalDoneButtonText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1444,5 +1561,90 @@ const styles = StyleSheet.create({
     borderRightColor: "transparent",
     alignSelf: "center",
     marginTop: -1,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  modalCard: {
+    width: "100%",
+    backgroundColor: ResQColors.cardSurface,
+    borderRadius: 24,
+    padding: 24,
+    alignItems: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.15,
+        shadowRadius: 20,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
+  },
+  modalIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontFamily: typography.bold,
+    color: DESIGN_COLORS.slate900,
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  modalSubtitle: {
+    fontSize: 13.5,
+    fontFamily: typography.regular,
+    color: ResQColors.textSubtle,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  modalInfoContainer: {
+    width: "100%",
+    backgroundColor: ResQColors.cardSurfaceSoft,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 22,
+    gap: 8,
+  },
+  modalInfoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  modalInfoLabel: {
+    fontSize: 13,
+    fontFamily: typography.medium,
+    color: ResQColors.textSubtle,
+  },
+  modalInfoValue: {
+    fontSize: 13,
+    fontFamily: typography.semibold,
+    color: DESIGN_COLORS.slate900,
+    maxWidth: "60%",
+    textAlign: "right",
+  },
+  modalDoneButton: {
+    width: "100%",
+    height: 48,
+    borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalDoneButtonText: {
+    fontSize: 16,
+    fontFamily: typography.bold,
+    color: ResQColors.cardSurface,
   },
 });
