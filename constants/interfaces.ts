@@ -8,6 +8,8 @@ export interface Person {
   longitude: number;
   urgency: "critical" | "high" | "medium";
   description?: string;
+  title?: string;
+  creatorId?: string;
   images?: string[];
   requesterDesc?: string;
   knownHealthProblems?: string[];
@@ -55,6 +57,8 @@ export interface caseProp {
   creatorID: string;
   falseAlarm: boolean;
   responseTime: number;
+  lat?: string;
+  lng?: string;
 }
 
 export interface PendingRequest {

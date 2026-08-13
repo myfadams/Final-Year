@@ -73,10 +73,10 @@ export default function IncidentDetailScreen() {
     : emergencyAlerts.find((item) => item.id === params.id) ||
       emergencyAlerts[0];
 
-  // Lookup coordinate from PEOPLE list, fallback to KNUST main campus coordinates
+  // Lookup coordinate from PEOPLE list or params, fallback to KNUST main campus coordinates
   const person = PEOPLE.find((p) => p.id === incident.id);
-  const latitude = person ? person.latitude : 6.675155;
-  const longitude = person ? person.longitude : -1.571569;
+  const latitude = params.lat ? parseFloat(params.lat) : (person ? person.latitude : 6.675155);
+  const longitude = params.lng ? parseFloat(params.lng) : (person ? person.longitude : -1.571569);
 
   // Resolve color scheme dynamically from severity level
   const getSeverityColors = (level: string) => {

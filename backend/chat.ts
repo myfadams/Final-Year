@@ -397,8 +397,9 @@ export function subscribeToChatMessages(
   onChatUpdated?: (chat: any) => void
 ): () => void {
   try {
+    const channelName = `private_chat_${chatId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const channel = supabase
-      .channel(`private_chat_${chatId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {

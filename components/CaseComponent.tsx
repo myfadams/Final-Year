@@ -46,6 +46,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   const displayLocation =
     location.length > 20 ? location.substring(0, 17) + "..." : location;
   const router = useRouter();
+  // console.log(location);
   return (
     <TouchableOpacity
       onPress={() => {
@@ -246,7 +247,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
           </View>
           <View style={{ flex: 1 }}>
             <CustomButton
-              onPress={() => {}}
+              onPress={() => { }}
               Icon={<Phone color={Colors.light.primary} size={19} />}
               text={"Call"}
               color={ResQColors.cardSurface}

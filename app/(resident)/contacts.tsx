@@ -122,19 +122,33 @@ export default function ContactsScreen() {
   useEffect(() => {
     loadFriends(true);
 
-    const channel = supabase
-      .channel("friends-realtime-contacts")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "friends" },
-        () => {
-          loadFriends(false);
-        }
-      )
-      .subscribe();
+    let channel: any = null;
+    try {
+      const channelName = `friends-contacts-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "friends" },
+          () => {
+            loadFriends(false);
+          }
+        )
+        .subscribe((status, err) => {
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn(`Realtime contacts channel notice [${status}]:`, err?.message || "Network offline");
+          }
+        });
+    } catch (err) {
+      console.warn("Realtime contacts setup warning:", err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) {}
+      }
     };
   }, [loadFriends]);
 

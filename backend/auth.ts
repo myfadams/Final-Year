@@ -265,8 +265,9 @@ export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profil
   }
 
   try {
+    const channelName = `user-profile-${userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
     realtimeProfileChannel = supabase
-      .channel(`public:users:id=${userId}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         {
@@ -642,5 +643,25 @@ export async function uploadStudentIdCard(
   } catch (error: any) {
     console.error("ID Card Upload Error:", error.message);
     return { publicUrl: null, error: error.message };
+  }
+}
+
+/**
+ * Fetch public profile details for a given user ID (e.g. creator of an emergency).
+ */
+export async function fetchUserProfileById(userId: string): Promise<UserProfile | null> {
+  if (!userId) return null;
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data as UserProfile;
+  } catch (err) {
+    console.warn("fetchUserProfileById notice:", err);
+    return null;
   }
 }

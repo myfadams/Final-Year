@@ -1,7 +1,7 @@
+import Colors from "@/constants/Colors";
 import { SharedLocationPinMarker } from "@/components/SharedLocationPinMarker";
 import { SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
-import { PEOPLE } from "@/constants/tempData";
 import axios from "axios";
 import * as Location from "expo-location";
 import { BriefcaseMedical, Flame, Shield } from "lucide-react-native";
@@ -35,17 +35,20 @@ const getIncidentType = (person: Person): "medical" | "fire" | "security" => {
   return "medical";
 };
 
-// Helper to resolve icon and color
+// Helper to resolve icon and color based on severity (urgency) using brand Colors constants
 const getIncidentIconInfo = (person: Person) => {
   const type = getIncidentType(person);
+  const color =
+    Colors.URGENCY_COLORS[person.urgency] || Colors.URGENCY_COLORS.critical;
+
   switch (type) {
     case "fire":
-      return { Icon: Flame, color: "#F59E0B" };
+      return { Icon: Flame, color };
     case "security":
-      return { Icon: Shield, color: "#1976D2" };
+      return { Icon: Shield, color };
     case "medical":
     default:
-      return { Icon: BriefcaseMedical, color: "#FF3B30" };
+      return { Icon: BriefcaseMedical, color };
   }
 };
 
@@ -68,9 +71,9 @@ const getDistanceInMeters = (
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
+    Math.cos((lat2 * Math.PI) / 180) *
+    Math.sin(dLon / 2) *
+    Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
 };
@@ -171,6 +174,7 @@ interface MapViewComponentProps {
   selectedPerson: Person | null;
   activeEmergency: Person | null;
   activeSharedLocation?: SharedLocationPin | null;
+  realEmergencies?: Person[];
   onSelectPerson: (p: Person) => void;
   onSelectSharedPin?: (pin: SharedLocationPin) => void;
   onRouteCalculated?: (distance: string, duration: string) => void;
@@ -184,6 +188,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   selectedPerson,
   activeEmergency,
   activeSharedLocation,
+  realEmergencies,
   onSelectPerson,
   onSelectSharedPin,
   onRouteCalculated,
@@ -204,39 +209,12 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
   const hasCentered = useRef(false);
 
-  // Dynamic helper to shift coordinates close to the responder for testing if too far
+  // Dynamic helper for person coordinates
   const getAdjustedPerson = React.useCallback(
     (p: Person | null): Person | null => {
-      if (!p || !location) return p;
-
-      const distanceToFirst = getDistanceInMeters(
-        location.latitude,
-        location.longitude,
-        PEOPLE[0].latitude,
-        PEOPLE[0].longitude,
-      );
-
-      if (distanceToFirst > 10000) {
-        const idx = PEOPLE.findIndex((item) => item.id === p.id);
-        if (idx !== -1) {
-          const offsets = [
-            { dLat: 0.002, dLon: 0.002 }, // ~300m (Within 500m)
-            { dLat: 0.007, dLon: 0.006 }, // ~1km (Too Far)
-            { dLat: 0.003, dLon: -0.002 }, // ~400m (Within 500m)
-            { dLat: -0.008, dLon: 0.008 }, // ~1.2km (Too Far)
-            { dLat: 0.001, dLon: -0.002 }, // ~250m (Within 500m)
-          ];
-          const offset = offsets[idx % offsets.length];
-          return {
-            ...p,
-            latitude: location.latitude + offset.dLat,
-            longitude: location.longitude + offset.dLon,
-          };
-        }
-      }
       return p;
     },
-    [location],
+    [],
   );
 
   const adjustedSelectedPerson = React.useMemo(() => {
@@ -247,9 +225,19 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     return getAdjustedPerson(activeEmergency);
   }, [activeEmergency, getAdjustedPerson]);
 
+  const allEmergenciesList = React.useMemo(() => {
+    const map = new Map<string, Person>();
+    if (realEmergencies) {
+      realEmergencies.forEach((p) => map.set(p.id, p));
+    }
+    if (selectedPerson) map.set(selectedPerson.id, selectedPerson);
+    if (activeEmergency) map.set(activeEmergency.id, activeEmergency);
+    return Array.from(map.values());
+  }, [realEmergencies, selectedPerson, activeEmergency]);
+
   const adjustedPeople = React.useMemo(() => {
-    return PEOPLE.map((p) => getAdjustedPerson(p) as Person);
-  }, [location, getAdjustedPerson]);
+    return allEmergenciesList.map((p) => getAdjustedPerson(p) as Person);
+  }, [allEmergenciesList, getAdjustedPerson]);
 
   // Initialize and watch current GPS location of the user (the attender)
   useEffect(() => {
@@ -607,9 +595,10 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           const iconInfo = getIncidentIconInfo(p);
           const ActiveIcon = iconInfo.Icon;
 
-          // Format label text (shorten it slightly for neat visualization)
+          // Format label text using nearest landmark / address
+          const labelText = p.address || p.name;
           const shortLabel =
-            p.name.length > 22 ? p.name.substring(0, 19) + "..." : p.name;
+            labelText.length > 22 ? labelText.substring(0, 19) + "..." : labelText;
 
           return (
             <Marker
@@ -762,7 +751,7 @@ const mapStyles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: "#af101a", // change to brand ResQ Red!
+    backgroundColor: Colors.light.primary,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 3,

@@ -1,7 +1,8 @@
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
-import { getCurrentUser } from "./auth";
+import { getCurrentUser, UserProfile } from "./auth";
 import { supabase } from "./supabaseConfig";
+import { Person } from "@/constants/interfaces";
 
 export interface EmergencyRecord {
   id: string;
@@ -230,4 +231,125 @@ export async function createEmergencyReport(
     console.error("Error creating emergency report:", err);
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
+}
+
+/**
+ * Fetches all emergency records from Supabase, excluding those created by the given user.
+ * Returns records ordered by created_at descending (newest first).
+ */
+export async function fetchEmergencies(
+  excludeUserId: string
+): Promise<{ data: EmergencyRecord[]; error: Error | null }> {
+  try {
+    const { data, error } = await supabase
+      .from("emergencies")
+      .select("*")
+      .neq("creator_id", excludeUserId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("fetchEmergencies error:", error);
+      return { data: [], error: new Error(error.message) };
+    }
+
+    return { data: (data as EmergencyRecord[]) || [], error: null };
+  } catch (err: any) {
+    console.error("fetchEmergencies exception:", err);
+    return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Subscribes to real-time changes on the emergencies table.
+ * Calls `onUpdate` whenever any INSERT/UPDATE/DELETE occurs (except for the current user's own records).
+ * Returns the channel so the caller can unsubscribe later.
+ */
+export function subscribeToEmergencies(
+  excludeUserId: string,
+  onUpdate: () => void,
+  onStatusChange?: (status: string) => void
+) {
+  try {
+    const channelName = `emergencies-all-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "emergencies" },
+        (payload) => {
+          // Ignore changes caused by the current user
+          const record = (payload.new || payload.old) as EmergencyRecord | null;
+          if (record && record.creator_id === excludeUserId) return;
+          onUpdate();
+        }
+      )
+      .subscribe((status, err) => {
+        if (onStatusChange) {
+          onStatusChange(status);
+        }
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          console.warn(`Emergencies realtime channel notice [${status}]:`, err?.message || "Network offline");
+        }
+      });
+
+    return channel;
+  } catch (err) {
+    console.warn("subscribeToEmergencies setup warning:", err);
+    return null;
+  }
+}
+
+/**
+ * Fetches a single emergency record by ID from Supabase.
+ */
+export async function fetchEmergencyById(
+  id: string
+): Promise<{ data: EmergencyRecord | null; error: Error | null }> {
+  try {
+    const { data, error } = await supabase
+      .from("emergencies")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      return { data: null, error: new Error(error.message) };
+    }
+    return { data: (data as EmergencyRecord) || null, error: null };
+  } catch (err: any) {
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Utility to convert a Supabase EmergencyRecord (and optional creator UserProfile) to a standard UI Person object.
+ */
+export function mapEmergencyRecordToPerson(
+  r: EmergencyRecord,
+  creatorProfile?: UserProfile | null
+): Person {
+  const creatorName = creatorProfile?.name || "Resident in Distress";
+  const urgency: Person["urgency"] =
+    r.severity === "Critical"
+      ? "critical"
+      : r.severity === "Moderate"
+        ? "high"
+        : "medium";
+
+  return {
+    id: r.id,
+    name: creatorName,
+    title: r.title,
+    creatorId: r.creator_id ?? undefined,
+    address: r.nearest_landmark || r.location_text || "Location details unavailable",
+    avatarColor: "#AF101A",
+    markerColor: "#AF101A",
+    latitude: typeof r.latitude === "number" ? r.latitude : 6.675155,
+    longitude: typeof r.longitude === "number" ? r.longitude : -1.571569,
+    urgency,
+    description: r.description || r.title || "",
+    requesterDesc: r.description || `${r.title} near ${r.nearest_landmark || r.location_text}`,
+    images: r.visual_media || [],
+    knownHealthProblems: creatorProfile?.known_health_problems || ["None"],
+  };
 }

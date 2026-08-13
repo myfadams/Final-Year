@@ -1,4 +1,5 @@
 import { UserProfile } from "@/backend/auth";
+import { Person } from "@/constants/interfaces";
 
 export interface SharedLocationPin {
   id: string;
@@ -20,6 +21,7 @@ export interface SharedLocationPin {
 
 export const globalState = {
   activeEmergencyId: null as string | null,
+  activeEmergencyPerson: null as Person | null,
   activeSharedLocation: null as SharedLocationPin | null,
   isWalkSafeRoutingActive: false as boolean,
   userProfile: null as UserProfile | null,

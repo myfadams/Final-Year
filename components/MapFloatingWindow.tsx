@@ -99,7 +99,7 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
           {selectedPerson.name}
         </Text>
         <Text style={styles.cardIncidentDescription} numberOfLines={2}>
-          {selectedPerson.requesterDesc || selectedPerson.description}
+          {selectedPerson.description || selectedPerson.requesterDesc}
         </Text>
 
         {/* Actions Row */}

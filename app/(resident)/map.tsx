@@ -4,8 +4,14 @@ import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatin
 import Colors from "@/constants/Colors";
 import { globalState, SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
-import { PEOPLE } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
+import { fetchUserProfileById, getCurrentUser } from "@/backend/auth";
+import {
+  EmergencyRecord,
+  fetchEmergencies,
+  fetchEmergencyById,
+  mapEmergencyRecordToPerson,
+} from "@/backend/emergencies";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   BriefcaseMedical,
@@ -41,6 +47,7 @@ export default function LocationScreen() {
   const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
   const [activeSharedLocation, setActiveSharedLocation] =
     useState<SharedLocationPin | null>(globalState.activeSharedLocation);
+  const [realEmergencies, setRealEmergencies] = useState<Person[]>([]);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
   const [recenterNonce, setRecenterNonce] = useState<string>("");
@@ -62,6 +69,11 @@ export default function LocationScreen() {
     createdAt?: string;
     hasImOkay?: string;
     messageText?: string;
+    title?: string;
+    description?: string;
+    severity?: string;
+    creatorID?: string;
+    location?: string;
   }>();
 
   // Recenter trigger
@@ -72,106 +84,203 @@ export default function LocationScreen() {
   // Sync active emergency, shared location pin, and handle incoming query parameters when focused
   useFocusEffect(
     React.useCallback(() => {
-      // 1. Sync active emergency & active shared location from globalState
-      const globalActiveId = globalState.activeEmergencyId;
-      if (globalActiveId) {
-        const found = PEOPLE.find((p) => p.id === globalActiveId);
-        if (found) {
-          setActiveEmergency(found);
+      let isAlive = true;
+
+      (async () => {
+        const { user } = await getCurrentUser();
+        const userId = user?.id || "";
+
+        // 1. Fetch active emergencies from Supabase & resolve creator user profiles
+        const { data: emergencies } = await fetchEmergencies(userId);
+        if (!isAlive) return;
+
+        let loadedRealPeople: Person[] = [];
+        if (emergencies && emergencies.length > 0) {
+          loadedRealPeople = await Promise.all(
+            emergencies.map(async (rec) => {
+              let creatorProfile = null;
+              if (rec.creator_id) {
+                creatorProfile = await fetchUserProfileById(rec.creator_id);
+              }
+              return mapEmergencyRecordToPerson(rec, creatorProfile);
+            })
+          );
+          if (!isAlive) return;
+          setRealEmergencies(loadedRealPeople);
         }
-      } else {
-        setActiveEmergency(null);
-      }
 
-      if (globalState.activeSharedLocation) {
-        setActiveSharedLocation(globalState.activeSharedLocation);
-      }
+        // 2. Sync active emergency & active shared location from globalState
+        const globalActiveId = globalState.activeEmergencyId;
+        if (globalActiveId) {
+          let found = loadedRealPeople.find((p) => p.id === globalActiveId);
+          if (
+            !found &&
+            globalState.activeEmergencyPerson &&
+            globalState.activeEmergencyPerson.id === globalActiveId
+          ) {
+            found = globalState.activeEmergencyPerson;
+          }
+          if (found) {
+            setActiveEmergency(found);
+          }
+        } else {
+          setActiveEmergency(null);
+        }
 
-      // 2. Handle deep link / parameter changes
-      const {
-        personId,
-        action,
-        recenter,
-        sharedLocationId,
-        senderName,
-        senderAvatar,
-        lat,
-        lng,
-        locationType,
-        timestampText,
-        createdAt,
-        hasImOkay,
-        messageText,
-      } = params;
+        if (globalState.activeSharedLocation) {
+          setActiveSharedLocation(globalState.activeSharedLocation);
+        }
 
-      if (recenter) {
-        setSelectedPerson(null);
-        globalState.activeEmergencyId = null;
-        setActiveEmergency(null);
-        setRecenterNonce(recenter);
-        router.setParams({ recenter: undefined });
-      } else if (sharedLocationId && lat && lng) {
-        const latitude = parseFloat(lat);
-        const longitude = parseFloat(lng);
-        const createdTimestamp = createdAt
-          ? parseInt(createdAt, 10)
-          : Date.now();
-        const now = Date.now();
-        const isExpired =
-          locationType === "location_share" && now - createdTimestamp >= 300000;
+        // 3. Handle deep link / parameter changes
+        const {
+          personId,
+          action,
+          recenter,
+          sharedLocationId,
+          senderName,
+          senderAvatar,
+          lat,
+          lng,
+          locationType,
+          timestampText,
+          createdAt,
+          hasImOkay,
+          messageText,
+          title,
+          description,
+          severity,
+          creatorID,
+          location: locationParam,
+        } = params;
 
-        const newPin: SharedLocationPin = {
-          id: sharedLocationId,
-          senderName: senderName || "User",
-          senderAvatar: senderAvatar || "",
-          latitude,
-          longitude,
-          type: locationType || "location_share",
-          timestampText: timestampText || "Shared Location",
-          createdAt: createdTimestamp,
-          messageText: messageText,
-          hasImOkay: hasImOkay === "true",
-          reopenedAt: isExpired ? now : undefined,
-          dismissed: false,
-          cardDismissed: false,
-          isTrackingActive: false,
-        };
+        if (recenter) {
+          setSelectedPerson(null);
+          globalState.activeEmergencyId = null;
+          globalState.activeEmergencyPerson = null;
+          setActiveEmergency(null);
+          setRecenterNonce(recenter);
+          router.setParams({ recenter: undefined });
+        } else if (sharedLocationId && lat && lng) {
+          const latitude = parseFloat(lat);
+          const longitude = parseFloat(lng);
+          const createdTimestamp = createdAt
+            ? parseInt(createdAt, 10)
+            : Date.now();
+          const now = Date.now();
+          const isExpired =
+            locationType === "location_share" &&
+            now - createdTimestamp >= 300000;
 
-        globalState.activeSharedLocation = newPin;
-        setActiveSharedLocation(newPin);
-        setSelectedPerson(null);
+          const newPin: SharedLocationPin = {
+            id: sharedLocationId,
+            senderName: senderName || "User",
+            senderAvatar: senderAvatar || "",
+            latitude,
+            longitude,
+            type: locationType || "location_share",
+            timestampText: timestampText || "Shared Location",
+            createdAt: createdTimestamp,
+            messageText: messageText,
+            hasImOkay: hasImOkay === "true",
+            reopenedAt: isExpired ? now : undefined,
+            dismissed: false,
+            cardDismissed: false,
+            isTrackingActive: false,
+          };
 
-        router.setParams({
-          sharedLocationId: undefined,
-          senderName: undefined,
-          senderAvatar: undefined,
-          lat: undefined,
-          lng: undefined,
-          locationType: undefined,
-          timestampText: undefined,
-          createdAt: undefined,
-          hasImOkay: undefined,
-          messageText: undefined,
-        });
-      } else if (personId) {
-        const person = PEOPLE.find((p) => p.id === personId);
-        if (person) {
-          setSelectedPerson(person);
-          if (globalState.activeSharedLocation) {
-            const updated = {
-              ...globalState.activeSharedLocation,
-              cardDismissed: true,
+          globalState.activeSharedLocation = newPin;
+          setActiveSharedLocation(newPin);
+          setSelectedPerson(null);
+
+          router.setParams({
+            sharedLocationId: undefined,
+            senderName: undefined,
+            senderAvatar: undefined,
+            lat: undefined,
+            lng: undefined,
+            locationType: undefined,
+            timestampText: undefined,
+            createdAt: undefined,
+            hasImOkay: undefined,
+            messageText: undefined,
+          });
+        } else if (personId) {
+          let person: Person | null =
+            loadedRealPeople.find((p) => p.id === personId) ?? null;
+
+          if (!person) {
+            person = loadedRealPeople.find((p) => p.id === personId) ?? null;
+          }
+
+          if (!person) {
+            const targetCreatorId = creatorID || "";
+            let creatorName = "Resident in Distress";
+            let knownHealth: string[] = [];
+
+            if (targetCreatorId) {
+              const profile = await fetchUserProfileById(targetCreatorId);
+              if (profile) {
+                creatorName = profile.name;
+                knownHealth = profile.known_health_problems || [];
+              }
+            } else {
+              const { data: rec } = await fetchEmergencyById(personId);
+              if (rec?.creator_id) {
+                const profile = await fetchUserProfileById(rec.creator_id);
+                if (profile) {
+                  creatorName = profile.name;
+                  knownHealth = profile.known_health_problems || [];
+                }
+              }
+            }
+
+            const urgencyMap: Record<string, "critical" | "high" | "medium"> = {
+              Critical: "critical",
+              Moderate: "high",
+              Low: "medium",
             };
-            globalState.activeSharedLocation = updated;
-            setActiveSharedLocation(updated);
+            const urgency = urgencyMap[severity || ""] ?? "critical";
+
+            person = {
+              id: personId,
+              name: creatorName,
+              title: title || "Emergency",
+              creatorId: targetCreatorId,
+              address: locationParam || "Location details",
+              avatarColor: "#AF101A",
+              markerColor: "#AF101A",
+              latitude: lat ? parseFloat(lat) : 6.675155,
+              longitude: lng ? parseFloat(lng) : -1.571569,
+              urgency,
+              description: description || title || "",
+              requesterDesc: description || `${title} near ${locationParam}`,
+              knownHealthProblems: knownHealth,
+            };
           }
-          if (action === "respond") {
-            globalState.activeEmergencyId = personId;
-            setActiveEmergency(person);
+
+          if (person) {
+            setSelectedPerson(person);
+            if (globalState.activeSharedLocation) {
+              const updated = {
+                ...globalState.activeSharedLocation,
+                cardDismissed: true,
+              };
+              globalState.activeSharedLocation = updated;
+              setActiveSharedLocation(updated);
+            }
+            if (action === "respond") {
+              globalState.activeEmergencyId = personId;
+              globalState.activeEmergencyPerson = person;
+              setActiveEmergency(person);
+            }
           }
+          router.setParams({ personId: undefined, action: undefined });
         }
-        router.setParams({ personId: undefined, action: undefined });
-      }
+      })();
+
+      return () => {
+        isAlive = false;
+      };
     }, [params]),
   );
 
@@ -292,6 +401,7 @@ export default function LocationScreen() {
         selectedPerson={selectedPerson}
         activeEmergency={activeEmergency}
         activeSharedLocation={activeSharedLocation}
+        realEmergencies={realEmergencies}
         recenterNonce={recenterNonce}
         categoryFilter={categoryFilter}
         searchQuery={searchQuery}
@@ -416,9 +526,9 @@ export default function LocationScreen() {
           {
             bottom:
               selectedPerson ||
-              (activeSharedLocation &&
-                !activeSharedLocation.cardDismissed &&
-                !activeSharedLocation.dismissed)
+                (activeSharedLocation &&
+                  !activeSharedLocation.cardDismissed &&
+                  !activeSharedLocation.dismissed)
                 ? Platform.OS === "ios"
                   ? 365
                   : 330
@@ -460,9 +570,9 @@ export default function LocationScreen() {
           {
             bottom:
               selectedPerson ||
-              (activeSharedLocation &&
-                !activeSharedLocation.cardDismissed &&
-                !activeSharedLocation.dismissed)
+                (activeSharedLocation &&
+                  !activeSharedLocation.cardDismissed &&
+                  !activeSharedLocation.dismissed)
                 ? Platform.OS === "ios"
                   ? 305
                   : 270
