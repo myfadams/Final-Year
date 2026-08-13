@@ -1,8 +1,9 @@
+import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
 import Colors from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
-import { emergencyAlerts, PEOPLE } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
+import { supabase } from "@/backend/supabaseConfig";
 import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
@@ -35,6 +36,7 @@ import {
   Alert,
   Modal,
   Platform,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -52,6 +54,8 @@ export default function IncidentDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<any>();
 
+  const targetId = (params.id || params.personId || "").toString();
+
   // Transport mode selection state
   const [travelMode, setTravelMode] = useState<"driving" | "running" | "walking">(
     params.travelMode || "running"
@@ -60,61 +64,151 @@ export default function IncidentDetailScreen() {
   // User current GPS coordinates for dynamic ETA calculation
   const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
 
-  // Resolve incident details from navigation params or fallback to mock tempData emergencyAlerts
-  const resolvedFromParams = Boolean(params.title && params.location);
+  // Live Supabase state
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [dbEmergency, setDbEmergency] = useState<any | null>(null);
+  const [dbCreator, setDbCreator] = useState<any | null>(null);
 
+  const fetchDetails = useCallback(async (isRefetch = false) => {
+    if (!isRefetch) setLoading(true);
+    setFetchError(null);
+
+    try {
+      if (!targetId) {
+        setFetchError("No emergency ID provided.");
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
+      // 1. Fetch emergency from 'emergencies' table
+      const { data: emergency, error: empError } = await supabase
+        .from("emergencies")
+        .select("*")
+        .eq("id", targetId)
+        .maybeSingle();
+
+      if (empError) {
+        console.error("Supabase emergency fetch error:", empError);
+        setFetchError(empError.message || "Failed to fetch emergency record.");
+      } else if (!emergency) {
+        if (!params.title && !params.location) {
+          setFetchError("Emergency record not found.");
+        }
+      } else {
+        setDbEmergency(emergency);
+
+        // 2. Fetch creator info from 'users' table
+        if (emergency.creator_id) {
+          const { data: userData, error: userError } = await supabase
+            .from("users")
+            .select("*")
+            .eq("id", emergency.creator_id)
+            .maybeSingle();
+
+          if (userError) {
+            console.warn("Supabase user profile fetch warning:", userError);
+          } else {
+            setDbCreator(userData);
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("Exception fetching emergency details:", err);
+      setFetchError(err?.message || "An error occurred while loading incident data.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [targetId, params.title, params.location]);
+
+  useEffect(() => {
+    fetchDetails();
+
+    if (!targetId) return;
+
+    // Realtime postgres changes channel for emergencies table
+    const channel = supabase
+      .channel(`incident-detail-${targetId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "emergencies", filter: `id=eq.${targetId}` },
+        (payload) => {
+          if (payload.new) {
+            setDbEmergency((prev: any) => ({ ...prev, ...payload.new }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [targetId, fetchDetails]);
+
+  // Derived incident object
   const incident = useMemo(() => {
-    if (resolvedFromParams) {
+    if (dbEmergency) {
       return {
-        id: (params.id || params.personId || "1").toString(),
-        title: params.title as string,
-        description: (params.description as string) || "",
-        location: (params.location as string) || "Campus location",
-        severity: (params.severity as string) || "Moderate",
-        isResolved: params.isResolved === "true",
-        created_at: params.createdAt || null,
-        photos: params.photos ? JSON.parse(params.photos as string) : null,
+        id: dbEmergency.id,
+        title: dbEmergency.title,
+        description: dbEmergency.description || "",
+        location: dbEmergency.nearest_landmark
+          ? `${dbEmergency.location_text} (${dbEmergency.nearest_landmark})`
+          : dbEmergency.location_text || "Campus location",
+        severity: dbEmergency.severity || "Moderate",
+        isResolved: Boolean(dbEmergency.is_resolved),
+        created_at: dbEmergency.created_at || null,
+        photos: dbEmergency.visual_media || null,
+        voiceNotes: dbEmergency.voice_notes || null,
+        latitude: typeof dbEmergency.latitude === "number" ? dbEmergency.latitude : parseFloat(dbEmergency.latitude) || 6.675155,
+        longitude: typeof dbEmergency.longitude === "number" ? dbEmergency.longitude : parseFloat(dbEmergency.longitude) || -1.571569,
       };
     }
-    const matched = emergencyAlerts.find(
-      (item) => item.id === (params.id || params.personId)
-    ) || emergencyAlerts[0];
-
     return {
-      id: matched.id.toString(),
-      title: matched.title,
-      description: matched.description,
-      location: matched.location,
-      severity: matched.severity,
-      isResolved: matched.isResolved,
-      created_at: null,
-      photos: null,
+      id: targetId || "1",
+      title: (params.title as string) || "Emergency Alert",
+      description: (params.description as string) || "",
+      location: (params.location as string) || "Campus location",
+      severity: (params.severity as string) || "Moderate",
+      isResolved: params.isResolved === "true",
+      created_at: params.createdAt || null,
+      photos: params.photos ? JSON.parse(params.photos as string) : null,
+      voiceNotes: params.voiceNotes ? JSON.parse(params.voiceNotes as string) : null,
+      latitude: typeof params.lat === "string" || typeof params.lat === "number" ? parseFloat(params.lat as string) : 6.675155,
+      longitude: typeof params.lng === "string" || typeof params.lng === "number" ? parseFloat(params.lng as string) : -1.571569,
     };
-  }, [params, resolvedFromParams]);
+  }, [dbEmergency, targetId, params]);
 
-  // Lookup reporter / target person profile from PEOPLE mock dataset or params
-  const person = useMemo(() => {
-    return PEOPLE.find((p) => p.id === incident.id) || PEOPLE[0];
-  }, [incident.id]);
-
+  // Derived creator profile
   const creatorProfile = useMemo(() => {
+    if (dbCreator) {
+      let healthProblems: string[] = ["No chronic conditions listed"];
+      if (Array.isArray(dbCreator.known_health_problems) && dbCreator.known_health_problems.length > 0) {
+        healthProblems = dbCreator.known_health_problems;
+      }
+      return {
+        name: dbCreator.name || "Resident",
+        role: (dbCreator.role || "RESIDENT").toUpperCase(),
+        phone: dbCreator.phone || null,
+        profile_image_url: dbCreator.profile_img_url || null,
+        known_health_problems: healthProblems,
+      };
+    }
+
     return {
-      name: params.creatorName || person?.name || "Resident",
-      role: params.creatorRole || "RESIDENT",
+      name: params.creatorName || "Resident in Distress",
+      role: (params.creatorRole || "RESIDENT").toUpperCase(),
       phone: params.creatorPhone || "+233 55 123 4567",
-      profile_image_url: params.creatorImage || person?.images?.[0] || null,
-      known_health_problems: person?.knownHealthProblems || ["No chronic conditions listed"],
+      profile_image_url: params.creatorImage || null,
+      known_health_problems: ["No chronic conditions listed"],
     };
-  }, [params, person]);
+  }, [dbCreator, params]);
 
-  // Incident coordinates
-  const latitude = typeof params.lat === "string" || typeof params.lat === "number"
-    ? parseFloat(params.lat as string)
-    : (person ? person.latitude : 6.675155);
-
-  const longitude = typeof params.lng === "string" || typeof params.lng === "number"
-    ? parseFloat(params.lng as string)
-    : (person ? person.longitude : -1.571569);
+  const latitude = incident.latitude;
+  const longitude = incident.longitude;
 
   // Load device position for dynamic ETA calculation
   useEffect(() => {
@@ -279,49 +373,49 @@ export default function IncidentDetailScreen() {
 
   // Retrieve attached visual media from incident or params
   const mediaList: { uri: string; type: "image" | "video" }[] = useMemo(() => {
-    if (incident.photos && Array.isArray(incident.photos)) {
-      return incident.photos;
-    }
-    if (person && person.images && person.images.length > 0) {
-      return person.images.map((url) => ({
-        uri: url,
-        type: "image" as const,
-      }));
+    if (incident.photos && Array.isArray(incident.photos) && incident.photos.length > 0) {
+      return incident.photos.map((item: any) => {
+        if (typeof item === "string") {
+          return { uri: item, type: "image" as const };
+        }
+        return item;
+      });
     }
     if (params.photos) {
       try {
         const parsed = JSON.parse(params.photos as string);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
         console.log("Failed to parse photos param:", e);
       }
     }
-    return [
-      {
-        uri: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80",
-        type: "image" as const,
-      },
-    ];
-  }, [incident.photos, person, params.photos]);
+    return [];
+  }, [incident.photos, params.photos]);
 
   // Retrieve attached voice notes
   const voiceNotesList: { id: string; uri: string; duration: number }[] = useMemo(() => {
+    if (incident.voiceNotes && Array.isArray(incident.voiceNotes) && incident.voiceNotes.length > 0) {
+      return incident.voiceNotes.map((item: any, idx: number) => {
+        if (typeof item === "string") {
+          return {
+            id: `vn_${idx}_${item.slice(-8)}`,
+            uri: item,
+            duration: 5,
+          };
+        }
+        return item;
+      });
+    }
     if (params.voiceNotes) {
       try {
         const parsed = JSON.parse(params.voiceNotes as string);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       } catch (e) {
         console.log("Failed to parse voiceNotes param:", e);
       }
     }
-    return [
-      {
-        id: "vn_1",
-        uri: FALLBACK_VOICE_NOTE_URI,
-        duration: 5,
-      },
-    ];
-  }, [params.voiceNotes]);
+    return [];
+  }, [incident.voiceNotes, params.voiceNotes]);
 
   // Audio Playback state
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
@@ -533,7 +627,7 @@ export default function IncidentDetailScreen() {
     }
   };
 
-  // Nearby responders dummy dataset
+  // Active responders dataset (dynamic live responder status)
   const respondersData = useMemo(() => {
     const data: Array<{
       id: string;
@@ -548,52 +642,27 @@ export default function IncidentDetailScreen() {
       statusText: string;
       timeText: string;
       mode: "driving" | "running" | "walking";
-    }> = [
-      {
-        id: "resp_1",
-        name: "Dr. Kwabena Frimpong",
-        role: "EMT",
-        status: "On-site",
+    }> = [];
+
+    if (isResponding) {
+      data.push({
+        id: "resp_current_user",
+        name: "You (Responding)",
+        role: "RESPONDER",
+        status: `ETA: ${calculatedEta.durationText}`,
         statusColor: "#2E7D32",
-        icon: BriefcaseMedical,
-        lat: latitude + 0.0003,
-        lng: longitude + 0.0004,
+        icon: User,
+        lat: userCoords?.latitude || latitude,
+        lng: userCoords?.longitude || longitude,
         color: "#2E7D32",
-        statusText: "On-site",
-        timeText: "Arrived",
-        mode: "driving",
-      },
-      {
-        id: "resp_2",
-        name: "Officer Samuel Mensah",
-        role: "Security",
-        status: "2 mins away",
-        statusColor: "#F57C00",
-        icon: Shield,
-        lat: latitude - 0.0008,
-        lng: longitude + 0.0007,
-        color: "#F57C00",
-        statusText: "ETA: 2 mins (250m)",
-        timeText: "2 mins away",
-        mode: "running",
-      },
-      {
-        id: "resp_3",
-        name: "Ambulance Unit 4",
-        role: "PARAMEDIC",
-        status: "En route",
-        statusColor: "#1976D2",
-        icon: Car,
-        lat: latitude + 0.0016,
-        lng: longitude - 0.0014,
-        color: "#1976D2",
-        statusText: "ETA: 4 mins (1.2km)",
+        statusText: `ETA: ${calculatedEta.durationText} (${calculatedEta.distanceText})`,
         timeText: "En route",
-        mode: "driving",
-      },
-    ];
+        mode: travelMode,
+      });
+    }
+
     return data;
-  }, [latitude, longitude]);
+  }, [isResponding, userCoords, latitude, longitude, calculatedEta, travelMode]);
 
   const handleCallServices = () => {
     Alert.alert(
@@ -657,6 +726,62 @@ export default function IncidentDetailScreen() {
 
   const ActiveAlertIcon = getAlertIcon();
 
+  const formatStartedTime = (createdAt?: string | null) => {
+    if (!createdAt) return "Recent alert";
+    try {
+      const diffMs = Date.now() - new Date(createdAt).getTime();
+      const diffMins = Math.floor(diffMs / (1000 * 60));
+      if (diffMins < 1) return "Just now";
+      if (diffMins < 60) return `${diffMins} min${diffMins > 1 ? "s" : ""} ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+      return new Date(createdAt).toLocaleDateString();
+    } catch (_) {
+      return "Recent alert";
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <NavHeader title="Incident Details" />
+        <View style={styles.loadingBody}>
+          <HeartBeatWave width={220} height={75} color="#AF101A" thickness={12} />
+          <Text style={styles.loadingText}>Fetching emergency details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (fetchError && !dbEmergency && !params.title) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <NavHeader title="Incident Details" />
+        <View style={styles.errorBody}>
+          <AlertTriangle size={44} color="#AF101A" />
+          <Text style={styles.errorTitle}>Emergency Details Unavailable</Text>
+          <Text style={styles.errorText}>{fetchError}</Text>
+          <TouchableOpacity
+            style={styles.retryBtn}
+            onPress={() => fetchDetails()}
+            activeOpacity={0.8}
+          >
+            <RotateCw size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+            <Text style={styles.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const getInitials = (name?: string | null): string => {
+    if (!name) return "R";
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return "R";
+    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+    return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase();
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -665,6 +790,17 @@ export default function IncidentDetailScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              fetchDetails(true);
+            }}
+            colors={["#AF101A"]}
+            tintColor="#AF101A"
+          />
+        }
       >
         {/* Incident Summary Header Card */}
         <View style={styles.summaryContainer}>
@@ -689,7 +825,7 @@ export default function IncidentDetailScreen() {
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
               <Clock size={16} color="#64748B" />
-              <Text style={styles.metaText}>Started 4 mins ago</Text>
+              <Text style={styles.metaText}>{formatStartedTime(incident.created_at)}</Text>
             </View>
             <View style={styles.metaItem}>
               <MapPin size={16} color="#64748B" />
@@ -747,7 +883,19 @@ export default function IncidentDetailScreen() {
               </View>
             </Marker>
 
-            {/* Responder Markers */}
+            {/* User Current Position Marker */}
+            {userCoords && (
+              <Marker
+                coordinate={{ latitude: userCoords.latitude, longitude: userCoords.longitude }}
+                title="Your Location"
+              >
+                <View style={styles.userLocationMarkerCircle}>
+                  <View style={styles.userLocationMarkerInner} />
+                </View>
+              </Marker>
+            )}
+
+            {/* Active Responder Markers */}
             {respondersData.map((resp) => {
               const RespIcon = resp.icon;
               return (
@@ -826,7 +974,9 @@ export default function IncidentDetailScreen() {
                 {creatorProfile?.profile_image_url ? (
                   <Image source={{ uri: creatorProfile.profile_image_url }} style={styles.profileAvatarImage} />
                 ) : (
-                  <User size={20} color="#AF101A" />
+                  <Text style={styles.profileInitialsText}>
+                    {getInitials(creatorProfile.name)}
+                  </Text>
                 )}
               </View>
               <View style={{ flex: 1 }}>
@@ -868,56 +1018,66 @@ export default function IncidentDetailScreen() {
         {/* Responder Status Timeline */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Responders ({respondersData.length})
+            Responders ({dbEmergency?.responders_count ?? respondersData.length})
           </Text>
           <View style={styles.timelineCard}>
-            {respondersData.map((r, index) => {
-              const isLast = index === respondersData.length - 1;
-              const color = r.color;
+            {respondersData.length > 0 ? (
+              respondersData.map((r, index) => {
+                const isLast = index === respondersData.length - 1;
+                const color = r.color;
 
-              const renderTransportIcon = () => {
-                const iconSize = 13;
-                const iconColor = "#475569";
-                if (r.mode === "driving") return <Car size={iconSize} color={iconColor} />;
-                if (r.mode === "walking" || r.mode === "running") return <Footprints size={iconSize} color={iconColor} />;
-                return <Zap size={iconSize} color={iconColor} />;
-              };
+                const renderTransportIcon = () => {
+                  const iconSize = 13;
+                  const iconColor = "#475569";
+                  if (r.mode === "driving") return <Car size={iconSize} color={iconColor} />;
+                  if (r.mode === "walking" || r.mode === "running") return <Footprints size={iconSize} color={iconColor} />;
+                  return <Zap size={iconSize} color={iconColor} />;
+                };
 
-              return (
-                <View key={r.id} style={styles.timelineRow}>
-                  <View style={styles.timelineBulletContainer}>
-                    <View style={[styles.timelineBulletCircle, { borderColor: color }]}>
-                      <View style={[styles.timelineBulletInner, { backgroundColor: color }]} />
+                return (
+                  <View key={r.id} style={styles.timelineRow}>
+                    <View style={styles.timelineBulletContainer}>
+                      <View style={[styles.timelineBulletCircle, { borderColor: color }]}>
+                        <View style={[styles.timelineBulletInner, { backgroundColor: color }]} />
+                      </View>
+                      {!isLast && <View style={styles.timelineConnector} />}
                     </View>
-                    {!isLast && <View style={styles.timelineConnector} />}
+
+                    <View style={styles.timelineContent}>
+                      <View style={styles.responderNameRow}>
+                        <Text style={styles.responderName}>{r.name}</Text>
+                        <View style={styles.roleBadge}>
+                          <Text style={styles.roleBadgeText}>{r.role}</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.statusBadgeRow}>
+                        <View style={styles.statusLabelContainer}>
+                          <Check size={12} color={color} style={{ marginRight: 4 }} />
+                          <Text style={[styles.statusLabelText, { color }]}>
+                            {r.statusText}
+                          </Text>
+                        </View>
+                        <View style={styles.transportModeTag}>
+                          {renderTransportIcon()}
+                          <Text style={styles.transportModeTagText}>
+                            {r.mode.charAt(0).toUpperCase() + r.mode.slice(1)}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
                   </View>
-
-                  <View style={styles.timelineContent}>
-                    <View style={styles.responderNameRow}>
-                      <Text style={styles.responderName}>{r.name}</Text>
-                      <View style={styles.roleBadge}>
-                        <Text style={styles.roleBadgeText}>{r.role}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.statusBadgeRow}>
-                      <View style={styles.statusLabelContainer}>
-                        <Check size={12} color={color} style={{ marginRight: 4 }} />
-                        <Text style={[styles.statusLabelText, { color }]}>
-                          {r.statusText}
-                        </Text>
-                      </View>
-                      <View style={styles.transportModeTag}>
-                        {renderTransportIcon()}
-                        <Text style={styles.transportModeTagText}>
-                          {r.mode.charAt(0).toUpperCase() + r.mode.slice(1)}
-                        </Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
+                );
+              })
+            ) : (
+              <View style={styles.noRespondersContainer}>
+                <Shield size={24} color="#94A3B8" />
+                <Text style={styles.noRespondersText}>No active responders yet</Text>
+                <Text style={styles.noRespondersSubtext}>
+                  Tap "Respond to Emergency" below to assist this resident.
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -1848,6 +2008,11 @@ const styles = StyleSheet.create({
     width: "100%",
     height: "100%",
   },
+  profileInitialsText: {
+    fontSize: 16,
+    fontFamily: typography.bold,
+    color: "#AF101A",
+  },
   profileNameText: {
     fontSize: 15.5,
     fontFamily: typography.bold,
@@ -1914,5 +2079,88 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontFamily: typography.semibold,
     color: "#475569",
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+  },
+  loadingBody: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 14,
+    fontFamily: typography.semibold,
+    color: "#64748B",
+  },
+  errorBody: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  errorTitle: {
+    fontSize: 18,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+    marginTop: 12,
+  },
+  errorText: {
+    fontSize: 14,
+    fontFamily: typography.regular,
+    color: "#64748B",
+    marginTop: 6,
+    textAlign: "center",
+  },
+  retryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#AF101A",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 16,
+  },
+  retryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: typography.bold,
+  },
+  userLocationMarkerCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(37, 99, 235, 0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#2563EB",
+  },
+  userLocationMarkerInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#2563EB",
+  },
+  noRespondersContainer: {
+    alignItems: "center",
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  noRespondersText: {
+    fontSize: 14,
+    fontFamily: typography.semibold,
+    color: "#475569",
+    marginTop: 4,
+  },
+  noRespondersSubtext: {
+    fontSize: 12,
+    fontFamily: typography.regular,
+    color: "#94A3B8",
+    textAlign: "center",
   },
 });
