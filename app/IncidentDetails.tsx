@@ -5,6 +5,7 @@ import { emergencyAlerts, PEOPLE } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import { Audio } from "expo-av";
 import { Image } from "expo-image";
+import * as Location from "expo-location";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   AlertTriangle,
@@ -14,6 +15,7 @@ import {
   Clock,
   Flame,
   Footprints,
+  HeartPulse,
   Info,
   MapPin,
   MessageSquare,
@@ -24,9 +26,11 @@ import {
   RotateCw,
   Shield,
   Siren,
+  User,
   X,
+  Zap,
 } from "lucide-react-native";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -40,45 +44,109 @@ import {
 } from "react-native";
 import MapView, { Circle, Marker } from "react-native-maps";
 
-// Default demo clip used whenever a voice note doesn't have a real, playable URI.
+// Default demo audio clip used whenever a voice note doesn't have a real, playable URI.
 const FALLBACK_VOICE_NOTE_URI =
   "https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/thrust.mp3";
 
 export default function IncidentDetailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<any>();
-  // console.log(resolvedFromParams);
-  // console.log(incident);
-  // console.log(params);
 
-  // Resolve the incident details from params first (for robust direct state pass),
-  // falling back to lookup in emergencyAlerts if incomplete.
-  const resolvedFromParams = params.title && params.location;
+  // Transport mode selection state
+  const [travelMode, setTravelMode] = useState<"driving" | "running" | "walking">(
+    params.travelMode || "running"
+  );
 
-  const incident = resolvedFromParams
-    ? {
-        id: params.id || "1",
-        title: params.title,
-        description: params.description || "",
-        location: params.location,
-        distance: params.distance ? parseInt(params.distance, 10) : 120,
-        time: params.time ? parseInt(params.time, 10) : 0,
-        responseTime: params.responseTime
-          ? parseInt(params.responseTime, 10)
-          : 240,
-        severity: params.severity || "Moderate",
+  // User current GPS coordinates for dynamic ETA calculation
+  const [userCoords, setUserCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Resolve incident details from navigation params or fallback to mock tempData emergencyAlerts
+  const resolvedFromParams = Boolean(params.title && params.location);
+
+  const incident = useMemo(() => {
+    if (resolvedFromParams) {
+      return {
+        id: (params.id || params.personId || "1").toString(),
+        title: params.title as string,
+        description: (params.description as string) || "",
+        location: (params.location as string) || "Campus location",
+        severity: (params.severity as string) || "Moderate",
         isResolved: params.isResolved === "true",
-        photos: params.photos ? JSON.parse(params.photos) : null,
-      }
-    : emergencyAlerts.find((item) => item.id === params.id) ||
-      emergencyAlerts[0];
+        created_at: params.createdAt || null,
+        photos: params.photos ? JSON.parse(params.photos as string) : null,
+      };
+    }
+    const matched = emergencyAlerts.find(
+      (item) => item.id === (params.id || params.personId)
+    ) || emergencyAlerts[0];
 
-  // Lookup coordinate from PEOPLE list or params, fallback to KNUST main campus coordinates
-  const person = PEOPLE.find((p) => p.id === incident.id);
-  const latitude = params.lat ? parseFloat(params.lat) : (person ? person.latitude : 6.675155);
-  const longitude = params.lng ? parseFloat(params.lng) : (person ? person.longitude : -1.571569);
+    return {
+      id: matched.id.toString(),
+      title: matched.title,
+      description: matched.description,
+      location: matched.location,
+      severity: matched.severity,
+      isResolved: matched.isResolved,
+      created_at: null,
+      photos: null,
+    };
+  }, [params, resolvedFromParams]);
 
-  // Resolve color scheme dynamically from severity level
+  // Lookup reporter / target person profile from PEOPLE mock dataset or params
+  const person = useMemo(() => {
+    return PEOPLE.find((p) => p.id === incident.id) || PEOPLE[0];
+  }, [incident.id]);
+
+  const creatorProfile = useMemo(() => {
+    return {
+      name: params.creatorName || person?.name || "Resident",
+      role: params.creatorRole || "RESIDENT",
+      phone: params.creatorPhone || "+233 55 123 4567",
+      profile_image_url: params.creatorImage || person?.images?.[0] || null,
+      known_health_problems: person?.knownHealthProblems || ["No chronic conditions listed"],
+    };
+  }, [params, person]);
+
+  // Incident coordinates
+  const latitude = typeof params.lat === "string" || typeof params.lat === "number"
+    ? parseFloat(params.lat as string)
+    : (person ? person.latitude : 6.675155);
+
+  const longitude = typeof params.lng === "string" || typeof params.lng === "number"
+    ? parseFloat(params.lng as string)
+    : (person ? person.longitude : -1.571569);
+
+  // Load device position for dynamic ETA calculation
+  useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status === "granted") {
+          const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
+        }
+      } catch (_) {}
+    })();
+  }, []);
+
+  // Map reference to center & animate camera to incident location
+  const mapRef = useRef<MapView>(null);
+
+  useEffect(() => {
+    if (mapRef.current && latitude && longitude) {
+      mapRef.current.animateToRegion(
+        {
+          latitude,
+          longitude,
+          latitudeDelta: 0.005,
+          longitudeDelta: 0.005,
+        },
+        500
+      );
+    }
+  }, [latitude, longitude]);
+
+  // Severity color tokens
   const getSeverityColors = (level: string) => {
     switch (level) {
       case "Critical":
@@ -99,115 +167,171 @@ export default function IncidentDetailScreen() {
         };
     }
   };
-  // console.log(incident.severity);
   const severityColors = getSeverityColors(incident.severity);
 
-  // State for fullscreen photo/video viewer lightbox
+  // Fullscreen image/video lightbox state
   const [viewerVisible, setViewerVisible] = useState(false);
   const [activeMediaUri, setActiveMediaUri] = useState<string | null>(null);
-  const [activeMediaType, setActiveMediaType] = useState<"image" | "video">(
-    "image",
-  );
+  const [activeMediaType, setActiveMediaType] = useState<"image" | "video">("image");
 
-  // State to track if the current resident is responding to this emergency
+  // Response assignment state
   const [isResponding, setIsResponding] = useState(
-    globalState.activeEmergencyId === incident.id.toString(),
+    globalState.activeEmergencyId === incident.id
   );
 
-  // Sync response state in real-time whenever the details screen gains focus
   useFocusEffect(
-    React.useCallback(() => {
-      setIsResponding(globalState.activeEmergencyId === incident.id.toString());
-    }, [incident.id]),
+    useCallback(() => {
+      setIsResponding(globalState.activeEmergencyId === incident.id);
+    }, [incident.id])
   );
+
+  // Calculate distance & travel ETA dynamically
+  const calculatedEta = useMemo(() => {
+    if (!userCoords) {
+      const defaultMins = travelMode === "driving" ? 2 : travelMode === "running" ? 4 : 8;
+      return { distanceText: "Near location", durationText: `${defaultMins} mins`, totalSeconds: defaultMins * 60 };
+    }
+
+    const R = 6371e3;
+    const toRad = (d: number) => (d * Math.PI) / 180;
+    const dLat = toRad(latitude - userCoords.latitude);
+    const dLon = toRad(longitude - userCoords.longitude);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(userCoords.latitude)) * Math.cos(toRad(latitude)) * Math.sin(dLon / 2) ** 2;
+    const distanceMeters = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+
+    let speed = 4.5; // running ~16 km/h
+    if (travelMode === "driving") speed = 12.0; // driving ~43 km/h
+    else if (travelMode === "walking") speed = 1.4; // walking ~5 km/h
+
+    const seconds = Math.max(30, Math.round(distanceMeters / speed));
+    const mins = Math.max(1, Math.ceil(seconds / 60));
+
+    const distanceText = distanceMeters < 1000 ? `${distanceMeters}m` : `${(distanceMeters / 1000).toFixed(1)}km`;
+    return { distanceText, durationText: `${mins} min${mins > 1 ? "s" : ""}`, totalSeconds: seconds };
+  }, [userCoords, latitude, longitude, travelMode]);
 
   const handleRespondToggle = () => {
-    const idStr = incident.id.toString();
-    if (isResponding) {
-      globalState.activeEmergencyId = null;
-      setIsResponding(false);
+    if (!isResponding && incident.severity === "Critical" && calculatedEta.totalSeconds / 60 > 8) {
       Alert.alert(
-        "Response Cancelled",
-        "You are no longer assigned as a responder to this incident.",
+        "Too Far Out to Respond",
+        "For critical emergencies, your estimated travel time (ETA) must be 8 minutes or less to respond."
       );
-    } else {
-      globalState.activeEmergencyId = idStr;
-      setIsResponding(true);
+      return;
+    }
+
+    if (isResponding) {
       Alert.alert(
-        "Response Assigned",
-        "You have been successfully assigned to respond. Would you like to view the navigation map route?",
+        "Cancel Response?",
+        "Are you sure you want to cancel your response attempt?",
         [
+          { text: "No, Stay Responding", style: "cancel" },
           {
-            text: "View Navigation Map",
+            text: "Yes, Cancel Response",
+            style: "destructive",
             onPress: () => {
-              router.push({
-                pathname: "/(resident)/map",
-                params: { personId: idStr, action: "respond" },
-              });
+              globalState.activeEmergencyId = null;
+              globalState.activeEmergencyPerson = null;
+              setIsResponding(false);
+              Alert.alert(
+                "Response Cancelled",
+                "Your response assignment has been cancelled."
+              );
             },
           },
-          { text: "Dismiss", style: "cancel" },
-        ],
+        ]
+      );
+    } else {
+      Alert.alert(
+        "Respond to this emergency?",
+        `You are approximately ${calculatedEta.durationText} away (${calculatedEta.distanceText}).`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Confirm Response",
+            onPress: () => {
+              globalState.activeEmergencyId = incident.id;
+              setIsResponding(true);
+
+              Alert.alert(
+                "Response Recorded",
+                `You are now responding. Estimated ETA: ${calculatedEta.durationText}.`,
+                [
+                  {
+                    text: "View Navigation Map",
+                    onPress: () => {
+                      router.push({
+                        pathname: "/(resident)/map",
+                        params: { personId: incident.id, action: "respond" },
+                      });
+                    },
+                  },
+                  { text: "OK", style: "cancel" },
+                ]
+              );
+            },
+          },
+        ]
       );
     }
   };
 
-  // Retrieve attached media (from submitted report state or database mock)
-  const mediaList =
-    (incident as any).photos ||
-    (person && person.images
-      ? person.images.map((url: string) => ({
-          uri: url,
-          type: "image" as const,
-        }))
-      : []);
-
-  // Retrieve attached voice notes (from params, report submit, or mock data).
-  // Memoized off stable primitives (incident.id, the raw params string) so this
-  // array keeps a STABLE reference across re-renders. Without this, a new array
-  // was created on every render, which retriggered the duration-fetch effect
-  // below on every render — including its cleanup, which was unloading the
-  // sound that was actively playing, killing playback moments after it started.
-  const voiceNotesList: { id: string; uri: string; duration: number }[] =
-    React.useMemo(() => {
-      if (params.voiceNotes) {
-        try {
-          const parsed = JSON.parse(params.voiceNotes as string);
-          if (Array.isArray(parsed)) return parsed;
-        } catch (e) {
-          console.log("Failed to parse voiceNotes param:", e);
-        }
+  // Retrieve attached visual media from incident or params
+  const mediaList: { uri: string; type: "image" | "video" }[] = useMemo(() => {
+    if (incident.photos && Array.isArray(incident.photos)) {
+      return incident.photos;
+    }
+    if (person && person.images && person.images.length > 0) {
+      return person.images.map((url) => ({
+        uri: url,
+        type: "image" as const,
+      }));
+    }
+    if (params.photos) {
+      try {
+        const parsed = JSON.parse(params.photos as string);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.log("Failed to parse photos param:", e);
       }
+    }
+    return [
+      {
+        uri: "https://images.unsplash.com/photo-1584515979956-d9f6e5d09982?auto=format&fit=crop&w=400&q=80",
+        type: "image" as const,
+      },
+    ];
+  }, [incident.photos, person, params.photos]);
 
-      return (
-        (incident as any).voiceNotes || [
-          {
-            id: "vn_1",
-            uri: FALLBACK_VOICE_NOTE_URI,
-            duration: 3,
-          },
-        ]
-      );
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [params.voiceNotes, incident.id]);
+  // Retrieve attached voice notes
+  const voiceNotesList: { id: string; uri: string; duration: number }[] = useMemo(() => {
+    if (params.voiceNotes) {
+      try {
+        const parsed = JSON.parse(params.voiceNotes as string);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        console.log("Failed to parse voiceNotes param:", e);
+      }
+    }
+    return [
+      {
+        id: "vn_1",
+        uri: FALLBACK_VOICE_NOTE_URI,
+        duration: 5,
+      },
+    ];
+  }, [params.voiceNotes]);
 
-  // Audio Playback state for voice notes
+  // Audio Playback state
   const [playingNoteId, setPlayingNoteId] = useState<string | null>(null);
   const [pausedNoteId, setPausedNoteId] = useState<string | null>(null);
-  const [noteDurations, setNoteDurations] = useState<Record<string, number>>(
-    {},
-  );
-  const [playbackRemaining, setPlaybackRemaining] = useState<
-    Record<string, number>
-  >({});
-  const [playbackProgress, setPlaybackProgress] = useState<
-    Record<string, number>
-  >({});
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-  const isMountedRef = React.useRef(true);
+  const [noteDurations, setNoteDurations] = useState<Record<string, number>>({});
+  const [playbackRemaining, setPlaybackRemaining] = useState<Record<string, number>>({});
+  const [playbackProgress, setPlaybackProgress] = useState<Record<string, number>>({});
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const isMountedRef = useRef(true);
 
-  // Resolve a safe, playable URI for a voice note, falling back to a demo clip
-  // for anything that isn't a genuine remote/local audio URI.
   const resolveVoiceNoteUri = (uri?: string | null) => {
     if (!uri) return FALLBACK_VOICE_NOTE_URI;
     const isPlayableScheme =
@@ -219,9 +343,7 @@ export default function IncidentDetailScreen() {
     return isPlayableScheme ? uri : FALLBACK_VOICE_NOTE_URI;
   };
 
-  // Configure the audio mode once on mount. On unmount, stop and release
-  // whatever is currently loaded so nothing keeps playing in the background.
-  React.useEffect(() => {
+  useEffect(() => {
     isMountedRef.current = true;
 
     Audio.setAudioModeAsync({
@@ -243,10 +365,7 @@ export default function IncidentDetailScreen() {
     };
   }, []);
 
-  // Fetch each voice note's real duration once (without playing it). This only
-  // reruns when voiceNotesList genuinely changes (e.g. navigating to a
-  // different incident), not on every render.
-  React.useEffect(() => {
+  useEffect(() => {
     let cancelled = false;
 
     const loadDurations = async () => {
@@ -255,12 +374,12 @@ export default function IncidentDetailScreen() {
         try {
           const { sound, status } = await Audio.Sound.createAsync(
             { uri: resolveVoiceNoteUri(note.uri) },
-            { shouldPlay: false },
+            { shouldPlay: false }
           );
           if (status.isLoaded && status.durationMillis && !cancelled) {
             const exactSeconds = Math.max(
               1,
-              Math.round(status.durationMillis / 1000),
+              Math.round(status.durationMillis / 1000)
             );
             setNoteDurations((prev) => ({ ...prev, [note.id]: exactSeconds }));
           }
@@ -278,10 +397,8 @@ export default function IncidentDetailScreen() {
     };
   }, [voiceNotesList]);
 
-  // Stop any playing voice note when the screen loses focus (e.g. user
-  // navigates to another tab/screen) so audio doesn't keep running unattended.
   useFocusEffect(
-    React.useCallback(() => {
+    useCallback(() => {
       return () => {
         const sound = soundRef.current;
         soundRef.current = null;
@@ -293,7 +410,7 @@ export default function IncidentDetailScreen() {
         setPlayingNoteId(null);
         setPausedNoteId(null);
       };
-    }, []),
+    }, [])
   );
 
   const stopActivePlayback = async () => {
@@ -317,7 +434,6 @@ export default function IncidentDetailScreen() {
     uri: string;
     duration?: number;
   }) => {
-    // 1. If currently PLAYING this note -> PAUSE IT (keep sound loaded & preserve position!)
     if (playingNoteId === note.id && soundRef.current) {
       try {
         await soundRef.current.pauseAsync();
@@ -329,7 +445,6 @@ export default function IncidentDetailScreen() {
       return;
     }
 
-    // 2. If currently PAUSED on this note -> RESUME IT from paused position!
     if (pausedNoteId === note.id && soundRef.current) {
       try {
         setPausedNoteId(null);
@@ -341,11 +456,10 @@ export default function IncidentDetailScreen() {
       return;
     }
 
-    // 3. Only one note plays at a time — stop and release whatever is active first.
     await stopActivePlayback();
 
     try {
-      const knownDuration = noteDurations[note.id] || note.duration || 3;
+      const knownDuration = noteDurations[note.id] || note.duration || 5;
       setPlaybackRemaining((prev) => ({ ...prev, [note.id]: knownDuration }));
       setPlaybackProgress((prev) => ({ ...prev, [note.id]: 0 }));
       setPlayingNoteId(note.id);
@@ -359,7 +473,7 @@ export default function IncidentDetailScreen() {
           volume: 1.0,
           isMuted: false,
           progressUpdateIntervalMillis: 150,
-        },
+        }
       );
 
       if (!status.isLoaded) {
@@ -382,7 +496,7 @@ export default function IncidentDetailScreen() {
         if (durationMs > 0) {
           const remainingSec = Math.max(
             0,
-            Math.ceil((durationMs - positionMs) / 1000),
+            Math.ceil((durationMs - positionMs) / 1000)
           );
           setPlaybackRemaining((prev) => ({
             ...prev,
@@ -419,48 +533,67 @@ export default function IncidentDetailScreen() {
     }
   };
 
-  // Hardcoded coordinates for nearby responders relative to center
-  const respondersData = [
-    {
-      id: "resp_1",
-      name: "John Doe",
-      role: "EMT",
-      status: "On-site",
-      statusColor: "#2E7D32",
-      icon: BriefcaseMedical,
-      lat: latitude + 0.0003,
-      lng: longitude + 0.0004,
-      color: "#2E7D32",
-      statusText: "On-site",
-      timeText: "",
-    },
-    {
-      id: "resp_2",
-      name: "Sarah Smith",
-      role: "Security",
-      status: "2 mins away",
-      statusColor: "#F57C00",
-      icon: Shield,
-      lat: latitude - 0.0008,
-      lng: longitude + 0.0007,
-      color: "#F57C00",
-      statusText: "2 mins away",
-      timeText: "2 mins away",
-    },
-    {
-      id: "resp_3",
-      name: "Ambulance Unit 4",
-      role: "",
-      status: "En route",
-      statusColor: "#1976D2",
-      icon: Car,
-      lat: latitude + 0.0016,
-      lng: longitude - 0.0014,
-      color: "#1976D2",
-      statusText: "En route",
-      timeText: "En route",
-    },
-  ];
+  // Nearby responders dummy dataset
+  const respondersData = useMemo(() => {
+    const data: Array<{
+      id: string;
+      name: string;
+      role: string;
+      status: string;
+      statusColor: string;
+      icon: any;
+      lat: number;
+      lng: number;
+      color: string;
+      statusText: string;
+      timeText: string;
+      mode: "driving" | "running" | "walking";
+    }> = [
+      {
+        id: "resp_1",
+        name: "Dr. Kwabena Frimpong",
+        role: "EMT",
+        status: "On-site",
+        statusColor: "#2E7D32",
+        icon: BriefcaseMedical,
+        lat: latitude + 0.0003,
+        lng: longitude + 0.0004,
+        color: "#2E7D32",
+        statusText: "On-site",
+        timeText: "Arrived",
+        mode: "driving",
+      },
+      {
+        id: "resp_2",
+        name: "Officer Samuel Mensah",
+        role: "Security",
+        status: "2 mins away",
+        statusColor: "#F57C00",
+        icon: Shield,
+        lat: latitude - 0.0008,
+        lng: longitude + 0.0007,
+        color: "#F57C00",
+        statusText: "ETA: 2 mins (250m)",
+        timeText: "2 mins away",
+        mode: "running",
+      },
+      {
+        id: "resp_3",
+        name: "Ambulance Unit 4",
+        role: "PARAMEDIC",
+        status: "En route",
+        statusColor: "#1976D2",
+        icon: Car,
+        lat: latitude + 0.0016,
+        lng: longitude - 0.0014,
+        color: "#1976D2",
+        statusText: "ETA: 4 mins (1.2km)",
+        timeText: "En route",
+        mode: "driving",
+      },
+    ];
+    return data;
+  }, [latitude, longitude]);
 
   const handleCallServices = () => {
     Alert.alert(
@@ -472,7 +605,7 @@ export default function IncidentDetailScreen() {
           text: "Call",
           onPress: () => Alert.alert("Connecting", "Calling KNUST Dispatch..."),
         },
-      ],
+      ]
     );
   };
 
@@ -480,7 +613,7 @@ export default function IncidentDetailScreen() {
     router.push({
       pathname: "/emergencyChat",
       params: {
-        incidentId: incident.id.toString(),
+        incidentId: incident.id,
         title: incident.title,
         severity: incident.severity,
         location: incident.location,
@@ -491,17 +624,18 @@ export default function IncidentDetailScreen() {
   const handleRefresh = () => {
     Alert.alert(
       "Status Refreshed",
-      "Responders status and GPS coordinates updated.",
+      "Responders status and GPS coordinates updated."
     );
   };
 
-  // Determine standard alert incident icon
+  // Contextual active alert icon
   const getAlertIcon = () => {
     const titleLower = incident.title.toLowerCase();
     if (
       titleLower.includes("breathing") ||
       titleLower.includes("injury") ||
-      titleLower.includes("medical")
+      titleLower.includes("medical") ||
+      titleLower.includes("allergic")
     ) {
       return BriefcaseMedical;
     } else if (
@@ -525,14 +659,14 @@ export default function IncidentDetailScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Navigation Header */}
-
+      {/* Header */}
       <NavHeader title="Incident Details" />
+
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Incident Summary Card */}
+        {/* Incident Summary Header Card */}
         <View style={styles.summaryContainer}>
           <View style={styles.titleRow}>
             <Text style={styles.incidentTitle} numberOfLines={2}>
@@ -569,17 +703,18 @@ export default function IncidentDetailScreen() {
         {/* Map View Card */}
         <View style={styles.mapCard}>
           <MapView
+            ref={mapRef}
             style={StyleSheet.absoluteFillObject}
-            initialRegion={{
+            region={{
               latitude,
               longitude,
-              latitudeDelta: 0.006,
-              longitudeDelta: 0.006,
+              latitudeDelta: 0.005,
+              longitudeDelta: 0.005,
             }}
             scrollEnabled={true}
             zoomEnabled={true}
           >
-            {/* Pulsating alert circle range */}
+            {/* Pulsating alert radius circle */}
             <Circle
               center={{ latitude, longitude }}
               radius={130}
@@ -588,7 +723,7 @@ export default function IncidentDetailScreen() {
               strokeWidth={1.5}
             />
 
-            {/* Main active incident marker */}
+            {/* Incident Pin Marker */}
             <Marker coordinate={{ latitude, longitude }}>
               <View style={styles.incidentMarkerContainer}>
                 <View
@@ -612,7 +747,7 @@ export default function IncidentDetailScreen() {
               </View>
             </Marker>
 
-            {/* Responder location markers */}
+            {/* Responder Markers */}
             {respondersData.map((resp) => {
               const RespIcon = resp.icon;
               return (
@@ -636,85 +771,148 @@ export default function IncidentDetailScreen() {
           </MapView>
         </View>
 
+        {/* Transport Mode & Dynamic ETA Selector */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Transport Mode & ETA</Text>
+          <View style={styles.transportCard}>
+            <View style={styles.etaHeaderRow}>
+              <View style={styles.etaBadge}>
+                <Clock size={15} color={severityColors.color} style={{ marginRight: 5 }} />
+                <Text style={[styles.etaBadgeText, { color: severityColors.color }]}>
+                  ETA: {calculatedEta.durationText}
+                </Text>
+              </View>
+              <View style={styles.distanceBadge}>
+                <MapPin size={14} color="#64748B" style={{ marginRight: 4 }} />
+                <Text style={styles.distanceBadgeText}>{calculatedEta.distanceText} away</Text>
+              </View>
+            </View>
+
+            <View style={styles.transportButtonsRow}>
+              {(["driving", "running", "walking"] as const).map((mode) => {
+                const isActive = travelMode === mode;
+                const renderIcon = () => {
+                  const size = 16;
+                  const color = isActive ? "#FFFFFF" : "#475569";
+                  if (mode === "driving") return <Car size={size} color={color} />;
+                  if (mode === "running") return <Zap size={size} color={color} />;
+                  return <Footprints size={size} color={color} />;
+                };
+
+                return (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[styles.transportBtn, isActive && styles.transportBtnActive]}
+                    onPress={() => setTravelMode(mode)}
+                    activeOpacity={0.85}
+                  >
+                    {renderIcon()}
+                    <Text style={[styles.transportBtnText, isActive && styles.transportBtnTextActive]}>
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+
+        {/* Reporter Profile & Medical Conditions Card */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Reporter Profile & Health Info</Text>
+          <View style={styles.profileCard}>
+            <View style={styles.profileHeaderRow}>
+              <View style={styles.profileAvatarCircle}>
+                {creatorProfile?.profile_image_url ? (
+                  <Image source={{ uri: creatorProfile.profile_image_url }} style={styles.profileAvatarImage} />
+                ) : (
+                  <User size={20} color="#AF101A" />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.profileNameText}>
+                  {creatorProfile.name}
+                </Text>
+                <Text style={styles.profileRoleText}>
+                  {creatorProfile.role.toUpperCase()}
+                </Text>
+              </View>
+              {creatorProfile.phone && (
+                <TouchableOpacity
+                  style={styles.profileCallButton}
+                  onPress={() => Alert.alert("Call Reporter", `Calling ${creatorProfile.phone}...`)}
+                  activeOpacity={0.85}
+                >
+                  <Phone size={14} color="#AF101A" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Known Health Conditions */}
+            <View style={styles.healthInfoContainer}>
+              <View style={styles.healthInfoHeader}>
+                <HeartPulse size={15} color="#AF101A" style={{ marginRight: 6 }} />
+                <Text style={styles.healthInfoTitle}>Known Health Conditions</Text>
+              </View>
+              <View style={styles.healthTagsRow}>
+                {creatorProfile.known_health_problems.map((condition, idx) => (
+                  <View key={idx} style={styles.healthTagPill}>
+                    <Text style={styles.healthTagText}>{condition}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        </View>
+
         {/* Responder Status Timeline */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Responder Status</Text>
+          <Text style={styles.sectionTitle}>
+            Responders ({respondersData.length})
+          </Text>
           <View style={styles.timelineCard}>
-            {respondersData.map((resp, index) => {
+            {respondersData.map((r, index) => {
               const isLast = index === respondersData.length - 1;
+              const color = r.color;
+
+              const renderTransportIcon = () => {
+                const iconSize = 13;
+                const iconColor = "#475569";
+                if (r.mode === "driving") return <Car size={iconSize} color={iconColor} />;
+                if (r.mode === "walking" || r.mode === "running") return <Footprints size={iconSize} color={iconColor} />;
+                return <Zap size={iconSize} color={iconColor} />;
+              };
 
               return (
-                <View key={resp.id} style={styles.timelineRow}>
-                  {/* Left bullet marker and connector */}
+                <View key={r.id} style={styles.timelineRow}>
                   <View style={styles.timelineBulletContainer}>
-                    <View
-                      style={[
-                        styles.timelineBulletCircle,
-                        { borderColor: resp.color },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.timelineBulletInner,
-                          { backgroundColor: resp.color },
-                        ]}
-                      />
+                    <View style={[styles.timelineBulletCircle, { borderColor: color }]}>
+                      <View style={[styles.timelineBulletInner, { backgroundColor: color }]} />
                     </View>
                     {!isLast && <View style={styles.timelineConnector} />}
                   </View>
 
-                  {/* Content details */}
                   <View style={styles.timelineContent}>
                     <View style={styles.responderNameRow}>
-                      <Text style={styles.responderName}>{resp.name}</Text>
-                      {resp.role !== "" && (
-                        <View style={styles.roleBadge}>
-                          <Text style={styles.roleBadgeText}>{resp.role}</Text>
-                        </View>
-                      )}
+                      <Text style={styles.responderName}>{r.name}</Text>
+                      <View style={styles.roleBadge}>
+                        <Text style={styles.roleBadgeText}>{r.role}</Text>
+                      </View>
                     </View>
 
-                    {/* Status badges matching mockup */}
                     <View style={styles.statusBadgeRow}>
-                      {resp.status === "On-site" ? (
-                        <View style={styles.statusLabelContainer}>
-                          <View style={styles.checkmarkCircle}>
-                            <Check size={10} color="#FFFFFF" strokeWidth={3} />
-                          </View>
-                          <Text
-                            style={[
-                              styles.statusLabelText,
-                              { color: resp.statusColor },
-                            ]}
-                          >
-                            {resp.status}
-                          </Text>
-                        </View>
-                      ) : resp.status === "2 mins away" ? (
-                        <View style={styles.statusLabelContainer}>
-                          <Footprints size={14} color={resp.statusColor} />
-                          <Text
-                            style={[
-                              styles.statusLabelText,
-                              { color: resp.statusColor },
-                            ]}
-                          >
-                            {resp.status}
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={styles.statusLabelContainer}>
-                          <Car size={14} color={resp.statusColor} />
-                          <Text
-                            style={[
-                              styles.statusLabelText,
-                              { color: resp.statusColor },
-                            ]}
-                          >
-                            {resp.status}
-                          </Text>
-                        </View>
-                      )}
+                      <View style={styles.statusLabelContainer}>
+                        <Check size={12} color={color} style={{ marginRight: 4 }} />
+                        <Text style={[styles.statusLabelText, { color }]}>
+                          {r.statusText}
+                        </Text>
+                      </View>
+                      <View style={styles.transportModeTag}>
+                        {renderTransportIcon()}
+                        <Text style={styles.transportModeTagText}>
+                          {r.mode.charAt(0).toUpperCase() + r.mode.slice(1)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -750,7 +948,7 @@ export default function IncidentDetailScreen() {
               const isPlaying = playingNoteId === note.id;
               const isPaused = pausedNoteId === note.id;
               const isPlayingOrPaused = isPlaying || isPaused;
-              const totalSec = noteDurations[note.id] || note.duration || 14;
+              const totalSec = noteDurations[note.id] || note.duration || 5;
               const currentRemaining =
                 isPlayingOrPaused && playbackRemaining[note.id] !== undefined
                   ? playbackRemaining[note.id]
@@ -806,12 +1004,12 @@ export default function IncidentDetailScreen() {
                     </View>
                   </View>
 
-                  {/* Visualizer Waveform Bar */}
+                  {/* Waveform Bar */}
                   <View style={styles.waveformContainer}>
                     {waveformBars.map((h, i) => {
                       const totalBars = waveformBars.length;
                       const activeBarCount = Math.floor(
-                        currentProgress * totalBars,
+                        currentProgress * totalBars
                       );
                       const isBarPlayed =
                         isPlayingOrPaused && i <= activeBarCount;
@@ -947,7 +1145,7 @@ export default function IncidentDetailScreen() {
             )}
           </View>
 
-          {/* Close Action Buttons */}
+          {/* Close Action Button */}
           <TouchableOpacity
             onPress={() => setViewerVisible(false)}
             style={styles.modalCloseButton}
@@ -959,17 +1157,13 @@ export default function IncidentDetailScreen() {
 
       {/* Bottom Fixed Navigation Actions */}
       <View style={styles.bottomBarContainer}>
-        {/* Dynamic primary Siren Response button or restricted status badge */}
-
         {incident.severity === "Critical" &&
-        incident.time / 60 > 8 &&
+        calculatedEta.totalSeconds / 60 > 8 &&
         !isResponding ? (
           <View style={styles.restrictedRespondBadge}>
             <X size={16} color="#94A3B8" style={{ marginRight: 6 }} />
             <Text style={styles.restrictedRespondBadgeText}>
-              {incident.time / 60
-                ? "Too Late to Respond"
-                : "Too Far Out to Respond"}
+              Too Far Out to Respond (ETA &gt; 8 mins)
             </Text>
           </View>
         ) : (
@@ -1007,7 +1201,7 @@ export default function IncidentDetailScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Secondary options row */}
+        {/* Secondary buttons row */}
         <View style={styles.bottomButtonsRow}>
           <TouchableOpacity
             onPress={handleCallServices}
@@ -1062,24 +1256,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8FAFC",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
-  },
-  headerIconButton: {
-    padding: 6,
-  },
-  headerTitle: {
-    fontSize: 17.5,
-    fontFamily: typography.semibold,
-    color: "#0F172A",
   },
   scrollContent: {
     paddingBottom: 135,
@@ -1291,14 +1467,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-  },
-  checkmarkCircle: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: "#2E7D32",
-    justifyContent: "center",
-    alignItems: "center",
   },
   statusLabelText: {
     fontSize: 13,
@@ -1590,5 +1758,161 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255, 255, 255, 0.15)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  transportCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    gap: 12,
+  },
+  etaHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  etaBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F8FAFC",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  etaBadgeText: {
+    fontSize: 14,
+    fontFamily: typography.bold,
+  },
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  distanceBadgeText: {
+    fontSize: 13,
+    fontFamily: typography.semibold,
+    color: "#64748B",
+  },
+  transportButtonsRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  transportBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+    borderRadius: 10,
+    paddingVertical: 9,
+    paddingHorizontal: 8,
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+  },
+  transportBtnActive: {
+    backgroundColor: "#AF101A",
+    borderColor: "#AF101A",
+  },
+  transportBtnText: {
+    fontSize: 13,
+    fontFamily: typography.semibold,
+    color: "#475569",
+  },
+  transportBtnTextActive: {
+    color: "#FFFFFF",
+  },
+  profileCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    gap: 14,
+  },
+  profileHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  profileAvatarCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  profileAvatarImage: {
+    width: "100%",
+    height: "100%",
+  },
+  profileNameText: {
+    fontSize: 15.5,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+  },
+  profileRoleText: {
+    fontSize: 11,
+    fontFamily: typography.bold,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  profileCallButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FEE2E2",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  healthInfoContainer: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#F1F5F9",
+  },
+  healthInfoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  healthInfoTitle: {
+    fontSize: 12.5,
+    fontFamily: typography.bold,
+    color: "#0F172A",
+  },
+  healthTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  healthTagPill: {
+    backgroundColor: "#FEE2E2",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  healthTagText: {
+    fontSize: 12,
+    fontFamily: typography.semibold,
+    color: "#B91C1C",
+  },
+  transportModeTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    gap: 4,
+    marginLeft: 6,
+  },
+  transportModeTagText: {
+    fontSize: 11.5,
+    fontFamily: typography.semibold,
+    color: "#475569",
   },
 });
