@@ -13,15 +13,16 @@ import NavHeader from "@/components/NavHeader";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { AlertCircle, Plus, Shield, Users } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const EmergencyContactsPage = () => {
@@ -74,13 +75,13 @@ const EmergencyContactsPage = () => {
     }
 
     if (!currentUserId) {
-      Alert.alert("Error", "User account not identified. Please try logging in again.");
+      showPopupAlert("Error", "User account not identified. Please try logging in again.", undefined, undefined, "error");
       return false;
     }
 
     const { data, error } = await addTrustedContact(currentUserId, newContactData);
     if (error) {
-      Alert.alert("Add Failed", error.message || "Could not save contact to database.");
+      showPopupAlert("Add Failed", error.message || "Could not save contact to database.", undefined, undefined, "error");
       return false;
     }
 
@@ -94,9 +95,12 @@ const EmergencyContactsPage = () => {
       };
 
       setContacts((prev) => [newContact, ...prev]);
-      Alert.alert(
+      showPopupAlert(
         "Contact Added",
-        `${newContact.name} has been added to your emergency contacts.`
+        `${newContact.name} has been added to your emergency contacts.`,
+        undefined,
+        undefined,
+        "success"
       );
       return true;
     }
@@ -107,13 +111,13 @@ const EmergencyContactsPage = () => {
     const target = contacts.find((c) => c.id === id);
     const { error } = await deleteTrustedContact(id);
     if (error) {
-      Alert.alert("Delete Failed", error.message || "Failed to remove contact.");
+      showPopupAlert("Delete Failed", error.message || "Failed to remove contact.", undefined, undefined, "error");
       return;
     }
 
     setContacts((prev) => prev.filter((item) => item.id !== id));
     if (target) {
-      Alert.alert("Contact Removed", `${target.name} has been removed.`);
+      showPopupAlert("Contact Removed", `${target.name} has been removed.`, undefined, undefined, "info");
     }
   };
 

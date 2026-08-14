@@ -28,9 +28,9 @@ import {
   Shield,
   X,
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useState } from "react";
 import {
-  Alert,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -43,6 +43,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import MapView, { Marker } from "react-native-maps";
 
 type IncidentType = "Medical" | "Fire" | "Security" | "Accident";
@@ -148,9 +149,12 @@ export default function ReportScreen() {
   const handleUpdateLocation = async () => {
     let { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(
+      showPopupAlert(
         "Permission Denied",
         "Permission to access location was denied. Keeping default coordinates.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
@@ -170,14 +174,20 @@ export default function ReportScreen() {
         line2: "KNUST Campus, Kumasi",
       });
 
-      Alert.alert(
+      showPopupAlert(
         "Location Updated",
         "The incident coordinates have been set to your current GPS location.",
+        undefined,
+        undefined,
+        "success"
       );
     } catch (error) {
-      Alert.alert(
+      showPopupAlert(
         "Error",
         "Could not fetch current coordinates. Defaulting to mock location.",
+        undefined,
+        undefined,
+        "error"
       );
     }
   };
@@ -211,9 +221,12 @@ export default function ReportScreen() {
   const handleAddPhoto = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(
+      showPopupAlert(
         "Permission Denied",
         "Permission to access media library is required to add images.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
@@ -235,7 +248,7 @@ export default function ReportScreen() {
         setPhotos((prev) => [...prev, { uri: asset.uri, type: isVideo ? "video" : "image" }]);
       }
     } catch (error) {
-      Alert.alert("Error", "Failed to select media.");
+      showPopupAlert("Error", "Failed to select media.", undefined, undefined, "error");
     }
   };
 
@@ -257,9 +270,12 @@ export default function ReportScreen() {
     try {
       const permission = await Audio.requestPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert(
+        showPopupAlert(
           "Permission Denied",
           "Microphone access is required to record voice notes.",
+          undefined,
+          undefined,
+          "warning"
         );
         return;
       }
@@ -285,7 +301,7 @@ export default function ReportScreen() {
     } catch (err) {
       console.error("Failed to start recording", err);
       setIsRecording(false);
-      Alert.alert("Error", "Could not start audio recording.");
+      showPopupAlert("Error", "Could not start audio recording.", undefined, undefined, "error");
     }
   };
 
@@ -327,9 +343,12 @@ export default function ReportScreen() {
             },
           ]);
         } else {
-          Alert.alert(
+          showPopupAlert(
             "Recording Too Short",
             "Hold the mic button longer to record a voice note.",
+            undefined,
+            undefined,
+            "warning"
           );
         }
       }
@@ -385,20 +404,26 @@ export default function ReportScreen() {
     if (isSubmitting) return;
 
     if (!title.trim()) {
-      Alert.alert("Validation Error", "Please provide a title for the incident report.");
+      showPopupAlert("Validation Error", "Please provide a title for the incident report.", undefined, undefined, "warning");
       return;
     }
     if (!description.trim()) {
-      Alert.alert(
+      showPopupAlert(
         "Validation Error",
         "Please provide details in the incident description.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
     if (!landmark.trim()) {
-      Alert.alert(
+      showPopupAlert(
         "Validation Error",
         "Please provide the nearest landmark to help responders locate the incident.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
@@ -409,9 +434,12 @@ export default function ReportScreen() {
       isNaN(locationCoords.latitude) ||
       isNaN(locationCoords.longitude)
     ) {
-      Alert.alert(
+      showPopupAlert(
         "Validation Error",
         "Valid location coordinates are required. Please use the Update button to capture your GPS location.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
@@ -435,9 +463,12 @@ export default function ReportScreen() {
       });
 
       if (error || !data) {
-        Alert.alert(
+        showPopupAlert(
           "Submission Failed",
           error?.message || "Could not record emergency report. Please try again.",
+          undefined,
+          undefined,
+          "error"
         );
         setIsSubmitting(false);
         return;
@@ -467,9 +498,12 @@ export default function ReportScreen() {
       setSuccessModalVisible(true);
     } catch (err: any) {
       console.error("Failed to submit emergency report:", err);
-      Alert.alert(
+      showPopupAlert(
         "Submission Error",
         err?.message || "An unexpected error occurred during submission.",
+        undefined,
+        undefined,
+        "error"
       );
       setIsSubmitting(false);
     }
@@ -523,9 +557,12 @@ export default function ReportScreen() {
           <Text style={styles.headerTitle}>Report Incident</Text>
           <TouchableOpacity
             onPress={() =>
-              Alert.alert(
+              showPopupAlert(
                 "Emergency Broadcasts",
                 "No active emergency alerts in your immediate radius.",
+                undefined,
+                undefined,
+                "info"
               )
             }
             style={[styles.headerIconButton, { backgroundColor: themeBgColor }]}

@@ -3,9 +3,9 @@ import { Article } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
 import { Calendar, Clock, Share2, Shield, X } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React from "react";
 import {
-  Alert,
   Modal,
   SafeAreaView,
   ScrollView,
@@ -36,7 +36,7 @@ export default function NewsDetailModal({
         message: `*${article.category} Update from ResQ*\n\n*${article.title}*\nPublished by ${article.publisher} (${article.time})\n\n${article.content}\n\n_Stay informed with ResQ Emergency Response App._`,
       });
     } catch (error) {
-      Alert.alert("Error", "Could not share this article.");
+      showPopupAlert("Error", "Could not share this article.", undefined, undefined, "error");
     }
   };
 

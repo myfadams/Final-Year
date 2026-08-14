@@ -43,9 +43,9 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Alert,
   Modal,
   Platform,
   RefreshControl,
@@ -53,6 +53,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+
   TouchableOpacity,
   View,
 } from "react-native";
@@ -313,7 +314,7 @@ export default function IncidentDetailScreen() {
   }, [userCoords, latitude, longitude, travelMode]);
 
   const handleDoneHelping = async () => {
-    Alert.alert(
+    showPopupAlert(
       "Complete Assistance?",
       "Are you sure you have finished helping with this emergency?",
       [
@@ -326,7 +327,7 @@ export default function IncidentDetailScreen() {
             globalState.activeEmergencyPerson = null;
             setIsResponding(false);
             setResponderStatus("done_helping");
-            Alert.alert(
+            showPopupAlert(
               "Thank You!",
               "Your assistance for this emergency has been marked as completed.",
               [
@@ -334,33 +335,43 @@ export default function IncidentDetailScreen() {
                   text: "OK",
                   onPress: () => router.back(),
                 },
-              ]
+              ],
+              undefined,
+              "success"
             );
           },
         },
-      ]
+      ],
+      undefined,
+      "confirm"
     );
   };
 
   const handleRespondToggle = async () => {
     if (incident.isFalseAlarm) {
-      Alert.alert(
+      showPopupAlert(
         "False Alarm Alert",
-        "The creator of this emergency flagged it as false information. You cannot respond to it."
+        "The creator of this emergency flagged it as false information. You cannot respond to it.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
 
     if (!isResponding && incident.severity === "Critical" && calculatedEta.totalSeconds / 60 > 8) {
-      Alert.alert(
+      showPopupAlert(
         "Too Far Out to Respond",
-        "For critical emergencies, your estimated travel time (ETA) must be 8 minutes or less to respond."
+        "For critical emergencies, your estimated travel time (ETA) must be 8 minutes or less to respond.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
 
     if (isResponding) {
-      Alert.alert(
+      showPopupAlert(
         "Cancel Response?",
         "Are you sure you want to cancel your response attempt?",
         [
@@ -374,16 +385,21 @@ export default function IncidentDetailScreen() {
               globalState.activeEmergencyPerson = null;
               setIsResponding(false);
               setResponderStatus(null);
-              Alert.alert(
+              showPopupAlert(
                 "Response Cancelled",
-                "Your response assignment has been cancelled."
+                "Your response assignment has been cancelled.",
+                undefined,
+                undefined,
+                "info"
               );
             },
           },
-        ]
+        ],
+        undefined,
+        "confirm"
       );
     } else {
-      Alert.alert(
+      showPopupAlert(
         "Respond to this emergency?",
         `You are approximately ${calculatedEta.durationText} away (${calculatedEta.distanceText}).`,
         [
@@ -400,7 +416,7 @@ export default function IncidentDetailScreen() {
               setIsResponding(true);
               setResponderStatus("responding");
 
-              Alert.alert(
+              showPopupAlert(
                 "Response Recorded",
                 `You are now responding. Estimated ETA: ${calculatedEta.durationText}.`,
                 [
@@ -675,7 +691,7 @@ export default function IncidentDetailScreen() {
       setPlayingNoteId(null);
       setPausedNoteId(null);
       await stopActivePlayback();
-      Alert.alert("Audio Error", "Could not play voice note.");
+      showPopupAlert("Audio Error", "Could not play voice note.", undefined, undefined, "error");
     }
   };
 
@@ -756,16 +772,18 @@ export default function IncidentDetailScreen() {
   }, [dbResponders, currentUserId, isResponding, userCoords, latitude, longitude, calculatedEta, travelMode]);
 
   const handleCallServices = () => {
-    Alert.alert(
+    showPopupAlert(
       "Call Dispatch",
       "Direct line to KNUST emergency responders. Would you like to call now?",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Call",
-          onPress: () => Alert.alert("Connecting", "Calling KNUST Dispatch..."),
+          onPress: () => showPopupAlert("Connecting", "Calling KNUST Dispatch...", undefined, undefined, "info"),
         },
-      ]
+      ],
+      undefined,
+      "confirm"
     );
   };
 
@@ -782,9 +800,12 @@ export default function IncidentDetailScreen() {
   };
 
   const handleRefresh = () => {
-    Alert.alert(
+    showPopupAlert(
       "Status Refreshed",
-      "Responders status and GPS coordinates updated."
+      "Responders status and GPS coordinates updated.",
+      undefined,
+      undefined,
+      "success"
     );
   };
 
@@ -1107,7 +1128,7 @@ export default function IncidentDetailScreen() {
               {creatorProfile.phone && (
                 <TouchableOpacity
                   style={styles.profileCallButton}
-                  onPress={() => Alert.alert("Call Reporter", `Calling ${creatorProfile.phone}...`)}
+                  onPress={() => showPopupAlert("Call Reporter", `Calling ${creatorProfile.phone}...`, undefined, undefined, "info")}
                   activeOpacity={0.85}
                 >
                   <Phone size={14} color="#AF101A" />
@@ -1437,9 +1458,12 @@ export default function IncidentDetailScreen() {
         {incident.isFalseAlarm ? (
           <TouchableOpacity
             onPress={() => {
-              Alert.alert(
+              showPopupAlert(
                 "False Alarm Alert",
-                "The creator of this emergency has flagged it as false information. You cannot respond to this incident."
+                "The creator of this emergency has flagged it as false information. You cannot respond to this incident.",
+                undefined,
+                undefined,
+                "warning"
               );
             }}
             style={[

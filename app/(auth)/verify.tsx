@@ -18,10 +18,10 @@ import { KNUST_PROGRAMMES, LOCATION_OPTIONS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { showPopupAlert } from "@/components/popupAlert";
 import { IdCard, LocateFixed, MapPin, Phone } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -29,6 +29,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 import { styles } from "./styles";
 
@@ -125,9 +126,12 @@ const Verify = () => {
     setOcrResult(ocrData);
 
     if (!ocrData || !isOcrComplete(ocrData)) {
-      Alert.alert(
+      showPopupAlert(
         "ID Verification Error",
-        "Unable to extract all required details (Full Name, Student ID, Reference Number, Date of Expiry, and Course) from your Student ID card. Please upload a clearer photo of your official Student ID card."
+        "Unable to extract all required details (Full Name, Student ID, Reference Number, Date of Expiry, and Course) from your Student ID card. Please upload a clearer photo of your official Student ID card.",
+        undefined,
+        undefined,
+        "error"
       );
     }
 
@@ -187,9 +191,12 @@ const Verify = () => {
       if (errors.location) setErrors((prev) => ({ ...prev, location: undefined }));
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert(
+        showPopupAlert(
           "Permission Denied",
-          "Permission to access location was denied"
+          "Permission to access location was denied",
+          undefined,
+          undefined,
+          "warning"
         );
         setLocationLoading(false);
         return;
@@ -200,9 +207,12 @@ const Verify = () => {
       setLongitude(current.coords.longitude);
     } catch (error) {
       console.error("Error getting location: ", error);
-      Alert.alert(
+      showPopupAlert(
         "Location Error",
-        "Error getting location. Please make sure location services are enabled."
+        "Error getting location. Please make sure location services are enabled.",
+        undefined,
+        undefined,
+        "error"
       );
     } finally {
       setLocationLoading(false);
@@ -240,17 +250,23 @@ const Verify = () => {
     }
 
     if (!imageUri) {
-      Alert.alert(
+      showPopupAlert(
         "Missing Student ID Photo",
-        "Please upload a photo of your Student ID card."
+        "Please upload a photo of your Student ID card.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
 
     if (!ocrResult || !isOcrComplete(ocrResult)) {
-      Alert.alert(
+      showPopupAlert(
         "Invalid Student ID Card",
-        "Unable to verify all required information (Full Name, Student ID, Reference Number, Expiry Date, and Course) from your Student ID card. Please upload a clear picture of your official Student ID card."
+        "Unable to verify all required information (Full Name, Student ID, Reference Number, Expiry Date, and Course) from your Student ID card. Please upload a clear picture of your official Student ID card.",
+        undefined,
+        undefined,
+        "error"
       );
       return;
     }
@@ -272,9 +288,12 @@ const Verify = () => {
       }
 
       if (!activeUserId) {
-        Alert.alert(
+        showPopupAlert(
           "Authentication Error",
-          "Could not find active user session. Please sign in again."
+          "Could not find active user session. Please sign in again.",
+          undefined,
+          undefined,
+          "error"
         );
         setIsSubmitting(false);
         return;
@@ -306,7 +325,7 @@ const Verify = () => {
           dupMsg = "The Student Reference number is already registered to another user account.";
         }
 
-        Alert.alert("Duplicate Student Credentials", dupMsg);
+        showPopupAlert("Duplicate Student Credentials", dupMsg, undefined, undefined, "error");
         setIsSubmitting(false);
         return;
       }
@@ -328,15 +347,18 @@ const Verify = () => {
       });
 
       if (updateError) {
-        Alert.alert(
+        showPopupAlert(
           "Verification Failed",
-          "Failed to save verification info: " + updateError
+          "Failed to save verification info: " + updateError,
+          undefined,
+          undefined,
+          "error"
         );
         setIsSubmitting(false);
         return;
       }
 
-      Alert.alert("Success", "Verification details submitted successfully!");
+      showPopupAlert("Success", "Verification details submitted successfully!", undefined, undefined, "success");
       // Proceed to the home page using replace
       router.replace({
         pathname: "/(resident)/home",
@@ -344,7 +366,7 @@ const Verify = () => {
       });
     } catch (err: any) {
       console.error("Verification submit error:", err);
-      Alert.alert("Error", err.message || "An unexpected error occurred.");
+      showPopupAlert("Error", err.message || "An unexpected error occurred.", undefined, undefined, "error");
     } finally {
       setIsSubmitting(false);
     }

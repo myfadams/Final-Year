@@ -8,9 +8,9 @@ import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
 import { Check, Plus, Search, UserPlus, X } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -22,6 +22,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+
 
 const AVATAR_COLORS = [
   { bg: "#FEE2E2", text: "#991B1B" },
@@ -103,7 +104,7 @@ export const AddNetworkMemberModal: React.FC<AddNetworkMemberModalProps> = ({
     );
 
     if (error) {
-      Alert.alert("Error", error);
+      showPopupAlert("Error", error, undefined, undefined, "error");
       loadFriendsList(); // rollback on error
     } else {
       onNetworkUpdated?.();

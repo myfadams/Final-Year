@@ -18,15 +18,16 @@ import {
   ShieldCheck,
   Users,
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const AVATAR_COLORS = [
@@ -110,7 +111,7 @@ const SafetyCirclesPage = () => {
     const { error } = await updateTrustedNetworkStatus(idStr, false);
 
     if (error) {
-      Alert.alert("Error", error);
+      showPopupAlert("Error", error, undefined, undefined, "error");
       fetchNetworkMembers(false); // rollback on error
     }
   };

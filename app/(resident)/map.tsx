@@ -27,9 +27,9 @@ import {
   SlidersHorizontal,
   Zap,
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Platform,
   ScrollView,
   StatusBar,
@@ -38,6 +38,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+
 } from "react-native";
 
 type CategoryFilter = "All" | "Medical" | "Fire" | "Security";
@@ -363,9 +364,12 @@ export default function LocationScreen() {
       globalState.activeEmergencyPerson = null;
       setActiveEmergency(null);
       setIsArrived(false);
-      Alert.alert(
+      showPopupAlert(
         "Response Cancelled",
         "You are no longer assigned as a responder to this incident.",
+        undefined,
+        undefined,
+        "info"
       );
       return;
     }
@@ -376,9 +380,12 @@ export default function LocationScreen() {
       estimatedArrivalSeconds: 300,
     });
     if (error) {
-      Alert.alert(
+      showPopupAlert(
         "Response Error",
         error.message || "Failed to record response.",
+        undefined,
+        undefined,
+        "error"
       );
       return;
     }
@@ -387,9 +394,12 @@ export default function LocationScreen() {
     globalState.activeEmergencyPerson = selectedPerson;
     setActiveEmergency(selectedPerson);
 
-    Alert.alert(
+    showPopupAlert(
       "Response Recorded",
       "Your response attempt has been recorded in the database.",
+      undefined,
+      undefined,
+      "success"
     );
   };
 
@@ -414,10 +424,12 @@ export default function LocationScreen() {
     setRealEmergencies((prev) => prev.filter((p) => p.id !== idStr));
     setSelectedPerson(null);
 
-    Alert.alert(
+    showPopupAlert(
       "Arrival Confirmed",
       "Your arrival at the emergency location has been recorded. The emergency pin has been removed from your map.",
       [{ text: "OK" }],
+      undefined,
+      "success"
     );
   };
 
@@ -520,9 +532,12 @@ export default function LocationScreen() {
           <TouchableOpacity
             style={styles.filterButton}
             onPress={() =>
-              Alert.alert(
+              showPopupAlert(
                 "Filter Settings",
                 "Configure your alert monitoring range and notifications.",
+                undefined,
+                undefined,
+                "info"
               )
             }
           >

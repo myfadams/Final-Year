@@ -25,14 +25,15 @@ import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { MapPin } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
   NativeScrollEvent,
+
   NativeSyntheticEvent,
   Platform,
   ScrollView,
@@ -421,9 +422,12 @@ export default function ContactChatScreen() {
 
     if (error) {
       const isNetworkErr = error?.includes("Network request failed") || error?.includes("fetch");
-      Alert.alert(
+      showPopupAlert(
         isNetworkErr ? "Connection Error" : "Sending Failed",
-        isNetworkErr ? "No internet connection. Please check your network and try again." : error
+        isNetworkErr ? "No internet connection. Please check your network and try again." : error,
+        undefined,
+        undefined,
+        "error"
       );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInputText(textToSend);
@@ -494,9 +498,12 @@ export default function ContactChatScreen() {
         if (!permission.granted) {
           micPressActiveRef.current = false;
           setIsRecording(false);
-          Alert.alert(
+          showPopupAlert(
             "Permission Denied",
-            "Microphone access is required to record voice notes."
+            "Microphone access is required to record voice notes.",
+            undefined,
+            undefined,
+            "warning"
           );
           return;
         }
@@ -540,9 +547,12 @@ export default function ContactChatScreen() {
         setIsRecording(false);
         micPressActiveRef.current = false;
 
-        Alert.alert(
+        showPopupAlert(
           "Recording Error",
-          "Could not start audio recording. Please try again."
+          "Could not start audio recording. Please try again.",
+          undefined,
+          undefined,
+          "error"
         );
       }
     };
@@ -586,15 +596,18 @@ export default function ContactChatScreen() {
       const uri = recording.getURI();
 
       if (!uri) {
-        Alert.alert("Recording Error", "The recording file could not be created.");
+        showPopupAlert("Recording Error", "The recording file could not be created.", undefined, undefined, "error");
         setRecordDuration(0);
         return;
       }
 
       if (finalDurationSec < 1) {
-        Alert.alert(
+        showPopupAlert(
           "Recording Too Short",
-          "Hold the mic button for at least one second to record a voice note."
+          "Hold the mic button for at least one second to record a voice note.",
+          undefined,
+          undefined,
+          "warning"
         );
         setRecordDuration(0);
         return;
@@ -649,7 +662,7 @@ export default function ContactChatScreen() {
         });
 
         if (error) {
-          Alert.alert("Audio Upload Error", error);
+          showPopupAlert("Audio Upload Error", error, undefined, undefined, "error");
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
         } else if (message) {
           const realMsg = mapDbMessageToChatMessage(message, currentUserId);
@@ -662,11 +675,14 @@ export default function ContactChatScreen() {
       } catch (uploadError: any) {
         const isNetworkErr = String(uploadError?.message || uploadError).includes("Network request failed");
         console.warn("Audio note upload notice:", uploadError?.message || uploadError);
-        Alert.alert(
+        showPopupAlert(
           isNetworkErr ? "Connection Error" : "Upload Failed",
           isNetworkErr
             ? "No internet connection. Please check your network and try again."
-            : "Could not upload voice note. Please try again."
+            : "Could not upload voice note. Please try again.",
+          undefined,
+          undefined,
+          "error"
         );
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
@@ -831,7 +847,7 @@ export default function ContactChatScreen() {
         setPlaybackRemainingSeconds(null);
         setPlaybackProgress(0);
         lastRemainingSecRef.current = null;
-        Alert.alert("Playback Error", "This voice note could not be played.");
+        showPopupAlert("Playback Error", "This voice note could not be played.", undefined, undefined, "error");
       }
     }
   };
@@ -843,7 +859,7 @@ export default function ContactChatScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert("Permission Denied", "Gallery access is required to share photos or videos.");
+        showPopupAlert("Permission Denied", "Gallery access is required to share photos or videos.", undefined, undefined, "warning");
         return;
       }
 
@@ -869,7 +885,7 @@ export default function ContactChatScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert("Permission Denied", "Camera access is required to take photos.");
+        showPopupAlert("Permission Denied", "Camera access is required to take photos.", undefined, undefined, "warning");
         return;
       }
 
@@ -934,7 +950,7 @@ export default function ContactChatScreen() {
       });
 
       if (error) {
-        Alert.alert("Media Upload Error", error);
+        showPopupAlert("Media Upload Error", error, undefined, undefined, "error");
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       } else if (message) {
         const realMsg = mapDbMessageToChatMessage(message, currentUserId);
@@ -947,11 +963,14 @@ export default function ContactChatScreen() {
     } catch (uploadError: any) {
       const isNetworkErr = String(uploadError?.message || uploadError).includes("Network request failed");
       console.warn("Media upload notice:", uploadError?.message || uploadError);
-      Alert.alert(
+      showPopupAlert(
         isNetworkErr ? "Connection Error" : "Upload Failed",
         isNetworkErr
           ? "No internet connection. Please check your network and try again."
-          : "Could not upload media attachment."
+          : "Could not upload media attachment.",
+        undefined,
+        undefined,
+        "error"
       );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     }
@@ -1031,7 +1050,7 @@ export default function ContactChatScreen() {
     });
 
     if (error) {
-      Alert.alert("Location Share Error", error);
+      showPopupAlert("Location Share Error", error, undefined, undefined, "error");
     } else if (message) {
       const realMsg = mapDbMessageToChatMessage(message, currentUserId);
       setMessages((prev) => (prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg]));
@@ -1064,7 +1083,7 @@ export default function ContactChatScreen() {
         headerSubtitle={headerSubtitle}
         headerAvatar={headerAvatar}
         onBackPress={() => router.back()}
-        onCallPress={() => Alert.alert("Calling", `Initiating direct call to ${headerName}...`)}
+        onCallPress={() => showPopupAlert("Calling", `Initiating direct call to ${headerName}...`, undefined, undefined, "info")}
         onOptionsPress={() => setContactModalVisible(true)}
         isWalkSafeActive={false}
       />
@@ -1164,7 +1183,7 @@ export default function ContactChatScreen() {
         relationship={headerSubtitle}
         avatarUrl={headerAvatar}
         phone={params.phone}
-        onCallPress={() => Alert.alert("Calling", `Initiating direct call to ${headerName}...`)}
+        onCallPress={() => showPopupAlert("Calling", `Initiating direct call to ${headerName}...`, undefined, undefined, "info")}
       />
 
       {/* Lightbox Media Viewer Modal */}

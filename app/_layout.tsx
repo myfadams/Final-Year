@@ -11,6 +11,8 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 
+import { PopupAlertProvider } from "@/components/popupAlert";
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -59,19 +61,22 @@ export default function RootLayout() {
     return null;
   }
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(resident)" />
-      <Stack.Screen name="(admin)" />
-      <Stack.Screen name="settingsPage" />
-      <Stack.Screen name="profile" />
-      <Stack.Screen name="report" />
-      <Stack.Screen name="incidentsDetails" />
-      <Stack.Screen name="connect" />
-      <Stack.Screen name="contactChat" />
-      <Stack.Screen name="emergencyChat" />
-      <Stack.Screen name="yourEmergencies" />
-    </Stack>
+    <PopupAlertProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="index" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(resident)" />
+        <Stack.Screen name="(admin)" />
+        <Stack.Screen name="settingsPage" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="report" />
+        <Stack.Screen name="incidentsDetails" />
+        <Stack.Screen name="connect" />
+        <Stack.Screen name="contactChat" />
+        <Stack.Screen name="emergencyChat" />
+        <Stack.Screen name="yourEmergencies" />
+      </Stack>
+    </PopupAlertProvider>
   );
 }
+

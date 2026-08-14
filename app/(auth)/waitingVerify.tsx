@@ -8,8 +8,8 @@ import * as Linking from "expo-linking";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef, useState } from "react";
+import { showPopupAlert } from "@/components/popupAlert";
 import {
-  Alert,
   Animated,
   AppState,
   Easing,
@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const POLL_INTERVAL_MS = 3000;
@@ -46,17 +47,23 @@ export default function WaitingVerify() {
     try {
       const { error } = await resendVerificationEmail(targetEmail);
       if (error) {
-        Alert.alert("Resend Failed", error);
+        showPopupAlert("Resend Failed", error, undefined, undefined, "error");
       } else {
-        Alert.alert(
+        showPopupAlert(
           "Email Resent",
           `A new verification link has been sent to ${targetEmail}. Please check your inbox and spam folder.`,
+          undefined,
+          undefined,
+          "success"
         );
       }
     } catch (err: any) {
-      Alert.alert(
+      showPopupAlert(
         "Error",
         err?.message || "Failed to resend verification email.",
+        undefined,
+        undefined,
+        "error"
       );
     } finally {
       setIsResendingEmail(false);
@@ -211,10 +218,12 @@ export default function WaitingVerify() {
       }
 
       if (isManual) {
-        Alert.alert(
+        showPopupAlert(
           "Verification Pending",
           `We could not confirm your email verification yet. Please tap the verification link sent to ${activeEmail || "your email"} and try again.`,
           [{ text: "OK" }],
+          undefined,
+          "warning"
         );
       }
     } finally {

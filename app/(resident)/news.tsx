@@ -5,15 +5,16 @@ import {
   Search,
   SlidersHorizontal
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useState } from "react";
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -73,7 +74,7 @@ export default function NewsScreen() {
         </View>
         <TouchableOpacity
           onPress={() =>
-            Alert.alert("Filter Settings", "Configure your feed preferences.")
+            showPopupAlert("Filter Settings", "Configure your feed preferences.", undefined, undefined, "info")
           }
           style={styles.filterButton}
           activeOpacity={0.8}

@@ -19,9 +19,9 @@ import {
   Users,
   UsersRound,
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Alert,
   Image,
   ScrollView,
   StyleSheet,
@@ -30,6 +30,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -154,7 +155,7 @@ export default function ContactsScreen() {
 
   // ── Action handlers ─────────────────────────────────────────────────────────
   const handleCallPress = (name: string) => {
-    Alert.alert("Emergency Call", `Initiating direct call to ${name}...`);
+    showPopupAlert("Emergency Call", `Initiating direct call to ${name}...`, undefined, undefined, "info");
   };
 
   const handleChatPress = (name: string, contactObj?: any) => {
@@ -191,7 +192,7 @@ export default function ContactsScreen() {
       );
       const { error } = await updateFriendRelationship(friendshipId, relationship);
       if (error) {
-        Alert.alert("Error", error);
+        showPopupAlert("Error", error, undefined, undefined, "error");
         loadFriends(); // restore on failure
       }
     },
@@ -202,7 +203,7 @@ export default function ContactsScreen() {
   const handleRemove = useCallback(
     (friendshipId: string, name: string) => {
       setModalVisible(false);
-      Alert.alert(
+      showPopupAlert(
         "Remove Contact",
         `Remove ${name} from your contacts?`,
         [
@@ -217,12 +218,14 @@ export default function ContactsScreen() {
               );
               const { error } = await removeFriend(friendshipId);
               if (error) {
-                Alert.alert("Error", error);
+                showPopupAlert("Error", error, undefined, undefined, "error");
                 loadFriends();
               }
             },
           },
         ],
+        undefined,
+        "confirm"
       );
     },
     [loadFriends],

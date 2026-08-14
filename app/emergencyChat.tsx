@@ -9,9 +9,9 @@ import { Audio, AVPlaybackStatus } from "expo-av";
 import * as FileSystem from "expo-file-system/legacy";
 import * as ImagePicker from "expo-image-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
@@ -20,6 +20,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+
 
 // ---------------------------------------------------------------------------
 // Audio helpers
@@ -248,9 +249,12 @@ export default function EmergencyChatScreen() {
         if (!permission.granted) {
           micPressActiveRef.current = false;
           setIsRecording(false);
-          Alert.alert(
+          showPopupAlert(
             "Permission Denied",
-            "Microphone access is required to record voice notes."
+            "Microphone access is required to record voice notes.",
+            undefined,
+            undefined,
+            "warning"
           );
           return;
         }
@@ -288,9 +292,12 @@ export default function EmergencyChatScreen() {
         setIsRecording(false);
         micPressActiveRef.current = false;
 
-        Alert.alert(
+        showPopupAlert(
           "Recording Error",
-          "Could not start audio recording. Please try again."
+          "Could not start audio recording. Please try again.",
+          undefined,
+          undefined,
+          "error"
         );
       }
     };
@@ -335,15 +342,18 @@ export default function EmergencyChatScreen() {
       await configureAudioMode(false).catch(() => { });
 
       if (!uri) {
-        Alert.alert("Recording Error", "The recording file could not be created.");
+        showPopupAlert("Recording Error", "The recording file could not be created.", undefined, undefined, "error");
         setRecordDuration(0);
         return;
       }
 
       if (durationSec < 1) {
-        Alert.alert(
+        showPopupAlert(
           "Recording Too Short",
-          "Hold the mic button for at least one second to record a voice note."
+          "Hold the mic button for at least one second to record a voice note.",
+          undefined,
+          undefined,
+          "warning"
         );
         setRecordDuration(0);
         return;
@@ -358,9 +368,12 @@ export default function EmergencyChatScreen() {
         const fileInfo = await FileSystem.getInfoAsync(uri);
         const fileSize = (fileInfo as { size?: number }).size ?? 0;
         if (!fileInfo.exists || fileSize < 1024) {
-          Alert.alert(
+          showPopupAlert(
             "Recording Error",
-            "That recording came out empty. Please try again."
+            "That recording came out empty. Please try again.",
+            undefined,
+            undefined,
+            "error"
           );
           setRecordDuration(0);
           return;
@@ -554,7 +567,7 @@ export default function EmergencyChatScreen() {
         setPlaybackRemainingSeconds(null);
         setPlaybackProgress(0);
         lastRemainingSecRef.current = null;
-        Alert.alert("Playback Error", "This voice note could not be played.");
+        showPopupAlert("Playback Error", "This voice note could not be played.", undefined, undefined, "error");
       }
     }
   };
@@ -564,7 +577,7 @@ export default function EmergencyChatScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert("Permission Denied", "Gallery access is required to share photos.");
+        showPopupAlert("Permission Denied", "Gallery access is required to share photos.", undefined, undefined, "warning");
         return;
       }
 
@@ -597,7 +610,7 @@ export default function EmergencyChatScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (permission.status !== "granted") {
-        Alert.alert("Permission Denied", "Camera access is required to take photos.");
+        showPopupAlert("Permission Denied", "Camera access is required to take photos.", undefined, undefined, "warning");
         return;
       }
 

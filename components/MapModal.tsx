@@ -1,6 +1,6 @@
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -13,6 +13,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 
 // =====================================================
 // TYPES
@@ -344,9 +345,12 @@ const BottomSheetModal: React.FC<{
                   <TouchableOpacity
                     style={[sheetStyles.acceptBtn, sheetStyles.disabledBtn]}
                     onPress={() => {
-                      Alert.alert(
+                      showPopupAlert(
                         "False Emergency Alert",
-                        "The creator of this emergency flagged it as false information. You cannot respond to it."
+                        "The creator of this emergency flagged it as false information. You cannot respond to it.",
+                        undefined,
+                        undefined,
+                        "warning"
                       );
                     }}
                   >

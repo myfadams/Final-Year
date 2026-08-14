@@ -16,9 +16,10 @@ import {
   sendFriendRequest,
 } from "@/backend/friends";
 import { useRouter } from "expo-router";
-import { AlertTriangle, SearchX } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
+
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -152,7 +153,7 @@ export default function ConnectScreen() {
         setSuggestedUsers((prev) =>
           updateRelationship(prev, userId, "none"),
         );
-        Alert.alert("Error", error);
+        showPopupAlert("Error", error, undefined, undefined, "error");
       }
     },
     [],
@@ -177,7 +178,7 @@ export default function ConnectScreen() {
         setSuggestedUsers((prev) =>
           updateRelationship(prev, userId, "pending_sent"),
         );
-        Alert.alert("Error", error);
+        showPopupAlert("Error", error, undefined, undefined, "error");
       }
     },
     [],
@@ -196,7 +197,7 @@ export default function ConnectScreen() {
         setSearchResults((prev) =>
           updateRelationship(prev, requesterId, "pending_received"),
         );
-        Alert.alert("Error", error);
+        showPopupAlert("Error", error, undefined, undefined, "error");
       }
     },
     [],
@@ -212,7 +213,7 @@ export default function ConnectScreen() {
       // Rollback: re-fetch to restore the list
       const { data } = await getPendingRequests();
       setPendingRequests(data);
-      Alert.alert("Error", error);
+      showPopupAlert("Error", error, undefined, undefined, "error");
     }
   }, []);
 
@@ -225,7 +226,7 @@ export default function ConnectScreen() {
       // Rollback: re-fetch to restore the list
       const { data } = await getPendingRequests();
       setPendingRequests(data);
-      Alert.alert("Error", error);
+      showPopupAlert("Error", error, undefined, undefined, "error");
     }
   }, []);
 
@@ -238,7 +239,7 @@ export default function ConnectScreen() {
       <ConnectHeader
         onBackPress={() => router.back()}
         onNotificationPress={() =>
-          Alert.alert("Notifications", "You have no new notifications.")
+          showPopupAlert("Notifications", "You have no new notifications.", undefined, undefined, "info")
         }
       />
 

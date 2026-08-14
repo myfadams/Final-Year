@@ -16,9 +16,9 @@ import {
   Shield,
   Users
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -27,6 +27,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 
 const getInitials = (name?: string | null) => {
   if (!name || !name.trim()) return "U";
@@ -80,9 +81,12 @@ export default function ProfileScreen() {
     // Request media library permissions
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert(
+      showPopupAlert(
         "Permission Denied",
         "Sorry, we need camera roll permissions to change your avatar image.",
+        undefined,
+        undefined,
+        "warning"
       );
       return;
     }
@@ -99,52 +103,64 @@ export default function ProfileScreen() {
         setAvatar(result.assets[0].uri);
       }
     } catch (error) {
-      Alert.alert("Error", "Something went wrong while choosing the image.");
+      showPopupAlert("Error", "Something went wrong while choosing the image.", undefined, undefined, "error");
     }
   };
 
   const [isSigningOut, setIsSigningOut] = useState<boolean>(false);
 
   const handleSignOut = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out of ResQ?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setIsSigningOut(true);
-            await signOutUser();
-            globalState.userProfile = null;
-            setUserProfile(null);
+    showPopupAlert(
+      "Sign Out",
+      "Are you sure you want to sign out of ResQ?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Sign Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setIsSigningOut(true);
+              await signOutUser();
+              globalState.userProfile = null;
+              setUserProfile(null);
 
-            // Reset navigation stack completely so the user cannot swipe back
-            if (router.canDismiss()) {
-              router.dismissAll();
+              // Reset navigation stack completely so the user cannot swipe back
+              if (router.canDismiss()) {
+                router.dismissAll();
+              }
+              router.replace("/(auth)/login");
+            } catch (err: any) {
+              console.error("Error signing out:", err);
+              showPopupAlert("Sign Out Error", err?.message || "Unable to sign out. Please try again.", undefined, undefined, "error");
+            } finally {
+              setIsSigningOut(false);
             }
-            router.replace("/(auth)/login");
-          } catch (err: any) {
-            console.error("Error signing out:", err);
-            Alert.alert("Sign Out Error", err?.message || "Unable to sign out. Please try again.");
-          } finally {
-            setIsSigningOut(false);
-          }
+          },
         },
-      },
-    ]);
+      ],
+      undefined,
+      "confirm"
+    );
   };
 
   const handleHelpCenter = () => {
-    Alert.alert(
+    showPopupAlert(
       "ResQ Help Center",
       "Need assistance? Reach our 24/7 support line at support@resq-app.org or tap Call Emergency for immediate danger.",
+      undefined,
+      undefined,
+      "info"
     );
   };
 
   const handleNotificationsPress = () => {
-    Alert.alert(
+    showPopupAlert(
       "Notification Preferences",
       "Notification settings successfully updated.",
+      undefined,
+      undefined,
+      "success"
     );
   };
 

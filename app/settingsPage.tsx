@@ -20,9 +20,9 @@ import {
   Phone,
   Pill,
 } from "lucide-react-native";
+import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -30,6 +30,7 @@ import {
   Text,
   View,
 } from "react-native";
+
 import { SafeAreaView } from "react-native-safe-area-context";
 
 interface ProfileItemProps {
@@ -116,7 +117,7 @@ const settingsPage = () => {
     }
 
     if (!userId) {
-      Alert.alert("Error", "Unable to identify current user. Please log in again.");
+      showPopupAlert("Error", "Unable to identify current user. Please log in again.", undefined, undefined, "error");
       return;
     }
 
@@ -124,14 +125,20 @@ const settingsPage = () => {
     try {
       const { data, error } = await saveMedicalInfo(userId, medicalData);
       if (error) {
-        Alert.alert(
+        showPopupAlert(
           "Save Failed",
-          error.message || "Could not save medical info to database."
+          error.message || "Could not save medical info to database.",
+          undefined,
+          undefined,
+          "error"
         );
       } else {
-        Alert.alert(
+        showPopupAlert(
           "Saved",
-          "Medical information has been saved successfully!"
+          "Medical information has been saved successfully!",
+          undefined,
+          undefined,
+          "success"
         );
         if (data) {
           setMedicalData({
@@ -144,7 +151,7 @@ const settingsPage = () => {
         }
       }
     } catch (err: any) {
-      Alert.alert("Save Failed", err?.message || "An unexpected error occurred.");
+      showPopupAlert("Save Failed", err?.message || "An unexpected error occurred.", undefined, undefined, "error");
     } finally {
       setIsSavingMedical(false);
     }

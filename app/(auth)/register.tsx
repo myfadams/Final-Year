@@ -6,10 +6,12 @@ import CustomInput from "@/components/CustomInput";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
+import { showPopupAlert } from "@/components/popupAlert";
 import { AlertCircle, KeyRound, Mail, User } from "lucide-react-native";
 import React, { useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { styles } from "./styles";
+
 
 interface FormErrors {
   fullName?: string;
@@ -67,7 +69,7 @@ export default function SignUp({ onSwitchToLogin }: SignUpProps) {
   };
 
   const handleAccountExists = () => {
-    Alert.alert(
+    showPopupAlert(
       "Account Already Exists",
       "An account with this email address already exists. Please log in with your credentials.",
       [
@@ -81,10 +83,13 @@ export default function SignUp({ onSwitchToLogin }: SignUpProps) {
             }
           },
         },
-      ]
+      ],
+      undefined,
+      "warning"
     );
     setErrors({ email: "An account with this email already exists" });
   };
+
 
   const handleCreateAccount = async () => {
     setErrors({});
@@ -168,7 +173,7 @@ export default function SignUp({ onSwitchToLogin }: SignUpProps) {
     } catch (err: any) {
       console.error("Sign up unexpected error:", err);
       const errorMessage = err?.message || "An unexpected error occurred.";
-      Alert.alert("Sign Up Error", errorMessage);
+      showPopupAlert("Sign Up Error", errorMessage, undefined, undefined, "error");
     } finally {
       setIsLoading(false);
     }
