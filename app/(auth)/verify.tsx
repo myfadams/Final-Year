@@ -6,19 +6,18 @@ import {
   checkStudentIdAndRefExists,
   getCurrentUser,
   signInUser,
-  signUpUser,
-  updateUserVerification,
-  uploadStudentIdCard,
+  signOutUser,
+  updateUserVerification
 } from "@/backend/auth";
-import { processStudentIdOcr, OcrExtractedData } from "@/backend/ocr";
+import { OcrExtractedData, processStudentIdOcr } from "@/backend/ocr";
 import { ImagePickerButton } from "@/components/ImagePickerButton";
 import ImageUpload from "@/components/ImageUpload";
+import { showPopupAlert } from "@/components/popupAlert";
 import Colors from "@/constants/Colors";
 import { KNUST_PROGRAMMES, LOCATION_OPTIONS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { showPopupAlert } from "@/components/popupAlert";
 import { IdCard, LocateFixed, MapPin, Phone } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -82,10 +81,10 @@ const Verify = () => {
     if (!data) return false;
     return Boolean(
       data.fullName &&
-        data.ReferenceNumber &&
-        data.studentID &&
-        data.dateOfExpiry &&
-        data.course
+      data.ReferenceNumber &&
+      data.studentID &&
+      data.dateOfExpiry &&
+      data.course
     );
   };
 
@@ -519,14 +518,20 @@ const Verify = () => {
               marginVertical: 16,
             }}
           >
-            <Text>{"You can "}</Text>
+            <Text>{"Or "}</Text>
             <TouchableOpacity
-              onPress={() => {}}
+              onPress={async () => {
+                await signOutUser();
+                router.replace({
+                  pathname: "/(auth)/login",
+                  params: { phone: phone.trim() },
+                });
+              }}
               disabled={isSubmitting || locationLoading}
             >
-              <Text style={{ color: Colors.light.accent }}>skip</Text>
+              <Text style={{ color: Colors.light.accent }}>{"Sign into"}</Text>
             </TouchableOpacity>
-            <Text>{" this and complete it later"}</Text>
+            <Text>{" a differnt account"}</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

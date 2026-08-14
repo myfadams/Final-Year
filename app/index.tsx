@@ -1,4 +1,9 @@
-import { getCachedUserProfile, getCurrentUser, getUserProfile } from "@/backend/auth";
+import {
+  checkUserAccountStatus,
+  getCachedUserProfile,
+  getCurrentUser,
+  getUserProfile,
+} from "@/backend/auth";
 import { subscribeToCurrentRespondingEmergency } from "@/backend/emergencies";
 import AnimatedEmergencyLogo from "@/components/AnimatedEmergencyLogo";
 import { globalState } from "@/constants/globalState";
@@ -24,11 +29,22 @@ export default function Index() {
 
         // Check if user is logged in and email is verified
         if (user && (user.email_confirmed_at || cachedProfile?.is_verified)) {
-          const { profile } = await getUserProfile(user.id);
-          if (profile) {
-            globalState.userProfile = profile;
+          const accountStatus = await checkUserAccountStatus(user.id);
+          if (accountStatus.profile) {
+            globalState.userProfile = accountStatus.profile;
           }
-          router.replace("/(resident)/home");
+
+          if (accountStatus.exists && accountStatus.isVerified) {
+            router.replace("/(resident)/home");
+          } else {
+            router.replace({
+              pathname: "/(auth)/verify",
+              params: {
+                email: user.email || "",
+                fullName: accountStatus.profile?.name || user.user_metadata?.full_name || "",
+              },
+            });
+          }
         } else {
           router.replace("/(auth)/login");
         }

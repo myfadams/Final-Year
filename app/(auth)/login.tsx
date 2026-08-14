@@ -1,4 +1,5 @@
 import {
+  checkUserAccountStatus,
   getUserProfile,
   resendVerificationEmail,
   signInUser,
@@ -184,14 +185,15 @@ export default function login() {
           return;
         }
 
-        // User email is verified: check student ID profile verification
-        const { profile } = await getUserProfile(data.user.id);
-        if (profile) {
-          globalState.userProfile = profile;
+        // Check if an entry exists for the user in the `users` table and whether they are verified
+        const accountStatus = await checkUserAccountStatus(data.user.id);
+        if (accountStatus.profile) {
+          globalState.userProfile = accountStatus.profile;
         }
         setIsLoading(false);
 
-        if (profile && profile.is_verified) {
+        // If user entry exists in `users` table AND is verified -> navigate to home, otherwise navigate to verify screen
+        if (accountStatus.exists && accountStatus.isVerified) {
           router.replace("/(resident)/home");
         } else {
           router.replace({
@@ -200,7 +202,7 @@ export default function login() {
               email: cleanEmail,
               password: password,
               fullName:
-                profile?.name || data.user.user_metadata?.full_name || "",
+                accountStatus.profile?.name || data.user.user_metadata?.full_name || "",
             },
           });
         }

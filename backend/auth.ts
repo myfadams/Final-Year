@@ -665,3 +665,36 @@ export async function fetchUserProfileById(userId: string): Promise<UserProfile 
     return null;
   }
 }
+
+/**
+ * Checks if a user has an entry in the `users` database table and whether they are verified.
+ * Used during login flow to route users missing a `users` table record or unverified to verification.
+ */
+export async function checkUserAccountStatus(userId: string): Promise<{
+  exists: boolean;
+  profile: UserProfile | null;
+  isVerified: boolean;
+}> {
+  if (!userId) return { exists: false, profile: null, isVerified: false };
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { exists: false, profile: null, isVerified: false };
+    }
+
+    const profile = data as UserProfile;
+    return {
+      exists: true,
+      profile,
+      isVerified: Boolean(profile.is_verified),
+    };
+  } catch (err) {
+    console.warn("checkUserAccountStatus notice:", err);
+    return { exists: false, profile: null, isVerified: false };
+  }
+}

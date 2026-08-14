@@ -8,6 +8,9 @@ import {
   TouchableWithoutFeedback,
   Animated,
   Dimensions,
+  StyleProp,
+  ViewStyle,
+  TextStyle,
 } from "react-native";
 import {
   AlertCircle,
@@ -149,13 +152,13 @@ export const PopupAlertCard: React.FC<PopupAlertCardProps> = ({
         };
       case "confirm":
         return {
-          icon: <HelpCircle size={34} color="#4F46E5" strokeWidth={2.2} />,
-          outerRingBg: "#E0E7FF",
-          innerBadgeBg: "#EEF2FF",
-          borderColor: "#C7D2FE",
-          accentColor: "#4F46E5",
-          badgeBorder: "#A5B4FC",
-          topBarColor: "#6366F1",
+          icon: <HelpCircle size={34} color={ResQColors.primaryRed || "#AF101A"} strokeWidth={2.2} />,
+          outerRingBg: "#FEE2E2",
+          innerBadgeBg: "#FEF2F2",
+          borderColor: "#FECACA",
+          accentColor: ResQColors.primaryRed || "#AF101A",
+          badgeBorder: "#FCA5A5",
+          topBarColor: ResQColors.primaryRed || "#AF101A",
         };
       case "info":
       default:
@@ -288,8 +291,8 @@ export const PopupAlertCard: React.FC<PopupAlertCardProps> = ({
                   const isCancel = btn.style === "cancel";
                   const isDestructive = btn.style === "destructive";
 
-                  let btnStyle = styles.defaultButton;
-                  let textStyle = styles.defaultButtonText;
+                  let btnStyle: StyleProp<ViewStyle> = styles.primaryButton;
+                  let textStyle: StyleProp<TextStyle> = styles.primaryButtonText;
 
                   if (isCancel) {
                     btnStyle = styles.cancelButton;
@@ -301,7 +304,8 @@ export const PopupAlertCard: React.FC<PopupAlertCardProps> = ({
                     btnStyle = [
                       styles.primaryButton,
                       { backgroundColor: typeConfig.accentColor },
-                    ] as any;
+                    ];
+                    textStyle = styles.primaryButtonText;
                   }
 
                   return (
@@ -473,6 +477,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 10,
     elevation: 4,
+  },
+  primaryButtonText: {
+    color: "#FFFFFF",
+    fontFamily: typography.bold || "System",
   },
   defaultButton: {
     backgroundColor: "#F1F5F9",
