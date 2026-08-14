@@ -3,6 +3,7 @@ import {
   cancelEmergencyResponse,
   EmergencyRecord,
   fetchEmergencies,
+  fetchUserEmergencyHistoryMap,
   subscribeToEmergencies,
 } from "@/backend/emergencies";
 import { supabase } from "@/backend/supabaseConfig";
@@ -149,9 +150,22 @@ export default function AlertsScreen() {
 
   // ── Data helpers ─────────────────────────────────────────────────────────
 
-  function applyData(records: EmergencyRecord[], loc?: { latitude: number; longitude: number } | null) {
+  async function applyData(
+    records: EmergencyRecord[],
+    loc?: { latitude: number; longitude: number } | null,
+    userId?: string
+  ) {
     const location = loc ?? userLocationRef.current;
-    const mapped = records.map((r) => mapEmergencyToCaseProp(r, location));
+    let historyMap: Record<string, any> = {};
+    if (userId) {
+      historyMap = await fetchUserEmergencyHistoryMap(userId);
+    }
+
+    const mapped = records.map((r) => ({
+      ...mapEmergencyToCaseProp(r, location),
+      responderStatus: historyMap[r.id] || null,
+    }));
+
     setAll(mapped);
     setResolved(filterByProperty(mapped, "isResolved", true));
     setCritical(filterByProperty(mapped, "severity", "Critical"));
@@ -185,7 +199,7 @@ export default function AlertsScreen() {
       setLoading(false);
       return;
     }
-    applyData(data, loc);
+    await applyData(data, loc, userId);
     setLoading(false);
   }, []);
 

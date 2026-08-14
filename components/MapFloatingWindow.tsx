@@ -129,14 +129,14 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
                 <Text style={styles.arrivedCTAText}>Arrived at Scene</Text>
               </View>
             ) : isNearLocation ? (
-              // Proximity Triggered "I Have Arrived" Button
+              // Proximity Triggered "I've Arrived" Button
               <TouchableOpacity
                 style={styles.arriveCTAButton}
                 onPress={onConfirmArrival}
                 activeOpacity={0.85}
               >
                 <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.arriveCTAText}>I Have Arrived</Text>
+                <Text style={styles.arriveCTAText}>I've Arrived</Text>
               </TouchableOpacity>
             ) : (
               // Cancel Response Button

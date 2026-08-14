@@ -9,13 +9,14 @@ import {
 import { useRouter } from "expo-router";
 import {
   AlertCircle,
+  Check,
   Clock,
   MapPin,
   Phone,
   ShieldAlert,
   Siren,
   TriangleAlert,
-  Users
+  Users,
 } from "lucide-react-native";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
@@ -23,6 +24,7 @@ import CustomButton from "./CustomButton";
 
 interface CaseComponentProps extends caseProp {
   isActiveResponse?: boolean;
+  responderStatus?: string | null;
   onRespondPress?: () => void;
   onMapPress?: () => void;
 }
@@ -39,11 +41,15 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   action,
   responders,
   isActiveResponse,
+  responderStatus,
   onRespondPress,
   onMapPress,
 }) => {
   const txtColor = getSeverityColors(severity);
   const router = useRouter();
+
+  const isArrivedStatus = responderStatus === "arrived";
+  const isDisabled = (distance > 800 && !isActiveResponse) || isArrivedStatus;
 
   return (
     <TouchableOpacity
@@ -228,7 +234,28 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
             </Text>
           </View>
 
-          {isActiveResponse && (
+          {isArrivedStatus ? (
+            <View
+              style={{
+                backgroundColor: "#DCFCE7",
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: "#86EFAC",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontFamily: typography.bold,
+                  color: "#15803D",
+                }}
+              >
+                Arrived at Scene
+              </Text>
+            </View>
+          ) : isActiveResponse ? (
             <View
               style={{
                 backgroundColor: "#DCFCE7",
@@ -249,7 +276,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                 You are responding
               </Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Round Custom Buttons */}
@@ -285,46 +312,58 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
           <View style={{ flex: 1 }}>
             <CustomButton
               onPress={onRespondPress}
-              disabled={distance > 800 && !isActiveResponse}
+              disabled={isDisabled}
               Icon={
-                <Siren
-                  color={
-                    distance > 800 && !isActiveResponse
-                      ? "#9E9D96"
-                      : isActiveResponse
-                        ? "#FF3B3B"
-                        : "#fff"
-                  }
-                  size={19}
-                />
+                isArrivedStatus ? (
+                  <Check color="#15803D" size={19} />
+                ) : (
+                  <Siren
+                    color={
+                      distance > 800 && !isActiveResponse
+                        ? "#9E9D96"
+                        : isActiveResponse
+                          ? "#FF3B3B"
+                          : "#fff"
+                    }
+                    size={19}
+                  />
+                )
               }
               text={
-                distance > 800 && !isActiveResponse
-                  ? "too far"
-                  : isActiveResponse
-                    ? "Cancel"
-                    : "Respond"
+                isArrivedStatus
+                  ? "arrived"
+                  : distance > 800 && !isActiveResponse
+                    ? "too far"
+                    : isActiveResponse
+                      ? "Cancel"
+                      : "Respond"
               }
               color={
-                distance > 800 && !isActiveResponse
-                  ? "#F1F1F0"
-                  : isActiveResponse
-                    ? "rgba(255, 59, 59, 0.08)"
-                    : Colors.light.primary
+                isArrivedStatus
+                  ? "rgba(34, 197, 94, 0.1)"
+                  : distance > 800 && !isActiveResponse
+                    ? "#F1F1F0"
+                    : isActiveResponse
+                      ? "rgba(255, 59, 59, 0.08)"
+                      : Colors.light.primary
               }
               textColor={
-                distance > 800 && !isActiveResponse
-                  ? "#9E9D96"
-                  : isActiveResponse
-                    ? "#FF3B3B"
-                    : "#fff"
+                isArrivedStatus
+                  ? "#15803D"
+                  : distance > 800 && !isActiveResponse
+                    ? "#9E9D96"
+                    : isActiveResponse
+                      ? "#FF3B3B"
+                      : "#fff"
               }
               borderColor={
-                distance > 800 && !isActiveResponse
-                  ? "#E2E2DF"
-                  : isActiveResponse
-                    ? "rgba(255, 59, 59, 0.2)"
-                    : ResQColors.border
+                isArrivedStatus
+                  ? "rgba(34, 197, 94, 0.3)"
+                  : distance > 800 && !isActiveResponse
+                    ? "#E2E2DF"
+                    : isActiveResponse
+                      ? "rgba(255, 59, 59, 0.2)"
+                      : ResQColors.border
               }
             />
           </View>

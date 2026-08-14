@@ -3,6 +3,8 @@ import {
   cancelEmergencyResponse,
   fetchEmergencyDetails,
   fetchEmergencyResponders,
+  fetchUserEmergencyStatus,
+  markEmergencyResponseDone,
   recordEmergencyResponse,
   subscribeToEmergencyById,
   subscribeToEmergencyResponders,
@@ -22,6 +24,7 @@ import {
   BriefcaseMedical,
   Car,
   Check,
+  CheckCircle2,
   Clock,
   Flame,
   Footprints,
@@ -267,10 +270,16 @@ export default function IncidentDetailScreen() {
   const [isResponding, setIsResponding] = useState(
     globalState.activeEmergencyId === incident.id
   );
+  const [responderStatus, setResponderStatus] = useState<"responding" | "arrived" | "done_helping" | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       setIsResponding(globalState.activeEmergencyId === incident.id);
+      if (incident.id) {
+        fetchUserEmergencyStatus(incident.id).then((status) => {
+          setResponderStatus(status as any);
+        });
+      }
     }, [incident.id])
   );
 
@@ -301,6 +310,36 @@ export default function IncidentDetailScreen() {
     return { distanceText, durationText: `${mins} min${mins > 1 ? "s" : ""}`, totalSeconds: seconds };
   }, [userCoords, latitude, longitude, travelMode]);
 
+  const handleDoneHelping = async () => {
+    Alert.alert(
+      "Complete Assistance?",
+      "Are you sure you have finished helping with this emergency?",
+      [
+        { text: "No, Still Helping", style: "cancel" },
+        {
+          text: "Yes, Done Helping",
+          onPress: async () => {
+            await markEmergencyResponseDone({ emergencyId: incident.id });
+            globalState.activeEmergencyId = null;
+            globalState.activeEmergencyPerson = null;
+            setIsResponding(false);
+            setResponderStatus("done_helping");
+            Alert.alert(
+              "Thank You!",
+              "Your assistance for this emergency has been marked as completed.",
+              [
+                {
+                  text: "OK",
+                  onPress: () => router.back(),
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleRespondToggle = async () => {
     if (!isResponding && incident.severity === "Critical" && calculatedEta.totalSeconds / 60 > 8) {
       Alert.alert(
@@ -324,6 +363,7 @@ export default function IncidentDetailScreen() {
               globalState.activeEmergencyId = null;
               globalState.activeEmergencyPerson = null;
               setIsResponding(false);
+              setResponderStatus(null);
               Alert.alert(
                 "Response Cancelled",
                 "Your response assignment has been cancelled."
@@ -348,6 +388,7 @@ export default function IncidentDetailScreen() {
               });
               globalState.activeEmergencyId = incident.id;
               setIsResponding(true);
+              setResponderStatus("responding");
 
               Alert.alert(
                 "Response Recorded",
@@ -1357,7 +1398,25 @@ export default function IncidentDetailScreen() {
 
       {/* Bottom Fixed Navigation Actions */}
       <View style={styles.bottomBarContainer}>
-        {incident.severity === "Critical" &&
+        {responderStatus === "arrived" || responderStatus === "done_helping" ? (
+          <TouchableOpacity
+            onPress={handleDoneHelping}
+            style={[
+              styles.respondButton,
+              { backgroundColor: "#16A34A" },
+            ]}
+            activeOpacity={0.85}
+          >
+            <CheckCircle2
+              size={18}
+              color="#FFFFFF"
+              style={{ marginRight: 8 }}
+            />
+            <Text style={[styles.respondButtonText, { color: "#FFFFFF" }]}>
+              Done Helping
+            </Text>
+          </TouchableOpacity>
+        ) : incident.severity === "Critical" &&
           calculatedEta.totalSeconds / 60 > 8 &&
           !isResponding ? (
           <View style={styles.restrictedRespondBadge}>

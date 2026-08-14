@@ -178,7 +178,7 @@ interface MapViewComponentProps {
   onSelectPerson: (p: Person) => void;
   onSelectSharedPin?: (pin: SharedLocationPin) => void;
   onRouteCalculated?: (distance: string, duration: string) => void;
-  recenterNonce?: string;
+  recenterNonce?: string | null;
   categoryFilter?: string; // category filter state passed from parent
   searchQuery?: string; // search query string passed from parent
   travelMode?: "driving" | "running" | "walking"; // travel mode passed from parent

@@ -4,6 +4,7 @@ import {
   confirmEmergencyArrival,
   fetchEmergencies,
   fetchEmergencyById,
+  fetchUserEmergencyHistoryMap,
   mapEmergencyRecordToPerson,
   recordEmergencyResponse,
 } from "@/backend/emergencies";
@@ -48,12 +49,12 @@ export default function LocationScreen() {
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
   const [activeSharedLocation, setActiveSharedLocation] =
-    useState<SharedLocationPin | null>(globalState.activeSharedLocation);
+    useState<SharedLocationPin | null>(null);
   const [realEmergencies, setRealEmergencies] = useState<Person[]>([]);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
   const [isArrived, setIsArrived] = useState(false);
-  const [recenterNonce, setRecenterNonce] = useState<string>("");
+  const [recenterNonce, setRecenterNonce] = useState<string | null>(null);
   const [travelMode, setTravelMode] = useState<
     "driving" | "running" | "walking"
   >("running");
@@ -67,7 +68,7 @@ export default function LocationScreen() {
     senderAvatar?: string;
     lat?: string;
     lng?: string;
-    locationType?: "location_share" | "walk_safe";
+    locationType?: string;
     timestampText?: string;
     createdAt?: string;
     hasImOkay?: string;
@@ -93,14 +94,22 @@ export default function LocationScreen() {
         const { user } = await getCurrentUser();
         const userId = user?.id || "";
 
+        const historyMap = userId ? await fetchUserEmergencyHistoryMap(userId) : {};
+
         // 1. Fetch active emergencies from Supabase & resolve creator user profiles
         const { data: emergencies } = await fetchEmergencies(userId);
         if (!isAlive) return;
 
         let loadedRealPeople: Person[] = [];
         if (emergencies && emergencies.length > 0) {
+          // Filter out emergencies where user status in history is 'arrived' or 'done'
+          const activeMapEmergencies = emergencies.filter((rec) => {
+            const status = historyMap[rec.id];
+            return status !== "arrived" && status !== "done";
+          });
+
           loadedRealPeople = await Promise.all(
-            emergencies.map(async (rec) => {
+            activeMapEmergencies.map(async (rec) => {
               let creatorProfile = null;
               if (rec.creator_id) {
                 creatorProfile = await fetchUserProfileById(rec.creator_id);
@@ -110,6 +119,16 @@ export default function LocationScreen() {
           );
           if (!isAlive) return;
           setRealEmergencies(loadedRealPeople);
+        } else {
+          setRealEmergencies([]);
+        }
+
+        // If currently selected person is arrived or done, clear selection
+        if (selectedPerson) {
+          const selStatus = historyMap[selectedPerson.id];
+          if (selStatus === "arrived" || selStatus === "done") {
+            setSelectedPerson(null);
+          }
         }
 
         // 2. Sync active emergency & active shared location from globalState
@@ -180,7 +199,7 @@ export default function LocationScreen() {
             senderAvatar: senderAvatar || "",
             latitude,
             longitude,
-            type: locationType || "location_share",
+            type: (locationType as "location_share" | "walk_safe") || "location_share",
             timestampText: timestampText || "Shared Location",
             createdAt: createdTimestamp,
             messageText: messageText,
@@ -208,73 +227,72 @@ export default function LocationScreen() {
             messageText: undefined,
           });
         } else if (personId) {
-          let person: Person | null =
-            loadedRealPeople.find((p) => p.id === personId) ?? null;
+          const targetStatus = historyMap[personId];
+          if (targetStatus !== "arrived" && targetStatus !== "done") {
+            let person: Person | null =
+              loadedRealPeople.find((p) => p.id === personId) ?? null;
 
-          if (!person) {
-            person = loadedRealPeople.find((p) => p.id === personId) ?? null;
-          }
+            if (!person) {
+              const targetCreatorId = creatorID || "";
+              let creatorName = "Resident in Distress";
+              let knownHealth: string[] = [];
 
-          if (!person) {
-            const targetCreatorId = creatorID || "";
-            let creatorName = "Resident in Distress";
-            let knownHealth: string[] = [];
-
-            if (targetCreatorId) {
-              const profile = await fetchUserProfileById(targetCreatorId);
-              if (profile) {
-                creatorName = profile.name;
-                knownHealth = profile.known_health_problems || [];
-              }
-            } else {
-              const { data: rec } = await fetchEmergencyById(personId);
-              if (rec?.creator_id) {
-                const profile = await fetchUserProfileById(rec.creator_id);
+              if (targetCreatorId) {
+                const profile = await fetchUserProfileById(targetCreatorId);
                 if (profile) {
                   creatorName = profile.name;
                   knownHealth = profile.known_health_problems || [];
                 }
+              } else {
+                const { data: rec } = await fetchEmergencyById(personId);
+                if (rec?.creator_id) {
+                  const profile = await fetchUserProfileById(rec.creator_id);
+                  if (profile) {
+                    creatorName = profile.name;
+                    knownHealth = profile.known_health_problems || [];
+                  }
+                }
               }
-            }
 
-            const urgencyMap: Record<string, "critical" | "high" | "medium"> = {
-              Critical: "critical",
-              Moderate: "high",
-              Low: "medium",
-            };
-            const urgency = urgencyMap[severity || ""] ?? "critical";
-
-            person = {
-              id: personId,
-              name: creatorName,
-              title: title || "Emergency",
-              creatorId: targetCreatorId,
-              address: locationParam || "Location details",
-              avatarColor: "#AF101A",
-              markerColor: "#AF101A",
-              latitude: lat ? parseFloat(lat) : 6.675155,
-              longitude: lng ? parseFloat(lng) : -1.571569,
-              urgency,
-              description: description || title || "",
-              requesterDesc: description || `${title} near ${locationParam}`,
-              knownHealthProblems: knownHealth,
-            };
-          }
-
-          if (person) {
-            setSelectedPerson(person);
-            if (globalState.activeSharedLocation) {
-              const updated = {
-                ...globalState.activeSharedLocation,
-                cardDismissed: true,
+              const urgencyMap: Record<string, "critical" | "high" | "medium"> = {
+                Critical: "critical",
+                Moderate: "high",
+                Low: "medium",
               };
-              globalState.activeSharedLocation = updated;
-              setActiveSharedLocation(updated);
+              const urgency = urgencyMap[severity || ""] ?? "critical";
+
+              person = {
+                id: personId,
+                name: creatorName,
+                title: title || "Emergency",
+                creatorId: targetCreatorId,
+                address: locationParam || "Location details",
+                avatarColor: "#AF101A",
+                markerColor: "#AF101A",
+                latitude: lat ? parseFloat(lat) : 6.675155,
+                longitude: lng ? parseFloat(lng) : -1.571569,
+                urgency,
+                description: description || title || "",
+                requesterDesc: description || `${title} near ${locationParam}`,
+                knownHealthProblems: knownHealth,
+              };
             }
-            if (action === "respond") {
-              globalState.activeEmergencyId = personId;
-              globalState.activeEmergencyPerson = person;
-              setActiveEmergency(person);
+
+            if (person) {
+              setSelectedPerson(person);
+              if (globalState.activeSharedLocation) {
+                const updated = {
+                  ...globalState.activeSharedLocation,
+                  cardDismissed: true,
+                };
+                globalState.activeSharedLocation = updated;
+                setActiveSharedLocation(updated);
+              }
+              if (action === "respond") {
+                globalState.activeEmergencyId = personId;
+                globalState.activeEmergencyPerson = person;
+                setActiveEmergency(person);
+              }
             }
           }
           router.setParams({ personId: undefined, action: undefined });
@@ -314,7 +332,6 @@ export default function LocationScreen() {
           });
         }, remainingMs);
 
-        return () => clearTimeout(timer);
       }
     }
   }, [activeSharedLocation]);
@@ -350,48 +367,26 @@ export default function LocationScreen() {
       return;
     }
 
-    // CRITICAL RESPONSE PERMISSION CHECK:
-    // If it's a critical emergency and the calculated ETA is greater than 5 minutes, block response assignment
-    if (selectedPerson.urgency === "critical") {
-      const parsedDuration = parseInt(duration.replace(/[^0-9]/g, ""), 10);
-      if (!isNaN(parsedDuration) && parsedDuration > 5) {
-        Alert.alert(
-          "Too Far to Respond",
-          `This critical emergency is too far out for you to respond safely (ETA: ${duration}). Professional emergency services have been dispatched.`,
-        );
-        return;
-      }
-    }
-
-    const parsedMins = parseInt(duration.replace(/[^0-9]/g, ""), 10) || 5;
-    const estimatedSeconds = parsedMins * 60;
-
     const { error } = await recordEmergencyResponse({
       emergencyId: idStr,
-      transportMode: travelMode,
-      estimatedArrivalSeconds: estimatedSeconds,
+      transportMode: "running",
+      estimatedArrivalSeconds: 300,
     });
-
     if (error) {
-      console.warn("recordEmergencyResponse warning:", error.message);
+      Alert.alert(
+        "Response Error",
+        error.message || "Failed to record response.",
+      );
+      return;
     }
 
     globalState.activeEmergencyId = idStr;
     globalState.activeEmergencyPerson = selectedPerson;
     setActiveEmergency(selectedPerson);
-    setIsArrived(false);
-
-    // MUTUAL EXCLUSION OF ROUTING: Cancel Walk Safe tracking if active
-    if (activeSharedLocation?.isTrackingActive) {
-      const updated = { ...activeSharedLocation, isTrackingActive: false };
-      globalState.activeSharedLocation = updated;
-      setActiveSharedLocation(updated);
-    }
 
     Alert.alert(
-      "Response Assigned",
-      "You are now responding to this incident. Follow the active navigation line on the map.",
-      [{ text: "OK" }],
+      "Response Recorded",
+      "Your response attempt has been recorded in the database.",
     );
   };
 
@@ -399,15 +394,26 @@ export default function LocationScreen() {
     if (!selectedPerson) return;
     const idStr = selectedPerson.id;
 
+    // Update history status to 'arrived' and cancel active response transit
     const { error } = await confirmEmergencyArrival({ emergencyId: idStr });
     if (error) {
       console.warn("confirmEmergencyArrival warning:", error.message);
     }
 
+    // Stop active navigation guidance and clear active emergency state
+    globalState.isWalkSafeRoutingActive = false;
+    globalState.activeEmergencyId = null;
+    globalState.activeEmergencyPerson = null;
+    setActiveEmergency(null);
     setIsArrived(true);
+
+    // Remove pin and emergency from the map and close floating map window
+    setRealEmergencies((prev) => prev.filter((p) => p.id !== idStr));
+    setSelectedPerson(null);
+
     Alert.alert(
       "Arrival Confirmed",
-      "Your arrival at the emergency location has been recorded in the database.",
+      "Your arrival at the emergency location has been recorded. The emergency pin has been removed from your map.",
       [{ text: "OK" }],
     );
   };

@@ -1,5 +1,5 @@
-import { Person } from "@/constants/interfaces";
 import { globalState } from "@/constants/globalState";
+import { Person } from "@/constants/interfaces";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { fetchUserProfileById, getCurrentUser, UserProfile } from "./auth";
@@ -253,6 +253,20 @@ export async function fetchEmergencies(
       return { data: [], error: new Error(error.message) };
     }
 
+    if (!data || data.length === 0) {
+      return { data: [], error: null };
+    }
+
+    // Filter out emergencies where user's response history status is 'done'
+    if (excludeUserId) {
+      const historyMap = await fetchUserEmergencyHistoryMap(excludeUserId);
+      const filtered = (data as EmergencyRecord[]).filter((rec) => {
+        const userStatus = historyMap[rec.id];
+        return userStatus !== "done" && userStatus !== "done_helping";
+      });
+      return { data: filtered, error: null };
+    }
+
     return { data: (data as EmergencyRecord[]) || [], error: null };
   } catch (err: any) {
     console.error("fetchEmergencies exception:", err);
@@ -445,7 +459,7 @@ export async function recordEmergencyResponse(params: {
 }
 
 /**
- * Marks responder as arrived in emergency_responders & emergency_response_history tables.
+ * Marks responder as arrived in emergency_response_history table and stops responding active transit.
  */
 export async function confirmEmergencyArrival(params: {
   emergencyId: string;
@@ -459,21 +473,7 @@ export async function confirmEmergencyArrival(params: {
     const userId = user.id;
     const nowIso = new Date().toISOString();
 
-    // 1. Update emergency_responders status to 'arrived'
-    const { error: responderErr } = await supabase
-      .from("emergency_responders")
-      .update({
-        status: "arrived",
-        arrived_at: nowIso,
-      })
-      .eq("emergency_id", params.emergencyId)
-      .eq("responder_id", userId);
-
-    if (responderErr) {
-      console.warn("confirmEmergencyArrival emergency_responders warning:", responderErr.message);
-    }
-
-    // 2. Update active history record in emergency_response_history
+    // 1. Update active history record in emergency_response_history table to status 'arrived'
     const { error: historyErr } = await supabase
       .from("emergency_response_history")
       .update({
@@ -481,17 +481,137 @@ export async function confirmEmergencyArrival(params: {
         actual_arrival_at: nowIso,
       })
       .eq("emergency_id", params.emergencyId)
-      .eq("responder_id", userId)
-      .eq("status", "responding");
+      .eq("responder_id", userId);
 
     if (historyErr) {
       console.warn("confirmEmergencyArrival emergency_response_history warning:", historyErr.message);
     }
 
+    // 2. Stop responding active transit (remove from emergency_responders table)
+    // await cancelEmergencyResponse({ emergencyId: params.emergencyId });
+    const { error: responderErr } = await supabase
+      .from("emergency_responders")
+      .delete()
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId);
+
+    // 3. Ensure history status remains 'arrived'
+    await supabase
+      .from("emergency_response_history")
+      .update({
+        status: "arrived",
+        actual_arrival_at: nowIso,
+      })
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId);
+
     return { success: true, error: null };
   } catch (err: any) {
     console.error("confirmEmergencyArrival error:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Marks responder's participation in emergency as completed ('done') in emergency_response_history table.
+ * Removes emergency from responder's personal feed without resolving emergency for others.
+ */
+export async function markEmergencyResponseDone(params: {
+  emergencyId: string;
+}): Promise<{ success: boolean; error: Error | null }> {
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: new Error("User not authenticated.") };
+    }
+
+    const userId = user.id;
+
+    // 1. Update emergency_response_history status to 'done_helping' for this user
+    const { error: historyErr } = await supabase
+      .from("emergency_response_history")
+      .update({
+        status: "done_helping",
+      })
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId);
+
+    if (historyErr) {
+      console.warn("markEmergencyResponseDone emergency_response_history warning:", historyErr.message);
+    }
+
+    // 2. Remove user from emergency_responders table if still present
+    await supabase
+      .from("emergency_responders")
+      .delete()
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId);
+
+    // 3. Clear active emergency state in globalState if it matches
+    if (globalState.activeEmergencyId === params.emergencyId) {
+      globalState.activeEmergencyId = null;
+      globalState.activeEmergencyPerson = null;
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("markEmergencyResponseDone error:", err);
+    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Fetches user's emergency_response_history records and maps emergency_id to latest status ('responding', 'arrived', 'done', 'cancelled').
+ */
+export async function fetchUserEmergencyHistoryMap(
+  userId: string
+): Promise<Record<string, "responding" | "arrived" | "done" | "done_helping" | "cancelled">> {
+  try {
+    if (!userId) return {};
+    const { data, error } = await supabase
+      .from("emergency_response_history")
+      .select("emergency_id, status, created_at")
+      .eq("responder_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) return {};
+
+    const historyMap: Record<string, "responding" | "arrived" | "done" | "done_helping" | "cancelled"> = {};
+    data.forEach((r: any) => {
+      if (r.emergency_id && !historyMap[r.emergency_id]) {
+        historyMap[r.emergency_id] = r.status;
+      }
+    });
+
+    return historyMap;
+  } catch (_) {
+    return {};
+  }
+}
+
+/**
+ * Fetches current user's response status for a specific emergency from emergency_response_history table.
+ */
+export async function fetchUserEmergencyStatus(
+  emergencyId: string
+): Promise<"responding" | "arrived" | "done" | "done_helping" | "cancelled" | null> {
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from("emergency_response_history")
+      .select("status")
+      .eq("emergency_id", emergencyId)
+      .eq("responder_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return (data.status as any) || null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -713,7 +833,7 @@ export function subscribeToCurrentRespondingEmergency(
   const refreshState = async () => {
     if (!isSubscribed) return;
     const res = await getCurrentRespondingEmergency();
-    
+
     // Explicitly set globalState properties
     globalState.activeEmergencyId = res.data?.emergency?.id || null;
     globalState.activeEmergencyPerson = res.data?.person || null;
@@ -785,12 +905,12 @@ export function subscribeToCurrentRespondingEmergency(
     if (responderChannel) {
       try {
         supabase.removeChannel(responderChannel);
-      } catch (_) {}
+      } catch (_) { }
     }
     if (emergencyChannel) {
       try {
         supabase.removeChannel(emergencyChannel);
-      } catch (_) {}
+      } catch (_) { }
     }
   };
 }
