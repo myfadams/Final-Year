@@ -45,6 +45,15 @@ function getAvatarColor(name?: string) {
   return AVATAR_COLORS[code % AVATAR_COLORS.length];
 }
 
+function getFirstTwoNames(name?: string) {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0]} ${parts[1]}`;
+  }
+  return name;
+}
+
 interface ChatMessageItemProps {
   msg: ChatMessage;
   headerAvatar?: string;
@@ -94,7 +103,7 @@ export default function ChatMessageItem({
   const isPlayingOrPausedThis = playingMessageId === msg.id || pausedMessageId === msg.id;
 
   const [imageError, setImageError] = React.useState(false);
-  const avatarUri = msg.senderAvatar || headerAvatar;
+  const avatarUri = msg.senderAvatar || undefined;
   const displayName = msg.senderName || headerName || "Contact";
   const avatarColor = getAvatarColor(displayName);
   const initials = getInitials(displayName);
@@ -133,10 +142,10 @@ export default function ChatMessageItem({
         )
       )}
 
-      <View style={{ maxWidth: "80%" }}>
+      <View style={{ maxWidth: "80%", alignItems: isMe ? "flex-end" : "flex-start" }}>
         {!isMe && showSenderName && (
           <View style={styles.senderMetaRow}>
-            <Text style={styles.senderName}>{msg.senderName}</Text>
+            <Text style={styles.senderName}>{getFirstTwoNames(msg.senderName)}</Text>
             {msg.senderRole && <Text style={styles.senderRole}>• {msg.senderRole}</Text>}
           </View>
         )}
@@ -433,6 +442,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     paddingHorizontal: 14,
     paddingVertical: 10,
+    // flexShrink: 1,
+    // flexGrow: 0
   },
   bubbleMe: {
     backgroundColor: ResQColors.primaryRed,
@@ -442,6 +453,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 2,
+    alignSelf: "flex-end",
   },
   bubbleOther: {
     backgroundColor: "#FFFFFF",
@@ -453,6 +465,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 1,
+    alignSelf: "flex-start",
   },
   messageText: {
     fontSize: 14.5,

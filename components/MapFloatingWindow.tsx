@@ -163,25 +163,15 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
                 Flagged as False Info
               </Text>
             </TouchableOpacity>
-          ) : isResponseRestricted ? (
-            // Disabled status indicator instead of respond button
-            <View style={styles.disabledRespondBadge}>
-              <X size={15} color="#94A3B8" style={{ marginRight: 5 }} />
-              <Text style={styles.disabledRespondBadgeText}>
-                {parsedDuration > 8
-                  ? "Too Late to Respond"
-                  : "Too Far Out to Respond"}
-              </Text>
+          ) : isArrived ? (
+            // Arrived Badge
+            <View style={styles.arrivedCTAButton}>
+              <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={styles.arrivedCTAText}>Arrived at Scene</Text>
             </View>
           ) : isResponding ? (
-            isArrived ? (
-              // Arrived Badge
-              <View style={styles.arrivedCTAButton}>
-                <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.arrivedCTAText}>Arrived at Scene</Text>
-              </View>
-            ) : isNearLocation ? (
-              // Proximity Triggered "I've Arrived" Button
+            isNearLocation ? (
+              // Proximity Triggered "I've Arrived" Button (only when actively responding AND 50m or less from incident)
               <TouchableOpacity
                 style={styles.arriveCTAButton}
                 onPress={onConfirmArrival}
@@ -191,7 +181,7 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
                 <Text style={styles.arriveCTAText}>I've Arrived</Text>
               </TouchableOpacity>
             ) : (
-              // Cancel Response Button
+              // Cancel Response Button (when responding but > 50m away)
               <TouchableOpacity
                 style={[styles.respondCTAButton, styles.respondCTAActive]}
                 onPress={onRespondToggle}
@@ -212,8 +202,18 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
                 </Text>
               </TouchableOpacity>
             )
+          ) : isResponseRestricted ? (
+            // Disabled status indicator instead of respond button
+            <View style={styles.disabledRespondBadge}>
+              <X size={15} color="#94A3B8" style={{ marginRight: 5 }} />
+              <Text style={styles.disabledRespondBadgeText}>
+                {parsedDuration > 8
+                  ? "Too Late to Respond"
+                  : "Too Far Out to Respond"}
+              </Text>
+            </View>
           ) : (
-            // Normal Primary Respond Button
+            // Normal Primary Respond Button (when user is not responding)
             <TouchableOpacity
               style={[
                 styles.respondCTAButton,

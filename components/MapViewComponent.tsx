@@ -399,7 +399,10 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       lastTravelModeRef.current = mode;
 
       const summary = feature.properties.summary;
-      const distanceVal = `${(summary.distance / 1000).toFixed(1)} km`;
+      const distanceVal =
+        summary.distance < 1000
+          ? `${Math.round(summary.distance)} m`
+          : `${(summary.distance / 1000).toFixed(1)} km`;
 
       let durationFactor = 1.0;
       if (mode === "driving") durationFactor = 0.5;
@@ -497,6 +500,21 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       latitude: location.latitude,
       longitude: location.longitude,
     };
+
+    const directDist = getDistanceInMeters(
+      currentStart.latitude,
+      currentStart.longitude,
+      currentTarget.latitude,
+      currentTarget.longitude
+    );
+    const immediateVal =
+      directDist < 1000
+        ? `${Math.round(directDist)} m`
+        : `${(directDist / 1000).toFixed(1)} km`;
+    setDistance(immediateVal);
+    const estMin = Math.max(1, Math.ceil(directDist / 80));
+    const durVal = directDist <= 50 ? "< 1 min" : `${estMin} min`;
+    onRouteCalculated?.(immediateVal, durVal);
 
     const MIN_MOVEMENT_METERS = 15; // Minimum 15m user movement to evaluate rerouting
     const OFF_ROUTE_METERS = 40;     // Off-route threshold: 40 meters

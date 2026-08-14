@@ -11,6 +11,8 @@ import AlertCasesComponent from "@/components/AlertCasesComponent";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import CaseComponent from "@/components/CaseComponent";
 import HeartBeatWave from "@/components/HeartBeatWave";
+import { useNetwork } from "@/components/network";
+import { showPopupAlert } from "@/components/popupAlert";
 import ResolvedCaseComponent from "@/components/ResolvedCaseComponent";
 import ScrollViewButton from "@/components/ScrollViewButton";
 import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
@@ -28,8 +30,6 @@ import {
   RefreshCw,
   WifiOff,
 } from "lucide-react-native";
-import { showPopupAlert } from "@/components/popupAlert";
-import { useNetwork } from "@/components/network";
 import React, {
   useCallback,
   useEffect,
@@ -180,6 +180,7 @@ export default function AlertsScreen() {
   }
 
   const loadEmergencies = useCallback(async (userId: string) => {
+    if (!userId) return;
     setLoading(true);
     setFetchError(null);
 
@@ -196,7 +197,7 @@ export default function AlertsScreen() {
         }
       } catch (_) { /* location unavailable — distances will show as 0 */ }
     }
-
+    // if (userId)
     const { data, error } = await fetchEmergencies(userId);
     if (error) {
       setFetchError(error.message);

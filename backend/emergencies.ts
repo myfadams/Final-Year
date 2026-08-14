@@ -470,35 +470,45 @@ export async function confirmEmergencyArrival(params: {
     const userId = user.id;
     const nowIso = new Date().toISOString();
 
-    // 1. Update active history record in emergency_response_history table to status 'arrived'
-    const { error: historyErr } = await supabase
+    // 1. Update or insert active history record in emergency_response_history table with status 'arrived'
+    const { data: existing } = await supabase
       .from("emergency_response_history")
-      .update({
-        status: "arrived",
-        actual_arrival_at: nowIso,
-      })
+      .select("id")
       .eq("emergency_id", params.emergencyId)
-      .eq("responder_id", userId);
+      .eq("responder_id", userId)
+      .maybeSingle();
 
-    if (historyErr) {
-      console.warn("confirmEmergencyArrival emergency_response_history warning:", historyErr.message);
+    if (existing) {
+      const { error: historyErr } = await supabase
+        .from("emergency_response_history")
+        .update({
+          status: "arrived",
+          actual_arrival_at: nowIso,
+        })
+        .eq("id", existing.id);
+
+      if (historyErr) {
+        console.warn("confirmEmergencyArrival emergency_response_history warning:", historyErr.message);
+      }
+    } else {
+      const { error: insertErr } = await supabase
+        .from("emergency_response_history")
+        .insert({
+          emergency_id: params.emergencyId,
+          responder_id: userId,
+          status: "arrived",
+          actual_arrival_at: nowIso,
+        });
+
+      if (insertErr) {
+        console.warn("confirmEmergencyArrival emergency_response_history insert warning:", insertErr.message);
+      }
     }
 
     // 2. Stop responding active transit (remove from emergency_responders table)
-    // await cancelEmergencyResponse({ emergencyId: params.emergencyId });
     const { error: responderErr } = await supabase
       .from("emergency_responders")
       .delete()
-      .eq("emergency_id", params.emergencyId)
-      .eq("responder_id", userId);
-
-    // 3. Ensure history status remains 'arrived'
-    await supabase
-      .from("emergency_response_history")
-      .update({
-        status: "arrived",
-        actual_arrival_at: nowIso,
-      })
       .eq("emergency_id", params.emergencyId)
       .eq("responder_id", userId);
 

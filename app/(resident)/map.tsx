@@ -10,6 +10,7 @@ import {
 } from "@/backend/emergencies";
 import { MapFloatingWindow } from "@/components/MapFloatingWindow";
 import MapViewComponent from "@/components/MapViewComponent";
+import { showPopupAlert } from "@/components/popupAlert";
 import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatingWindow";
 import Colors from "@/constants/Colors";
 import { globalState, SharedLocationPin } from "@/constants/globalState";
@@ -27,7 +28,6 @@ import {
   SlidersHorizontal,
   Zap,
 } from "lucide-react-native";
-import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useState } from "react";
 import {
   Platform,
@@ -38,7 +38,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-
 } from "react-native";
 
 type CategoryFilter = "All" | "Medical" | "Fire" | "Security";
@@ -90,6 +89,7 @@ export default function LocationScreen() {
   // Sync active emergency, shared location pin, and handle incoming query parameters when focused
   useFocusEffect(
     React.useCallback(() => {
+
       let isAlive = true;
 
       (async () => {
@@ -97,7 +97,7 @@ export default function LocationScreen() {
         const userId = user?.id || "";
 
         const historyMap = userId ? await fetchUserEmergencyHistoryMap(userId) : {};
-
+        if (!userId) return;
         // 1. Fetch active emergencies from Supabase & resolve creator user profiles
         const { data: emergencies } = await fetchEmergencies(userId);
         if (!isAlive) return;
@@ -133,8 +133,13 @@ export default function LocationScreen() {
           }
         }
 
-        // 2. Sync active emergency & active shared location from globalState
-        const globalActiveId = globalState.activeEmergencyId;
+        // 2. Sync active emergency & active shared location from historyMap & globalState
+        const activeFromHistory = loadedRealPeople.find(
+          (p) => historyMap[p.id] === "responding"
+        );
+        const globalActiveId =
+          globalState.activeEmergencyId || activeFromHistory?.id;
+
         if (globalActiveId) {
           let found = loadedRealPeople.find((p) => p.id === globalActiveId);
           if (
@@ -145,6 +150,8 @@ export default function LocationScreen() {
             found = globalState.activeEmergencyPerson;
           }
           if (found) {
+            globalState.activeEmergencyId = found.id;
+            globalState.activeEmergencyPerson = found;
             setActiveEmergency(found);
           }
         } else {
@@ -342,7 +349,14 @@ export default function LocationScreen() {
 
   const isNearLocation = React.useMemo(() => {
     if (!distance || distance === "--") return false;
-    if (distance.includes("km")) return false;
+    if (distance.includes("km")) {
+      const matchKm = distance.match(/([\d.]+)\s*km/);
+      if (matchKm) {
+        const km = parseFloat(matchKm[1]);
+        return !isNaN(km) && km <= 0.05; // 0.05 km = 50 meters
+      }
+      return false;
+    }
     const match = distance.match(/(\d+)\s*m/);
     if (match) {
       const meters = parseInt(match[1], 10);
