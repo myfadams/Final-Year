@@ -2,8 +2,9 @@ import { ChatMessage } from "@/constants/interfaces";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
-import { getCurrentUser, getUserProfile } from "./auth";
-import { supabase } from "./supabaseConfig";
+import { getCurrentUser } from "./auth";
+import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+
 
 export interface PrivateChat {
   id: string;
@@ -114,7 +115,7 @@ export async function setCachedPrivateChat(otherUserId: string, chat: PrivateCha
   try {
     if (!otherUserId || !chat) return;
     await AsyncStorage.setItem(`${PRIVATE_CHAT_CACHE_PREFIX}${otherUserId}`, JSON.stringify(chat));
-  } catch {}
+  } catch { }
 }
 
 /**
@@ -397,50 +398,45 @@ export function subscribeToChatMessages(
   onChatUpdated?: (chat: any) => void
 ): () => void {
   try {
-    const channelName = `private_chat_${chatId}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "private_chat_messages",
-          filter: `chat_id=eq.${chatId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            onNewMessage(payload.new);
+    const channel = createSafeRealtimeChannel(`private-chat-${chatId}`, (ch) =>
+      ch
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "private_chat_messages",
+            filter: `chat_id=eq.${chatId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              onNewMessage(payload.new);
+            }
           }
-        }
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "private_chat",
-          filter: `id=eq.${chatId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            onChatUpdated?.(payload.new);
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "private_chat",
+            filter: `id=eq.${chatId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              onChatUpdated?.(payload.new);
+            }
           }
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn(`Realtime chat channel notice [${status}]:`, err?.message || "Network offline");
-        }
-      });
+        )
+    );
 
     return () => {
       try {
         supabase.removeChannel(channel);
-      } catch (e) {}
+      } catch (e) { }
     };
   } catch (err: any) {
     console.warn("subscribeToChatMessages setup notice:", err?.message || err);
-    return () => {};
+    return () => { };
   }
 }

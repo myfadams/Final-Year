@@ -29,6 +29,7 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { showPopupAlert } from "@/components/popupAlert";
+import { useNetwork } from "@/components/network";
 import React, {
   useCallback,
   useEffect,
@@ -117,6 +118,7 @@ function mapEmergencyToCaseProp(
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export default function AlertsScreen() {
+  const { isOffline } = useNetwork();
   const [isActive, setActive] = useState("all");
   const [all, setAll] = useState<caseProp[]>([]);
   const [resolved, setResolved] = useState<caseProp[]>([]);
@@ -349,7 +351,7 @@ export default function AlertsScreen() {
             </TouchableOpacity>
 
             <View style={styles.realtimeBadge}>
-              {realtimeConnected ? (
+              {realtimeConnected && !isOffline ? (
                 <>
                   <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
                   <Text style={styles.liveText}>Live Sync</Text>

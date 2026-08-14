@@ -4,7 +4,8 @@ import {
   removeFriend,
   updateFriendRelationship,
 } from "@/backend/friends";
-import { supabase } from "@/backend/supabaseConfig";
+import { createSafeRealtimeChannel, supabase } from "@/backend/supabaseConfig";
+
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import ContactActionModal from "@/components/ContactActionModal";
 import Contacts from "@/components/Contacts";
@@ -125,21 +126,15 @@ export default function ContactsScreen() {
 
     let channel: any = null;
     try {
-      const channelName = `friends-contacts-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-      channel = supabase
-        .channel(channelName)
-        .on(
+      channel = createSafeRealtimeChannel("friends-contacts", (ch) =>
+        ch.on(
           "postgres_changes",
           { event: "*", schema: "public", table: "friends" },
           () => {
             loadFriends(false);
           }
         )
-        .subscribe((status, err) => {
-          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            console.warn(`Realtime contacts channel notice [${status}]:`, err?.message || "Network offline");
-          }
-        });
+      );
     } catch (err) {
       console.warn("Realtime contacts setup warning:", err);
     }
@@ -148,10 +143,11 @@ export default function ContactsScreen() {
       if (channel) {
         try {
           supabase.removeChannel(channel);
-        } catch (e) { }
+        } catch (e) {}
       }
     };
   }, [loadFriends]);
+
 
   // ── Action handlers ─────────────────────────────────────────────────────────
   const handleCallPress = (name: string) => {

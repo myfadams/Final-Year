@@ -1,5 +1,7 @@
-import { getVerifyRedirectUrl } from "@/externalFunctions/expoFunctions";
-import { supabase } from "./supabaseConfig";
+import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+import { getVerifyRedirectUrl } from "../externalFunctions/expoFunctions";
+
+
 
 /**
  * Interface representing user verification data fields
@@ -265,10 +267,8 @@ export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profil
   }
 
   try {
-    const channelName = `user-profile-${userId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    realtimeProfileChannel = supabase
-      .channel(channelName)
-      .on(
+    realtimeProfileChannel = createSafeRealtimeChannel(`user-profile-${userId}`, (ch) =>
+      ch.on(
         "postgres_changes",
         {
           event: "*",
@@ -287,11 +287,7 @@ export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profil
           }
         }
       )
-      .subscribe((status, err) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn(`Realtime user profile channel notice [${status}]:`, err?.message || "Network offline");
-        }
-      });
+    );
   } catch (err: any) {
     console.warn("subscribeToUserProfileChanges setup notice:", err?.message || err);
   }

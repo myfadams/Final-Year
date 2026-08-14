@@ -1,11 +1,3 @@
-import ConnectHeader from "@/components/connect/ConnectHeader";
-import ConnectSearchBar from "@/components/connect/ConnectSearchBar";
-import FriendSearchResultCard from "@/components/connect/FriendSearchResultCard";
-import PendingRequestCard from "@/components/connect/PendingRequestCard";
-import HeartBeatWave from "@/components/HeartBeatWave";
-import { ResQColors } from "@/constants/Colors";
-import { FriendSearchResult } from "@/constants/interfaces";
-import { typography } from "@/constants/typograyph";
 import {
   acceptFriendRequest,
   getPendingRequests,
@@ -15,11 +7,22 @@ import {
   searchUsers,
   sendFriendRequest,
 } from "@/backend/friends";
+import { createSafeRealtimeChannel, supabase } from "@/backend/supabaseConfig";
+import ConnectHeader from "@/components/connect/ConnectHeader";
+import ConnectSearchBar from "@/components/connect/ConnectSearchBar";
+import FriendSearchResultCard from "@/components/connect/FriendSearchResultCard";
+import PendingRequestCard from "@/components/connect/PendingRequestCard";
+import HeartBeatWave from "@/components/HeartBeatWave";
+
+import { ResQColors } from "@/constants/Colors";
+import { FriendSearchResult } from "@/constants/interfaces";
+import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
-import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 
+import { showPopupAlert } from "@/components/popupAlert";
+import { AlertTriangle, SearchX } from "lucide-react-native";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -51,18 +54,44 @@ export default function ConnectScreen() {
     [],
   );
 
-  // Load pending requests and suggested users on mount
-  useEffect(() => {
-    (async () => {
-      const [pendingResult, suggestedResult] = await Promise.all([
-        getPendingRequests(),
-        getSuggestedUsers(2),
-      ]);
-      setPendingRequests(pendingResult.data);
-      setIsPendingLoading(false);
-      setSuggestedUsers(suggestedResult.data);
-    })();
+  const loadPendingAndSuggested = useCallback(async () => {
+    const [pendingResult, suggestedResult] = await Promise.all([
+      getPendingRequests(),
+      getSuggestedUsers(2),
+    ]);
+    setPendingRequests(pendingResult.data);
+    setIsPendingLoading(false);
+    setSuggestedUsers(suggestedResult.data);
   }, []);
+
+  // Load pending requests and suggested users on mount + Realtime listener
+  useEffect(() => {
+    loadPendingAndSuggested();
+
+    let channel: any = null;
+    try {
+      channel = createSafeRealtimeChannel("connect-pending", (ch) =>
+        ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "friends" },
+          () => {
+            loadPendingAndSuggested();
+          }
+        )
+      );
+    } catch (e) {
+      console.warn("Connect realtime listener setup notice:", e);
+    }
+
+    return () => {
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (err) { }
+      }
+    };
+  }, [loadPendingAndSuggested]);
+
 
   // ── Debounced search ────────────────────────────────────────────────────────
   const runSearch = useCallback(async (term: string, requestId: number) => {

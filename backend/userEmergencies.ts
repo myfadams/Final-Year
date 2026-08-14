@@ -1,6 +1,7 @@
 import { getCurrentUser } from "./auth";
 import { EmergencyRecord } from "./emergencies";
-import { supabase } from "./supabaseConfig";
+import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+
 
 export interface CreatedEmergencyRecord extends EmergencyRecord {
   activeRespondersCount?: number;
@@ -209,32 +210,29 @@ export function subscribeToUserEmergencies(
   onUpdate: () => void
 ) {
   try {
-    const nonce = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const channelName = `user-emergencies-${userId}-${nonce}`;
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "emergencies",
-          filter: `creator_id=eq.${userId}`,
-        },
-        () => onUpdate()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "emergency_response_history",
-          filter: `responder_id=eq.${userId}`,
-        },
-        () => onUpdate()
-      )
-      .subscribe();
+    const channel = createSafeRealtimeChannel(`user-emergencies-${userId}`, (ch) =>
+      ch
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "emergencies",
+            filter: `creator_id=eq.${userId}`,
+          },
+          () => onUpdate()
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "emergency_response_history",
+            filter: `responder_id=eq.${userId}`,
+          },
+          () => onUpdate()
+        )
+    );
 
     return channel;
   } catch (err) {

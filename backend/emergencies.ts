@@ -3,7 +3,8 @@ import { Person } from "@/constants/interfaces";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { fetchUserProfileById, getCurrentUser, UserProfile } from "./auth";
-import { supabase } from "./supabaseConfig";
+import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+
 
 export interface EmergencyRecord {
   id: string;
@@ -285,27 +286,21 @@ export function subscribeToEmergencies(
   onStatusChange?: (status: string) => void
 ) {
   try {
-    const channelName = `emergencies-all-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "emergencies" },
-        (payload) => {
-          // Ignore changes caused by the current user
-          const record = (payload.new || payload.old) as EmergencyRecord | null;
-          if (record && record.creator_id === excludeUserId) return;
-          onUpdate();
-        }
-      )
-      .subscribe((status, err) => {
-        if (onStatusChange) {
-          onStatusChange(status);
-        }
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn(`Emergencies realtime channel notice [${status}]:`, err?.message || "Network offline");
-        }
-      });
+    const channel = createSafeRealtimeChannel(
+      "emergencies-all",
+      (ch) =>
+        ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "emergencies" },
+          (payload) => {
+            // Ignore changes caused by the current user
+            const record = (payload.new || payload.old) as EmergencyRecord | null;
+            if (record && record.creator_id === excludeUserId) return;
+            onUpdate();
+          }
+        ),
+      onStatusChange
+    );
 
     return channel;
   } catch (err) {
@@ -858,10 +853,8 @@ export function subscribeToCurrentRespondingEmergency(
       const nonce = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
       // 1. Channel for user's responder record changes
-      const responderChannelName = `resp-sub-${uid}-${nonce}`;
-      responderChannel = supabase
-        .channel(responderChannelName)
-        .on(
+      responderChannel = createSafeRealtimeChannel(`resp-sub-${uid}`, (ch) =>
+        ch.on(
           "postgres_changes",
           {
             event: "*",
@@ -873,13 +866,11 @@ export function subscribeToCurrentRespondingEmergency(
             refreshState();
           }
         )
-        .subscribe();
+      );
 
       // 2. Channel for emergency record updates (e.g. resolution)
-      const emergencyChannelName = `emp-sub-${uid}-${nonce}`;
-      emergencyChannel = supabase
-        .channel(emergencyChannelName)
-        .on(
+      emergencyChannel = createSafeRealtimeChannel(`emp-sub-${uid}`, (ch) =>
+        ch.on(
           "postgres_changes",
           {
             event: "*",
@@ -896,7 +887,7 @@ export function subscribeToCurrentRespondingEmergency(
             }
           }
         )
-        .subscribe();
+      );
     } catch (err) {
       console.warn("subscribeToCurrentRespondingEmergency setup error:", err);
     }
@@ -966,10 +957,8 @@ export function subscribeToEmergencyById(
   onUpdate: (updatedRecord: Partial<EmergencyRecord>) => void
 ) {
   try {
-    const channelName = `incident-detail-${emergencyId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
+    const channel = createSafeRealtimeChannel(`incident-detail-${emergencyId}`, (ch) =>
+      ch.on(
         "postgres_changes",
         {
           event: "*",
@@ -983,7 +972,7 @@ export function subscribeToEmergencyById(
           }
         }
       )
-      .subscribe();
+    );
 
     return channel;
   } catch (err) {
@@ -992,18 +981,13 @@ export function subscribeToEmergencyById(
   }
 }
 
-/**
- * Subscribes to real-time changes on emergency_responders table for a specific emergency.
- */
 export function subscribeToEmergencyResponders(
   emergencyId: string,
   onUpdate: () => void
 ) {
   try {
-    const channelName = `incident-responders-${emergencyId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    const channel = supabase
-      .channel(channelName)
-      .on(
+    const channel = createSafeRealtimeChannel(`incident-responders-${emergencyId}`, (ch) =>
+      ch.on(
         "postgres_changes",
         {
           event: "*",
@@ -1015,7 +999,7 @@ export function subscribeToEmergencyResponders(
           onUpdate();
         }
       )
-      .subscribe();
+    );
 
     return channel;
   } catch (err) {
