@@ -1,10 +1,4 @@
-import HeartBeatWave from "@/components/HeartBeatWave";
-import ChatHeader from "@/components/chat/ChatHeader";
-import ChatInputBar from "@/components/chat/ChatInputBar";
-import ChatMessageItem from "@/components/chat/ChatMessageItem";
-import ChatPillsRow, { PillItem } from "@/components/chat/ChatPillsRow";
-import MediaViewerModal from "@/components/chat/MediaViewerModal";
-import ContactDetailsModal from "@/components/chat/ContactDetailsModal";
+import { getCurrentUser, getUserProfile } from "@/backend/auth";
 import {
   fetchChatMessages,
   getCachedChatMessages,
@@ -16,16 +10,21 @@ import {
   uploadChatAudio,
   uploadChatMedia,
 } from "@/backend/chat";
-import { getCurrentUser, getUserProfile } from "@/backend/auth";
-import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
+import HeartBeatWave from "@/components/HeartBeatWave";
+import ChatHeader from "@/components/chat/ChatHeader";
+import ChatInputBar from "@/components/chat/ChatInputBar";
+import ChatMessageItem from "@/components/chat/ChatMessageItem";
+import ChatPillsRow, { PillItem } from "@/components/chat/ChatPillsRow";
+import ContactDetailsModal from "@/components/chat/ContactDetailsModal";
+import MediaViewerModal from "@/components/chat/MediaViewerModal";
+import { ResQColors } from "@/constants/Colors";
 import { ChatMessage } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
 import { Audio } from "expo-av";
-import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { MapPin, Radio, ShieldCheck, X } from "lucide-react-native";
+import { MapPin } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -33,15 +32,13 @@ import {
   Animated,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
-  NativeSyntheticEvent,
   NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 export default function ContactChatScreen() {
@@ -1234,5 +1231,6 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontFamily: typography.regular,
     color: ResQColors.textMuted,
+    textAlign: "center"
   },
 });

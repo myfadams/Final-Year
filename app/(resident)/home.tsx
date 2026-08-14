@@ -363,7 +363,7 @@ const Home = () => {
               subText="View all emergencies & people responding"
               icon={<Siren size={22} color={ResQColors.pinkText} />}
               iconBgColor={ResQColors.pinkBg}
-              onPress={() => router.push("/(resident)/alerts")}
+              onPress={() => router.push("/yourEmergencies")}
             />
           </View>
         </View>
