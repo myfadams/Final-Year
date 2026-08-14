@@ -176,20 +176,20 @@ export async function fetchUserResponderHistory(
         createdAt: h.created_at || null,
         emergency: emp
           ? {
-              id: emp.id,
-              title: emp.title,
-              description: emp.description,
-              locationText: emp.location_text,
-              nearestLandmark: emp.nearest_landmark,
-              severity: emp.severity || "Moderate",
-              isResolved: emp.is_resolved ?? false,
-              falseAlarm: emp.false_alarm ?? false,
-              creatorId: emp.creator_id,
-              creatorName: emp.creator_id ? creatorsMap[emp.creator_id] || "Resident" : "Resident",
-              respondersCount: emp.responders_count ?? 0,
-              createdAt: emp.created_at,
-              resolvedAt: emp.resolved_at,
-            }
+            id: emp.id,
+            title: emp.title,
+            description: emp.description,
+            locationText: emp.location_text,
+            nearestLandmark: emp.nearest_landmark,
+            severity: emp.severity || "Moderate",
+            isResolved: emp.is_resolved ?? false,
+            falseAlarm: emp.false_alarm ?? false,
+            creatorId: emp.creator_id,
+            creatorName: emp.creator_id ? creatorsMap[emp.creator_id] || "Resident" : "Resident",
+            respondersCount: emp.responders_count ?? 0,
+            createdAt: emp.created_at,
+            resolvedAt: emp.resolved_at,
+          }
           : null,
       };
     });
@@ -262,7 +262,7 @@ export async function markEmergencyFalseAlarm(
       .from("emergencies")
       .update({
         false_alarm: true,
-        is_resolved: true,
+        // is_resolved: true,
         resolved_at: nowIso,
       })
       .eq("id", emergencyId)

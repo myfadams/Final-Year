@@ -1,9 +1,10 @@
 import Colors from "@/constants/Colors";
 import { Person } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
-import { Check, Clock, MapPin, MoreHorizontal, Siren, X } from "lucide-react-native";
+import { AlertTriangle, Check, Clock, MapPin, MoreHorizontal, Siren, X } from "lucide-react-native";
 import React from "react";
 import {
+  Alert,
   Platform,
   StyleSheet,
   Text,
@@ -49,12 +50,14 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
     !isNaN(parsedDuration) &&
     parsedDuration > 5;
 
+  const isFalseAlarm = Boolean(selectedPerson.falseAlarm || (selectedPerson as any).isFalseAlarm);
+
   return (
     <View
       style={[
         styles.floatingDetailCard,
         {
-          borderTopColor: Colors.URGENCY_COLORS[selectedPerson.urgency],
+          borderTopColor: isFalseAlarm ? "#FDBA74" : Colors.URGENCY_COLORS[selectedPerson.urgency],
           borderTopWidth: 5,
         },
       ]}
@@ -82,6 +85,14 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
               </Text>
             </View>
 
+            {isFalseAlarm && (
+              <View style={[styles.urgencyBadge, { backgroundColor: "#FFF7ED", borderColor: "#FDBA74", borderWidth: 1 }]}>
+                <Text style={[styles.urgencyBadgeText, { color: "#C2410C" }]}>
+                  FALSE ALARM
+                </Text>
+              </View>
+            )}
+
             {/* Distance and ETA calculations with Lucide icons */}
             <View style={styles.metaInfoRow}>
               <MapPin size={12.5} color="#64748B" style={{ marginRight: 3 }} />
@@ -108,10 +119,51 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
           {selectedPerson.description || selectedPerson.requesterDesc}
         </Text>
 
+        {/* False Alarm Notice Banner */}
+        {/* {isFalseAlarm && (
+          <View
+            style={{
+              backgroundColor: "#FFF7ED",
+              borderColor: "#FDBA74",
+              borderWidth: 1,
+              borderRadius: 8,
+              paddingHorizontal: 10,
+              paddingVertical: 8,
+              marginBottom: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <AlertTriangle size={16} color="#C2410C" />
+            <Text style={{ fontSize: 12, fontWeight: "600", color: "#C2410C", flex: 1 }}>
+              Flagged as False Info by creator. Responding disabled.
+            </Text>
+          </View>
+        )} */}
+
         {/* Actions Row */}
         <View style={styles.cardActionRow}>
-          {/* Check if critical emergency response is restricted */}
-          {isResponseRestricted ? (
+          {selectedPerson.falseAlarm || (selectedPerson as any).isFalseAlarm ? (
+            <TouchableOpacity
+              style={[
+                styles.disabledRespondBadge,
+                { backgroundColor: "#FFF7ED", borderColor: "#FDBA74", borderWidth: 1 },
+              ]}
+              onPress={() => {
+                Alert.alert(
+                  "False Emergency Alert",
+                  "The creator of this emergency flagged it as false information. You cannot respond to it."
+                );
+              }}
+              activeOpacity={0.8}
+            >
+              <AlertTriangle size={15} color="#C2410C" style={{ marginRight: 5 }} />
+              <Text style={[styles.disabledRespondBadgeText, { color: "#C2410C", fontWeight: "700" }]}>
+                Flagged as False Info
+              </Text>
+            </TouchableOpacity>
+          ) : isResponseRestricted ? (
             // Disabled status indicator instead of respond button
             <View style={styles.disabledRespondBadge}>
               <X size={15} color="#94A3B8" style={{ marginRight: 5 }} />

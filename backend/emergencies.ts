@@ -366,6 +366,8 @@ export function mapEmergencyRecordToPerson(
     requesterDesc: r.description || `${r.title} near ${r.nearest_landmark || r.location_text}`,
     images: r.visual_media || [],
     knownHealthProblems: creatorProfile?.known_health_problems || ["None"],
+    falseAlarm: r.false_alarm ?? false,
+    isResolved: r.is_resolved ?? false,
   };
 }
 

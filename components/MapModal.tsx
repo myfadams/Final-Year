@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -333,7 +334,28 @@ const BottomSheetModal: React.FC<{
 
             {/* Action buttons */}
             <View style={sheetStyles.actionContainer}>
-              {isAccepted ? (
+              {selectedPerson.falseAlarm || (selectedPerson as any).isFalseAlarm ? (
+                <View style={{ gap: 12 }}>
+                  <View style={[sheetStyles.warningBanner, { backgroundColor: "#FFF7ED", borderColor: "#FDBA74" }]}>
+                    <Text style={[sheetStyles.warningBannerText, { color: "#C2410C" }]}>
+                      ⚠️ The creator flagged this emergency as false information. Responding is disabled.
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[sheetStyles.acceptBtn, sheetStyles.disabledBtn]}
+                    onPress={() => {
+                      Alert.alert(
+                        "False Emergency Alert",
+                        "The creator of this emergency flagged it as false information. You cannot respond to it."
+                      );
+                    }}
+                  >
+                    <Text style={sheetStyles.disabledBtnText}>
+                      Flagged as False Info
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : isAccepted ? (
                 <TouchableOpacity
                   style={sheetStyles.cancelBtn}
                   onPress={onCancelEmergency}

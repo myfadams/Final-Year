@@ -13,6 +13,8 @@ export interface Person {
   images?: string[];
   requesterDesc?: string;
   knownHealthProblems?: string[];
+  falseAlarm?: boolean;
+  isResolved?: boolean;
 }
 export interface ContactsProp {
   id: string | number;

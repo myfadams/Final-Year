@@ -12,7 +12,7 @@ import {
 } from "@/backend/emergencies";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
-import Colors from "@/constants/Colors";
+import Colors, { ResQColors } from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
 import { Audio } from "expo-av";
@@ -157,6 +157,7 @@ export default function IncidentDetailScreen() {
           : dbEmergency.location_text || "Campus location",
         severity: dbEmergency.severity || "Moderate",
         isResolved: Boolean(dbEmergency.is_resolved),
+        isFalseAlarm: Boolean(dbEmergency.false_alarm),
         created_at: dbEmergency.created_at || null,
         photos: dbEmergency.visual_media || null,
         voiceNotes: dbEmergency.voice_notes || null,
@@ -172,6 +173,7 @@ export default function IncidentDetailScreen() {
       location: (params.location as string) || "Campus location",
       severity: (params.severity as string) || "Moderate",
       isResolved: params.isResolved === "true",
+      isFalseAlarm: params.falseAlarm === "true" || params.isFalseAlarm === "true",
       created_at: params.createdAt || null,
       photos: params.photos ? JSON.parse(params.photos as string) : null,
       voiceNotes: params.voiceNotes ? JSON.parse(params.voiceNotes as string) : null,
@@ -341,6 +343,14 @@ export default function IncidentDetailScreen() {
   };
 
   const handleRespondToggle = async () => {
+    if (incident.isFalseAlarm) {
+      Alert.alert(
+        "False Alarm Alert",
+        "The creator of this emergency flagged it as false information. You cannot respond to it."
+      );
+      return;
+    }
+
     if (!isResponding && incident.severity === "Critical" && calculatedEta.totalSeconds / 60 > 8) {
       Alert.alert(
         "Too Far Out to Respond",
@@ -885,6 +895,32 @@ export default function IncidentDetailScreen() {
       >
         {/* Incident Summary Header Card */}
         <View style={styles.summaryContainer}>
+          {incident.isFalseAlarm && (
+            <View
+              style={{
+                backgroundColor: "#FFF7ED",
+                borderColor: "#FDBA74",
+                borderWidth: 1,
+                borderRadius: 10,
+                padding: 10,
+                marginBottom: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <AlertTriangle size={20} color={ResQColors.orangeText} />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: ResQColors.orangeText }}>
+                  Flagged as False Emergency
+                </Text>
+                <Text style={{ fontSize: 12, color: "#9A3412", marginTop: 2 }}>
+                  The creator flagged this incident as false information. Responding is disabled.
+                </Text>
+              </View>
+            </View>
+          )}
+
           <View style={styles.titleRow}>
             <Text style={styles.incidentTitle} numberOfLines={2}>
               {incident.title}
@@ -1398,7 +1434,26 @@ export default function IncidentDetailScreen() {
 
       {/* Bottom Fixed Navigation Actions */}
       <View style={styles.bottomBarContainer}>
-        {responderStatus === "arrived" || responderStatus === "done_helping" ? (
+        {incident.isFalseAlarm ? (
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                "False Alarm Alert",
+                "The creator of this emergency has flagged it as false information. You cannot respond to this incident."
+              );
+            }}
+            style={[
+              styles.restrictedRespondBadge,
+              { backgroundColor: "#FFF7ED", borderColor: "#FDBA74", borderWidth: 1 },
+            ]}
+            activeOpacity={0.8}
+          >
+            <AlertTriangle size={16} color={ResQColors.orangeText} style={{ marginRight: 6 }} />
+            <Text style={[styles.restrictedRespondBadgeText, { color: ResQColors.orangeText, fontWeight: "700" }]}>
+              Flagged as False Info by Creator
+            </Text>
+          </TouchableOpacity>
+        ) : responderStatus === "arrived" || responderStatus === "done_helping" ? (
           <TouchableOpacity
             onPress={handleDoneHelping}
             style={[

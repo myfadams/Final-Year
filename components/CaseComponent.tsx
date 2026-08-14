@@ -42,6 +42,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   responders,
   isActiveResponse,
   responderStatus,
+  falseAlarm,
   onRespondPress,
   onMapPress,
 }) => {
@@ -49,7 +50,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   const router = useRouter();
 
   const isArrivedStatus = responderStatus === "arrived";
-  const isDisabled = (distance > 800 && !isActiveResponse) || isArrivedStatus;
+  const isDisabled = (distance > 800 && !isActiveResponse) || isArrivedStatus || Boolean(falseAlarm);
 
   return (
     <TouchableOpacity
@@ -65,6 +66,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
             time: time.toString(),
             severity: severity,
             isResolved: isResolved ? "true" : "false",
+            falseAlarm: falseAlarm ? "true" : "false",
             fromCasesScreen: "true",
           },
         });
@@ -314,7 +316,9 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
               onPress={onRespondPress}
               disabled={isDisabled}
               Icon={
-                isArrivedStatus ? (
+                falseAlarm ? (
+                  <TriangleAlert color={ResQColors.orangeText} size={19} />
+                ) : isArrivedStatus ? (
                   <Check color="#15803D" size={19} />
                 ) : (
                   <Siren
@@ -330,40 +334,48 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                 )
               }
               text={
-                isArrivedStatus
-                  ? "arrived"
-                  : distance > 800 && !isActiveResponse
-                    ? "too far"
-                    : isActiveResponse
-                      ? "Cancel"
-                      : "Respond"
+                falseAlarm
+                  ? "False Info"
+                  : isArrivedStatus
+                    ? "arrived"
+                    : distance > 800 && !isActiveResponse
+                      ? "too far"
+                      : isActiveResponse
+                        ? "Cancel"
+                        : "Respond"
               }
               color={
-                isArrivedStatus
-                  ? "rgba(34, 197, 94, 0.1)"
-                  : distance > 800 && !isActiveResponse
-                    ? "#F1F1F0"
-                    : isActiveResponse
-                      ? "rgba(255, 59, 59, 0.08)"
-                      : Colors.light.primary
+                falseAlarm
+                  ? "#FFF7ED"
+                  : isArrivedStatus
+                    ? "rgba(34, 197, 94, 0.1)"
+                    : distance > 800 && !isActiveResponse
+                      ? "#F1F1F0"
+                      : isActiveResponse
+                        ? "rgba(255, 59, 59, 0.08)"
+                        : Colors.light.primary
               }
               textColor={
-                isArrivedStatus
-                  ? "#15803D"
-                  : distance > 800 && !isActiveResponse
-                    ? "#9E9D96"
-                    : isActiveResponse
-                      ? "#FF3B3B"
-                      : "#fff"
+                falseAlarm
+                  ? ResQColors.orangeText
+                  : isArrivedStatus
+                    ? "#15803D"
+                    : distance > 800 && !isActiveResponse
+                      ? "#9E9D96"
+                      : isActiveResponse
+                        ? "#FF3B3B"
+                        : "#fff"
               }
               borderColor={
-                isArrivedStatus
-                  ? "rgba(34, 197, 94, 0.3)"
-                  : distance > 800 && !isActiveResponse
-                    ? "#E2E2DF"
-                    : isActiveResponse
-                      ? "rgba(255, 59, 59, 0.2)"
-                      : ResQColors.border
+                falseAlarm
+                  ? "#FDBA74"
+                  : isArrivedStatus
+                    ? "rgba(34, 197, 94, 0.3)"
+                    : distance > 800 && !isActiveResponse
+                      ? "#E2E2DF"
+                      : isActiveResponse
+                        ? "rgba(255, 59, 59, 0.2)"
+                        : ResQColors.border
               }
             />
           </View>

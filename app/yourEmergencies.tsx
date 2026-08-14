@@ -10,20 +10,16 @@ import CreatedEmergencyCard from "@/components/CreatedEmergencyCard";
 import EmergencyDetailsModal from "@/components/EmergencyDetailsModal";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import ResponderHistoryCard from "@/components/ResponderHistoryCard";
-import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
+import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { useRouter } from "expo-router";
 import {
   AlertTriangle,
-  ArrowLeft,
-  CheckCircle2,
   ChevronLeft,
-  Clock,
   Plus,
   RefreshCw,
   Shield,
   ShieldAlert,
-  Siren,
-  Users,
+  Siren
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -142,7 +138,7 @@ export default function YourEmergenciesScreen() {
       if (channel) {
         try {
           channel.unsubscribe?.();
-        } catch (_) {}
+        } catch (_) { }
       }
     };
   }, [loadData]);
@@ -171,6 +167,7 @@ export default function YourEmergenciesScreen() {
           location: item.emergency.nearestLandmark || item.emergency.locationText,
           severity: item.emergency.severity || "Moderate",
           isResolved: item.emergency.isResolved ? "true" : "false",
+          falseAlarm: item.emergency.falseAlarm ? "true" : "false",
         },
       });
       return;
@@ -406,7 +403,12 @@ export default function YourEmergenciesScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.emptyActionBtn, { backgroundColor: DESIGN_COLORS.tertiary }]}
-                onPress={() => router.push("/(resident)/alerts")}
+                onPress={() => {
+                  // router.push("/(resident)/alerts")
+                  router.dismissAll()
+                  router.replace("/(resident)/alerts");
+
+                }}
                 activeOpacity={0.85}
               >
                 <ShieldAlert size={18} color="#FFFFFF" style={{ marginRight: 6 }} />

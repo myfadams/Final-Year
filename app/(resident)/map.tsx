@@ -77,6 +77,7 @@ export default function LocationScreen() {
     description?: string;
     severity?: string;
     creatorID?: string;
+    falseAlarm?: string;
     location?: string;
   }>();
 
@@ -172,6 +173,7 @@ export default function LocationScreen() {
           description,
           severity,
           creatorID,
+          falseAlarm: falseAlarmParam,
           location: locationParam,
         } = params;
 
@@ -275,6 +277,7 @@ export default function LocationScreen() {
                 description: description || title || "",
                 requesterDesc: description || `${title} near ${locationParam}`,
                 knownHealthProblems: knownHealth,
+                falseAlarm: falseAlarmParam === "true",
               };
             }
 

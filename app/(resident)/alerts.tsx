@@ -36,6 +36,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   Animated,
   ScrollView,
   StyleSheet,
@@ -480,6 +481,13 @@ export default function AlertsScreen() {
                     });
                   }}
                   onRespondPress={async () => {
+                    if (item.falseAlarm) {
+                      Alert.alert(
+                        "False Emergency Alert",
+                        "The creator of this emergency flagged it as false information. You cannot respond to it."
+                      );
+                      return;
+                    }
                     const idStr = item.id.toString();
                     if (activeEmergencyId === idStr) {
                       globalState.activeEmergencyId = null;

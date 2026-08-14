@@ -8,19 +8,12 @@ import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { formatTimeAgo, getSeverityColors } from "@/externalFunctions/functions";
 import {
   AlertTriangle,
-  ArrowRight,
-  Bike,
-  Car,
   CheckCircle2,
   Clock,
-  Footprints,
   MapPin,
-  Navigation,
   ShieldAlert,
-  User,
   Users,
-  X,
-  XCircle,
+  X
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -32,6 +25,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import HeartBeatWave from "./HeartBeatWave";
 
 interface EmergencyDetailsModalProps {
   visible: boolean;
@@ -80,8 +74,8 @@ export const EmergencyDetailsModal: React.FC<EmergencyDetailsModalProps> = ({
   const createdMs = createdItem?.created_at
     ? new Date(createdItem.created_at).getTime()
     : historyItem?.emergency?.createdAt
-    ? new Date(historyItem.emergency.createdAt).getTime()
-    : Date.now();
+      ? new Date(historyItem.emergency.createdAt).getTime()
+      : Date.now();
   const timeAgoStr = formatTimeAgo(Math.max(0, Math.floor((Date.now() - createdMs) / 1000)));
 
   const [severityBorder, severityBg] = getSeverityColors(
@@ -205,6 +199,33 @@ export const EmergencyDetailsModal: React.FC<EmergencyDetailsModalProps> = ({
               </View>
             </View>
 
+            {/* False Alarm Notice Banner */}
+            {isFalseAlarm && (
+              <View
+                style={{
+                  backgroundColor: "#FFF7ED",
+                  borderColor: "#FDBA74",
+                  borderWidth: 1,
+                  borderRadius: 12,
+                  padding: 12,
+                  marginVertical: 10,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <AlertTriangle size={22} color={ResQColors.orangeText} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13.5, fontWeight: "700", color: ResQColors.orangeText }}>
+                    Flagged as False Emergency Information
+                  </Text>
+                  <Text style={{ fontSize: 12, color: "#9A3412", marginTop: 2, lineHeight: 16 }}>
+                    The creator of this incident flagged it as false information. Active response and emergency operations have been terminated.
+                  </Text>
+                </View>
+              </View>
+            )}
+
             {/* Description Box */}
             <View style={styles.sectionBox}>
               <Text style={styles.sectionTitle}>Incident Description</Text>
@@ -283,7 +304,8 @@ export const EmergencyDetailsModal: React.FC<EmergencyDetailsModalProps> = ({
                     activeOpacity={0.85}
                   >
                     {isUpdating ? (
-                      <ActivityIndicator color="#FFFFFF" size="small" />
+                      // <ActivityIndicator color="#FFFFFF" size="small" />
+                      <HeartBeatWave width={84} height={29} color={"#FFFFFF"} thickness={14.5} />
                     ) : (
                       <>
                         <CheckCircle2 size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
