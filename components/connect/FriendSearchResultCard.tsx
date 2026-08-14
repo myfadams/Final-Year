@@ -13,7 +13,29 @@ interface FriendSearchResultCardProps {
   onCancel: (id: string) => void;
 }
 
-const AVATAR_PLACEHOLDER = "https://ui-avatars.com/api/?background=E2E8F0&color=94A3B8&size=128&bold=true";
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name?: string) {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
+function getAvatarColor(name?: string) {
+  const code = (name || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
 
 const FriendSearchResultCard: React.FC<FriendSearchResultCardProps> = ({
   item,
@@ -21,9 +43,10 @@ const FriendSearchResultCard: React.FC<FriendSearchResultCardProps> = ({
   onAccept,
   onCancel,
 }) => {
-  const avatarSource = item.profile_img_url
-    ? { uri: item.profile_img_url }
-    : { uri: `${AVATAR_PLACEHOLDER}&name=${encodeURIComponent(item.name)}` };
+  const [imageError, setImageError] = React.useState(false);
+  const avatarColor = getAvatarColor(item.name);
+  const initials = getInitials(item.name);
+  const hasAvatar = !!item.profile_img_url && !imageError;
 
   const renderActionButton = () => {
     switch (item.relationship) {
@@ -80,12 +103,36 @@ const FriendSearchResultCard: React.FC<FriendSearchResultCardProps> = ({
     <View style={styles.card}>
       {/* Avatar */}
       <View style={styles.avatarWrapper}>
-        <Image
-          source={avatarSource}
-          style={styles.avatar}
-          contentFit="cover"
-          transition={200}
-        />
+        {hasAvatar ? (
+          <Image
+            source={{ uri: item.profile_img_url! }}
+            style={styles.avatar}
+            contentFit="cover"
+            transition={200}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: avatarColor.bg,
+                justifyContent: "center",
+                alignItems: "center",
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontFamily: typography.bold,
+                fontSize: 14,
+                color: avatarColor.text,
+              }}
+            >
+              {initials}
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Info */}

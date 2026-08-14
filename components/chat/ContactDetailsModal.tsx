@@ -94,8 +94,10 @@ export default function ContactDetailsModal({
   const displayRole = profile?.role
     ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
     : relationship;
+  const [imageError, setImageError] = React.useState(false);
   const avatarColor = getAvatarColor(displayName);
   const initials = getInitials(displayName);
+  const showImage = !!displayAvatar && !imageError;
 
   return (
     <Modal
@@ -131,11 +133,12 @@ export default function ContactDetailsModal({
           >
             {/* Hero Profile Header */}
             <View style={styles.heroSection}>
-              {displayAvatar ? (
+              {showImage ? (
                 <Image
                   source={{ uri: displayAvatar }}
                   style={styles.avatarImage}
                   contentFit="cover"
+                  onError={() => setImageError(true)}
                 />
               ) : (
                 <View style={[styles.initialsAvatar, { backgroundColor: avatarColor.bg }]}>

@@ -40,6 +40,7 @@ interface ChatHeaderProps {
   onBackPress: () => void;
   onCallPress?: () => void;
   onOptionsPress: () => void;
+  onAvatarPress?: () => void;
   isWalkSafeActive?: boolean;
   onImOkayPress?: () => void;
 }
@@ -54,12 +55,15 @@ export default function ChatHeader({
   onBackPress,
   onCallPress,
   onOptionsPress,
+  onAvatarPress,
   isWalkSafeActive = false,
   onImOkayPress,
 }: ChatHeaderProps) {
   const insets = useSafeAreaInsets();
+  const [imageError, setImageError] = React.useState(false);
   const avatarColor = getAvatarColor(headerName);
   const initials = getInitials(headerName);
+  const showImage = !!headerAvatar && !imageError;
 
   return (
     <View style={[styles.navHeaderWrapper, { paddingTop: Math.max(insets.top, 12) }]}>
@@ -72,11 +76,16 @@ export default function ChatHeader({
         <TouchableOpacity
           style={styles.headerTitleContainer}
           activeOpacity={0.85}
-          onPress={onOptionsPress}
+          onPress={onAvatarPress || onOptionsPress}
         >
           <View style={styles.avatarWrapper}>
-            {headerAvatar ? (
-              <Image source={{ uri: headerAvatar }} style={styles.headerAvatar} contentFit="cover" />
+            {showImage ? (
+              <Image
+                source={{ uri: headerAvatar }}
+                style={styles.headerAvatar}
+                contentFit="cover"
+                onError={() => setImageError(true)}
+              />
             ) : (
               <View
                 style={[

@@ -11,22 +11,74 @@ interface SearchResultCardProps {
   onToggleConnect: (id: string) => void;
 }
 
+const AVATAR_COLORS = [
+  { bg: "#FEE2E2", text: "#991B1B" },
+  { bg: "#DBEAFE", text: "#1E40AF" },
+  { bg: "#D1FAE5", text: "#065F46" },
+  { bg: "#FEF3C7", text: "#92400E" },
+  { bg: "#EDE9FE", text: "#5B21B6" },
+  { bg: "#FCE7F3", text: "#9D174D" },
+  { bg: "#CCFBF1", text: "#0F766E" },
+];
+
+function getInitials(name?: string) {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+}
+
+function getAvatarColor(name?: string) {
+  const code = (name || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return AVATAR_COLORS[code % AVATAR_COLORS.length];
+}
+
 const SearchResultCard: React.FC<SearchResultCardProps> = ({
   item,
   onToggleConnect,
 }) => {
   const isLeader = item.role.toLowerCase().includes("community");
+  const [imageError, setImageError] = React.useState(false);
+  const avatarColor = getAvatarColor(item.name);
+  const initials = getInitials(item.name);
+  const hasAvatar = !!item.avatarUrl && !imageError;
 
   return (
     <View style={styles.card}>
       {/* Avatar */}
       <View style={styles.avatarWrapper}>
-        <Image
-          source={{ uri: item.avatarUrl }}
-          style={styles.avatar}
-          contentFit="cover"
-          transition={200}
-        />
+        {hasAvatar ? (
+          <Image
+            source={{ uri: item.avatarUrl }}
+            style={styles.avatar}
+            contentFit="cover"
+            transition={200}
+            onError={() => setImageError(true)}
+          />
+        ) : (
+          <View
+            style={[
+              styles.avatar,
+              {
+                backgroundColor: avatarColor.bg,
+                justifyContent: "center",
+                alignItems: "center",
+              },
+            ]}
+          >
+            <Text
+              style={{
+                fontFamily: typography.bold,
+                fontSize: 15,
+                color: avatarColor.text,
+              }}
+            >
+              {initials}
+            </Text>
+          </View>
+        )}
         {item.isOnline && <View style={styles.onlineDot} />}
       </View>
 

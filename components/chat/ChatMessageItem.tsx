@@ -1,3 +1,4 @@
+import HeartBeatWave from "@/components/HeartBeatWave";
 import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { ChatMessage } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
@@ -12,11 +13,10 @@ import {
 } from "lucide-react-native";
 import React from "react";
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 const RECORDING_WAVEFORM_BARS = [8, 16, 24, 12, 28, 18, 30, 22, 14, 26, 16, 28, 20, 10, 22, 14, 8];
@@ -57,6 +57,7 @@ interface ChatMessageItemProps {
   onPlayAudio: (msg: ChatMessage) => void;
   onOpenMedia: (media: { uri: string; type: "image" | "video" }) => void;
   onNavigateToMap?: (msg: ChatMessage) => void;
+  onRetry?: (msg: ChatMessage) => void;
   showSenderName?: boolean;
   showAvatar?: boolean;
 }
@@ -73,10 +74,11 @@ export default function ChatMessageItem({
   onPlayAudio,
   onOpenMedia,
   onNavigateToMap,
+  onRetry,
   showSenderName = true,
   showAvatar = false,
 }: ChatMessageItemProps) {
-  if (msg.sender === "system") {
+  if (msg.sender === "system" || msg.isSystemMessage || msg.type === "system") {
     return (
       <View key={msg.id} style={styles.systemBubbleWrapper}>
         <View style={styles.systemBubble}>
@@ -91,16 +93,22 @@ export default function ChatMessageItem({
   const isAnyLoading = !!loadingMessageId && loadingMessageId !== msg.id;
   const isPlayingOrPausedThis = playingMessageId === msg.id || pausedMessageId === msg.id;
 
+  const [imageError, setImageError] = React.useState(false);
   const avatarUri = msg.senderAvatar || headerAvatar;
   const displayName = msg.senderName || headerName || "Contact";
   const avatarColor = getAvatarColor(displayName);
   const initials = getInitials(displayName);
+  const hasAvatar = !!avatarUri && !imageError;
 
   return (
     <View style={[styles.messageRow, isMe ? styles.messageRowMe : styles.messageRowOther]}>
       {!isMe && showAvatar && (
-        avatarUri ? (
-          <Image source={{ uri: avatarUri }} style={styles.messageAvatar} />
+        hasAvatar ? (
+          <Image
+            source={{ uri: avatarUri }}
+            style={styles.messageAvatar}
+            onError={() => setImageError(true)}
+          />
         ) : (
           <View
             style={[
@@ -154,7 +162,7 @@ export default function ChatMessageItem({
                     { backgroundColor: isMe ? "rgba(255, 255, 255, 0.25)" : ResQColors.primaryRedLight },
                   ]}
                 >
-                  <ActivityIndicator size="small" color={isMe ? "#FFFFFF" : ResQColors.primaryRedText} />
+                  <HeartBeatWave width={22} height={12} color={isMe ? "#FFFFFF" : ResQColors.primaryRedText} thickness={3} />
                 </View>
               ) : (
                 <TouchableOpacity
@@ -311,12 +319,60 @@ export default function ChatMessageItem({
             <Text style={[styles.timeStampOther, { marginTop: 4 }]}>{msg.timestamp}</Text>
           </View>
         )}
+
+        {/* Delivery Status Indicator */}
+        {isMe && (
+          <View style={styles.statusRow}>
+            {msg.status === "sending" || msg.isUploading ? (
+              <View style={styles.statusInnerRow}>
+                <HeartBeatWave width={30} height={20} color={ResQColors.primaryRed} thickness={13} style={{ marginRight: 4 }} />
+                <Text style={styles.statusTextSending}>Sending...</Text>
+              </View>
+            ) : msg.status === "failed" || msg.status === "pending" ? (
+              <TouchableOpacity
+                style={styles.statusInnerRow}
+                activeOpacity={0.7}
+                onPress={() => onRetry?.(msg)}
+              >
+                <Text style={styles.statusTextFailed}>⚠ Failed — Tap to retry</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.statusTextSent}>✓ Sent</Text>
+            )}
+          </View>
+        )}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 2,
+    marginRight: 2,
+  },
+  statusInnerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  statusTextSending: {
+    fontSize: 10,
+    fontFamily: typography.medium,
+    color: "#64748B",
+  },
+  statusTextFailed: {
+    fontSize: 10.5,
+    fontFamily: typography.bold,
+    color: ResQColors.primaryRedText,
+  },
+  statusTextSent: {
+    fontSize: 9.5,
+    fontFamily: typography.medium,
+    color: "#10B981",
+  },
   systemBubbleWrapper: {
     alignItems: "center",
     marginVertical: 12,

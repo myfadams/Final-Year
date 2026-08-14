@@ -1118,7 +1118,7 @@ export default function ContactChatScreen() {
           >
             {isLoadingOlder && (
               <View style={styles.loadingOlderContainer}>
-                <ActivityIndicator size="small" color={ResQColors.primaryRed} />
+                <HeartBeatWave width={140} color={ResQColors.primaryRed} thickness={4} />
                 <Text style={styles.loadingOlderText}>Loading older messages...</Text>
               </View>
             )}
@@ -1146,6 +1146,7 @@ export default function ContactChatScreen() {
                     setMediaViewerVisible(true);
                   }}
                   onNavigateToMap={handleNavigateToMap}
+                  onRetry={() => handleSendText()}
                   showSenderName={false}
                 />
               ))

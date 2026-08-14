@@ -104,15 +104,19 @@ export interface ChatMessage {
   senderRole?: string;
   senderAvatar?: string;
   timestamp: string;
-  type: "text" | "audio" | "media" | "location_share" | "walk_safe" | "im_okay";
+  type: "text" | "audio" | "media" | "location_share" | "walk_safe" | "im_okay" | "system" | "location";
   text?: string;
   audioUri?: string;
   audioDuration?: number;
   isUploading?: boolean;
+  uploadProgress?: number;
   mediaUri?: string;
   mediaType?: "image" | "video";
   locationCoords?: { latitude: number; longitude: number };
   locationTimestampText?: string;
+  locationLabel?: string;
+  isSystemMessage?: boolean;
+  status?: "sending" | "sent" | "failed" | "pending";
   createdTimestamp?: number;
   createdAtIso?: string;
 }

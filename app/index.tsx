@@ -1,11 +1,11 @@
 import {
   checkUserAccountStatus,
   getCachedUserProfile,
-  getCurrentUser,
-  getUserProfile,
+  getCurrentUser
 } from "@/backend/auth";
 import { subscribeToCurrentRespondingEmergency } from "@/backend/emergencies";
 import AnimatedEmergencyLogo from "@/components/AnimatedEmergencyLogo";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import { globalState } from "@/constants/globalState";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
@@ -23,6 +23,7 @@ export default function Index() {
     async function checkAuthAndNavigate() {
       try {
         // Pre-warm cache
+        // await AsyncStorage.clear()
         const cachedProfile = await getCachedUserProfile();
 
         const { user } = await getCurrentUser();
@@ -64,6 +65,7 @@ export default function Index() {
   return (
     <View style={styles.container}>
       <AnimatedEmergencyLogo size={220} />
+      <HeartBeatWave width={200} color="#AF101A" style={{ marginTop: 24 }} />
     </View>
   );
 }

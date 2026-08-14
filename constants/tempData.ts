@@ -905,8 +905,6 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     phone: "+44 999 999 999",
     relationship: "Family",
     badgeType: "Family",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
     status: "Available",
     statusColor: "#22C55E",
     avatarColor: "#FCE7F3",
@@ -921,8 +919,6 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     phone: "+44 999 999 999",
     relationship: "Office",
     badgeType: "Office",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1494790108377-be9c29b29330?q=80&w=250&auto=format&fit=crop",
     status: "Available",
     statusColor: "#22C55E",
     avatarColor: "#FFEDD5",
@@ -937,8 +933,6 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     phone: "+44 999 999 999",
     relationship: "Friend",
     badgeType: "Friend",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=250&auto=format&fit=crop",
     status: "Away",
     statusColor: "#F59E0B",
     avatarColor: "#DCFCE7",
@@ -953,8 +947,6 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     phone: "+44 999 888 777",
     relationship: "Roommate",
     badgeType: "Friend",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=250&auto=format&fit=crop",
     status: "Available",
     statusColor: "#22C55E",
     avatarColor: "#EC4899",
@@ -984,8 +976,6 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     phone: "+44 999 111 222",
     relationship: "Family",
     badgeType: "Family",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=250&auto=format&fit=crop",
     status: "Available",
     statusColor: "#22C55E",
     avatarColor: "#FCA5A5",
@@ -1000,8 +990,6 @@ export const DEFAULT_CONTACTS: ContactsProp[] = [
     phone: "+44 999 555 666",
     relationship: "Academic Office",
     badgeType: "Office",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=250&auto=format&fit=crop",
     status: "Available",
     statusColor: "#22C55E",
     avatarColor: "#FFEDD5",
@@ -1018,16 +1006,12 @@ export const DEFAULT_PENDING_REQUESTS: PendingRequest[] = [
     name: "Sarah Jenkins",
     role: "Medic",
     distance: "1.2mi away",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=300&auto=format&fit=crop",
   },
   {
     id: "pr-2",
     name: "David Chen",
     role: "Volunteer",
     distance: "3.5mi away",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=300&auto=format&fit=crop",
   },
 ];
 
@@ -1037,8 +1021,6 @@ export const DEFAULT_SUGGESTED_RESPONDERS: SuggestedResponder[] = [
     name: "Marcus Thorne",
     role: "Fire Rescue",
     distance: "0.8mi away",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=300&auto=format&fit=crop",
     isOnline: false,
     isRequested: false,
   },
@@ -1047,8 +1029,6 @@ export const DEFAULT_SUGGESTED_RESPONDERS: SuggestedResponder[] = [
     name: "Elena Rodriguez",
     role: "EMT Specialist",
     distance: "1.5mi away",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?q=80&w=300&auto=format&fit=crop",
     isOnline: true,
     isRequested: true,
   },
@@ -1057,8 +1037,6 @@ export const DEFAULT_SUGGESTED_RESPONDERS: SuggestedResponder[] = [
     name: "Robert King",
     role: "Community Leader",
     distance: "2.1mi away",
-    avatarUrl:
-      "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=300&auto=format&fit=crop",
     isOnline: false,
     isRequested: false,
   },
@@ -1165,8 +1143,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Austin Arthur",
         senderRole: "Family",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
         timestamp: "10:24 AM",
         type: "text",
         text: "Hey, I just reached the Commercial Area shuttle terminal. Sharing my location snapshot with you.",
@@ -1176,8 +1152,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Austin Arthur",
         senderRole: "Family",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
         timestamp: "10:25 AM",
         type: "location_share",
         text: "Austin Arthur shared current location snapshot",
@@ -1189,8 +1163,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Austin Arthur",
         senderRole: "Family",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=250&auto=format&fit=crop",
         timestamp: "10:26 AM",
         type: "text",
         text: "Tap the location card to view me on the main map!",
@@ -1206,8 +1178,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Helen Miller",
         senderRole: "Family",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=250&auto=format&fit=crop",
         timestamp: "09:40 AM",
         type: "text",
         text: "Hey! I am walking towards Unity Hall Gate. Starting a Walk Safe session so you can track me.",
@@ -1217,8 +1187,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Helen Miller",
         senderRole: "Family",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=250&auto=format&fit=crop",
         timestamp: "09:41 AM",
         type: "walk_safe",
         text: "Helen Miller requested a Walk Safe session • Track live movement on map",
@@ -1244,8 +1212,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Dr. Sarah Vance",
         senderRole: "Academic Office",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=250&auto=format&fit=crop",
         timestamp: "10:10 AM",
         type: "text",
         text: "I am walking back to the Science Faculty library alone. Starting a Walk Safe session.",
@@ -1255,8 +1221,6 @@ export const getContactChatMessages = (
         sender: "other",
         senderName: "Dr. Sarah Vance",
         senderRole: "Academic Office",
-        senderAvatar:
-          "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?q=80&w=250&auto=format&fit=crop",
         timestamp: "10:12 AM",
         type: "walk_safe",
         text: "Dr. Sarah Vance requested a Walk Safe session • Track live movement on map",
@@ -1277,9 +1241,7 @@ export const getContactChatMessages = (
   // 4. Default for any other contact
   const targetName = contactName || "Contact";
   const targetRole = contactRole || "Trusted Contact";
-  const targetAvatar =
-    contactAvatar ||
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80";
+  const targetAvatar = contactAvatar || undefined;
 
   return [
     {
@@ -1319,8 +1281,6 @@ export const getEmergencyChatMessages = (): ChatMessage[] => {
       sender: "other",
       senderName: "John Doe",
       senderRole: "EMT Lead",
-      senderAvatar:
-        "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=200&q=80",
       timestamp: "10:42 AM",
       type: "text",
       text: "Unit 4 is en route. ETA 3 minutes. Patient history indicates severe asthma.",
@@ -1330,8 +1290,6 @@ export const getEmergencyChatMessages = (): ChatMessage[] => {
       sender: "other",
       senderName: "Dispatch Control",
       senderRole: "KNUST Security",
-      senderAvatar:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
       timestamp: "10:44 AM",
       type: "text",
       text: "Traffic on Main St is heavy. Advise taking 4th Ave detour.",
@@ -1341,8 +1299,6 @@ export const getEmergencyChatMessages = (): ChatMessage[] => {
       sender: "other",
       senderName: "Dispatch Control",
       senderRole: "KNUST Security",
-      senderAvatar:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
       timestamp: "10:44 AM",
       type: "audio",
       audioUri:
