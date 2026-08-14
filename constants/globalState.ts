@@ -18,7 +18,6 @@ export interface SharedLocationPin {
   cardDismissed?: boolean;
   isTrackingActive?: boolean; // Active routing mode enabled from floating card
 }
-
 export const globalState = {
   activeEmergencyId: null as string | null,
   activeEmergencyPerson: null as Person | null,

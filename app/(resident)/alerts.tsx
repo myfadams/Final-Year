@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/backend/auth";
 import {
+  cancelEmergencyResponse,
   EmergencyRecord,
   fetchEmergencies,
   subscribeToEmergencies,
@@ -22,6 +23,7 @@ import {
   AlertTriangle,
   Bell,
   BellOff,
+  MapPin,
   RefreshCw,
   WifiOff,
 } from "lucide-react-native";
@@ -316,20 +318,33 @@ export default function AlertsScreen() {
       >
         {/* Location + Realtime badge */}
         <View style={styles.locationSubtitleRow}>
-          <Text style={styles.locationSubtitleText}>Near KNUST campus</Text>
+          <View style={styles.locationHeaderBox}>
+            <MapPin size={14} color="#AF101A" style={{ marginRight: 4 }} />
+            <Text style={styles.locationSubtitleText}>Near KNUST campus</Text>
+          </View>
 
-          <View style={styles.realtimeBadge}>
-            {realtimeConnected ? (
-              <>
-                <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
-                <Text style={styles.liveText}>Live</Text>
-              </>
-            ) : (
-              <>
-                <WifiOff size={11} color={ResQColors.textSubtle} />
-                <Text style={styles.offlineText}>Offline</Text>
-              </>
-            )}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <TouchableOpacity
+              style={styles.refreshIconBtn}
+              onPress={() => loadEmergencies(currentUserIdRef.current ?? "")}
+              activeOpacity={0.7}
+            >
+              <RefreshCw size={13} color="#64748B" />
+            </TouchableOpacity>
+
+            <View style={styles.realtimeBadge}>
+              {realtimeConnected ? (
+                <>
+                  <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+                  <Text style={styles.liveText}>Live Sync</Text>
+                </>
+              ) : (
+                <>
+                  <WifiOff size={11} color={ResQColors.textSubtle} />
+                  <Text style={styles.offlineText}>Offline</Text>
+                </>
+              )}
+            </View>
           </View>
         </View>
 
@@ -450,11 +465,12 @@ export default function AlertsScreen() {
                       },
                     });
                   }}
-                  onRespondPress={() => {
+                  onRespondPress={async () => {
                     const idStr = item.id.toString();
                     if (activeEmergencyId === idStr) {
                       globalState.activeEmergencyId = null;
                       setActiveEmergencyId(null);
+                      await cancelEmergencyResponse({ emergencyId: idStr });
                     } else {
                       globalState.activeEmergencyId = idStr;
                       setActiveEmergencyId(idStr);
@@ -512,26 +528,45 @@ const styles = StyleSheet.create({
   locationSubtitleRow: {
     paddingHorizontal: 16,
     marginTop: 4,
-    marginBottom: 12,
+    marginBottom: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
+  locationHeaderBox: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   locationSubtitleText: {
-    fontSize: 14,
-    fontFamily: typography.medium,
-    color: ResQColors.textSubtle,
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+    color: "#475569",
+  },
+  refreshIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
   },
   realtimeBadge: {
     flexDirection: "row",
     alignItems: "center",
     gap: 5,
-    backgroundColor: ResQColors.cardSurface,
+    backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: ResQColors.border,
+    borderColor: "#E2E8F0",
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 2,
+    elevation: 1,
   },
   liveDot: {
     width: 7,

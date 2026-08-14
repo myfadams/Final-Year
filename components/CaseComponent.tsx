@@ -1,5 +1,6 @@
 import Colors, { ResQColors } from "@/constants/Colors";
 import { caseProp } from "@/constants/interfaces";
+import { typography } from "@/constants/typograyph";
 import {
   formatDistance,
   formatTimeAgo,
@@ -9,12 +10,12 @@ import { useRouter } from "expo-router";
 import {
   AlertCircle,
   Clock,
-  Dot,
   MapPin,
   Phone,
   ShieldAlert,
   Siren,
   TriangleAlert,
+  Users
 } from "lucide-react-native";
 import React from "react";
 import { Text, TouchableOpacity, View } from "react-native";
@@ -35,7 +36,6 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   time,
   severity,
   isResolved,
-  // color,
   action,
   responders,
   isActiveResponse,
@@ -43,10 +43,8 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
   onMapPress,
 }) => {
   const txtColor = getSeverityColors(severity);
-  const displayLocation =
-    location.length > 20 ? location.substring(0, 17) + "..." : location;
   const router = useRouter();
-  // console.log(location);
+
   return (
     <TouchableOpacity
       onPress={() => {
@@ -68,9 +66,9 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
       style={{
         backgroundColor: ResQColors.cardSurface,
         borderTopColor: txtColor[0],
-        borderTopWidth: 5,
+        borderTopWidth: 3.5,
         borderWidth: 1,
-        borderColor: ResQColors.border,
+        borderColor: txtColor[0],
         borderRadius: 16,
         paddingHorizontal: 8,
         marginHorizontal: 16,
@@ -83,6 +81,7 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
       }}
     >
       <View style={{ margin: 16 }}>
+        {/* Header Row */}
         <View style={{ flexDirection: "row", gap: 8 }}>
           <View>
             <View
@@ -94,13 +93,13 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                 borderColor: ResQColors.border,
               }}
             >
-              {severity.toLocaleLowerCase() == "critical" && (
+              {severity.toLocaleLowerCase() === "critical" && (
                 <TriangleAlert size={28} color={txtColor[0]} />
               )}
-              {severity.toLocaleLowerCase() == "moderate" && (
+              {severity.toLocaleLowerCase() === "moderate" && (
                 <ShieldAlert size={28} color={txtColor[0]} />
               )}
-              {severity.toLocaleLowerCase() == "low" && (
+              {severity.toLocaleLowerCase() === "low" && (
                 <AlertCircle size={28} color={txtColor[0]} />
               )}
             </View>
@@ -109,7 +108,6 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
             style={{
               flexDirection: "row",
               justifyContent: "space-between",
-              // gap: 18,
               flex: 1,
             }}
           >
@@ -118,16 +116,16 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                 style={{
                   color: Colors.light.primary,
                   fontSize: 16,
-                  fontWeight: "500",
+                  fontFamily: typography.bold,
                 }}
               >
                 {title}
               </Text>
               <View
-                style={{ flexDirection: "row", gap: 2, alignItems: "center" }}
+                style={{ flexDirection: "row", gap: 4, alignItems: "center", marginTop: 2 }}
               >
                 <Clock size={12} color={Colors.light.textMuted} />
-                <Text style={{ fontSize: 12, color: Colors.light.textMuted }}>
+                <Text style={{ fontSize: 12, fontFamily: typography.medium, color: Colors.light.textMuted }}>
                   {formatTimeAgo(time)}
                 </Text>
               </View>
@@ -136,11 +134,10 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
               <View
                 style={{
                   backgroundColor: txtColor[1],
-                  // flexGrow: 0,
-                  // flexDirection:
                   justifyContent: "center",
                   alignItems: "center",
-                  padding: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
                   borderWidth: 1,
                   borderColor: ResQColors.border,
                   borderRadius: 10,
@@ -149,8 +146,9 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
                 <Text
                   style={{
                     color: txtColor[0],
-                    fontWeight: "500",
-                    fontSize: 13,
+                    fontFamily: typography.bold,
+                    fontSize: 12,
+                    textTransform: "uppercase",
                   }}
                 >
                   {severity}
@@ -160,79 +158,108 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
           </View>
         </View>
 
+        {/* Enhanced Location & Distance Bar */}
         <View
           style={{
-            marginVertical: 8,
-            backgroundColor: "#F9F9F8",
-            padding: 10,
-            borderRadius: 10,
+            marginVertical: 10,
+            backgroundColor: "#F8FAFC",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 12,
             flexDirection: "row",
             alignItems: "center",
-            gap: 8,
+            justifyContent: "space-between",
             borderWidth: 1,
-            borderColor: "#EBEBE5",
+            borderColor: "#E2E8F0",
           }}
         >
-          <MapPin color={Colors.light.primary} size={16} />
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              flex: 1,
-              overflow: "hidden",
-            }}
-          >
+          <View style={{ flexDirection: "row", alignItems: "center", flex: 1, marginRight: 8 }}>
+            <MapPin color="#AF101A" size={16} style={{ marginRight: 6 }} />
             <Text
               style={{
-                fontSize: 15,
-                color: Colors.light.textMuted,
+                fontSize: 13.5,
+                fontFamily: typography.semibold,
+                color: "#1E293B",
                 flexShrink: 1,
               }}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {displayLocation}
+              {location}
             </Text>
-            <Dot color={Colors.light.textMuted} />
+          </View>
+
+          <View
+            style={{
+              backgroundColor: "#EDF2F7",
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 8,
+            }}
+          >
             <Text
               style={{
-                fontSize: 15,
-                color: Colors.light.textMuted,
-                flexShrink: 0,
+                fontSize: 12,
+                fontFamily: typography.bold,
+                color: "#475569",
               }}
             >
               {formatDistance(distance)}
             </Text>
           </View>
         </View>
-        <View>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              flexWrap: "wrap",
-            }}
-          >
-            <Text style={{ fontSize: 13, color: Colors.light.textMuted }}>
-              {responders} resp.
+
+        {/* Enhanced Responders & Status Row */}
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: 8,
+            marginTop: 2,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Users size={14} color="#64748B" style={{ marginRight: 6 }} />
+            <Text style={{ fontSize: 13, fontFamily: typography.medium, color: "#475569" }}>
+              {responders > 0
+                ? `${responders} Responder${responders > 1 ? "s" : ""}`
+                : "No responders yet"}
             </Text>
-            {responders > 0 && (
-              <>
-                <Dot color={Colors.light.textMuted} />
-                <Text style={{ fontSize: 13, color: Colors.light.textMuted }}>
-                  amb. en route
-                </Text>
-              </>
-            )}
           </View>
+
+          {isActiveResponse && (
+            <View
+              style={{
+                backgroundColor: "#DCFCE7",
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: "#86EFAC",
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 11.5,
+                  fontFamily: typography.bold,
+                  color: "#15803D",
+                }}
+              >
+                You are responding
+              </Text>
+            </View>
+          )}
         </View>
+
+        {/* Round Custom Buttons */}
         <View
           style={{
             flexDirection: "row",
             width: "100%",
             gap: 6,
             justifyContent: "space-between",
-            marginVertical: 8,
+            marginVertical: 4,
           }}
         >
           <View style={{ flex: 1 }}>

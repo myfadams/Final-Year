@@ -1,3 +1,12 @@
+import { fetchUserProfileById, getCurrentUser } from "@/backend/auth";
+import {
+  cancelEmergencyResponse,
+  confirmEmergencyArrival,
+  fetchEmergencies,
+  fetchEmergencyById,
+  mapEmergencyRecordToPerson,
+  recordEmergencyResponse,
+} from "@/backend/emergencies";
 import { MapFloatingWindow } from "@/components/MapFloatingWindow";
 import MapViewComponent from "@/components/MapViewComponent";
 import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatingWindow";
@@ -5,13 +14,6 @@ import Colors from "@/constants/Colors";
 import { globalState, SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
-import { fetchUserProfileById, getCurrentUser } from "@/backend/auth";
-import {
-  EmergencyRecord,
-  fetchEmergencies,
-  fetchEmergencyById,
-  mapEmergencyRecordToPerson,
-} from "@/backend/emergencies";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
   BriefcaseMedical,
@@ -50,6 +52,7 @@ export default function LocationScreen() {
   const [realEmergencies, setRealEmergencies] = useState<Person[]>([]);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
+  const [isArrived, setIsArrived] = useState(false);
   const [recenterNonce, setRecenterNonce] = useState<string>("");
   const [travelMode, setTravelMode] = useState<
     "driving" | "running" | "walking"
@@ -316,13 +319,30 @@ export default function LocationScreen() {
     }
   }, [activeSharedLocation]);
 
-  const handleRespondToggle = () => {
+  const isNearLocation = React.useMemo(() => {
+    if (!distance || distance === "--") return false;
+    if (distance.includes("km")) return false;
+    const match = distance.match(/(\d+)\s*m/);
+    if (match) {
+      const meters = parseInt(match[1], 10);
+      return !isNaN(meters) && meters <= 50;
+    }
+    return false;
+  }, [distance]);
+
+  const handleRespondToggle = async () => {
     if (!selectedPerson) return;
     const idStr = selectedPerson.id;
 
     if (activeEmergency?.id === idStr) {
+      const { error } = await cancelEmergencyResponse({ emergencyId: idStr });
+      if (error) {
+        console.warn("cancelEmergencyResponse warning:", error.message);
+      }
       globalState.activeEmergencyId = null;
+      globalState.activeEmergencyPerson = null;
       setActiveEmergency(null);
+      setIsArrived(false);
       Alert.alert(
         "Response Cancelled",
         "You are no longer assigned as a responder to this incident.",
@@ -343,8 +363,23 @@ export default function LocationScreen() {
       }
     }
 
+    const parsedMins = parseInt(duration.replace(/[^0-9]/g, ""), 10) || 5;
+    const estimatedSeconds = parsedMins * 60;
+
+    const { error } = await recordEmergencyResponse({
+      emergencyId: idStr,
+      transportMode: travelMode,
+      estimatedArrivalSeconds: estimatedSeconds,
+    });
+
+    if (error) {
+      console.warn("recordEmergencyResponse warning:", error.message);
+    }
+
     globalState.activeEmergencyId = idStr;
+    globalState.activeEmergencyPerson = selectedPerson;
     setActiveEmergency(selectedPerson);
+    setIsArrived(false);
 
     // MUTUAL EXCLUSION OF ROUTING: Cancel Walk Safe tracking if active
     if (activeSharedLocation?.isTrackingActive) {
@@ -356,6 +391,23 @@ export default function LocationScreen() {
     Alert.alert(
       "Response Assigned",
       "You are now responding to this incident. Follow the active navigation line on the map.",
+      [{ text: "OK" }],
+    );
+  };
+
+  const handleConfirmArrival = async () => {
+    if (!selectedPerson) return;
+    const idStr = selectedPerson.id;
+
+    const { error } = await confirmEmergencyArrival({ emergencyId: idStr });
+    if (error) {
+      console.warn("confirmEmergencyArrival warning:", error.message);
+    }
+
+    setIsArrived(true);
+    Alert.alert(
+      "Arrival Confirmed",
+      "Your arrival at the emergency location has been recorded in the database.",
       [{ text: "OK" }],
     );
   };
@@ -594,8 +646,11 @@ export default function LocationScreen() {
           activeEmergency={activeEmergency}
           distance={distance}
           duration={duration}
+          isNearLocation={isNearLocation}
+          isArrived={isArrived}
           onClose={() => setSelectedPerson(null)}
           onRespondToggle={handleRespondToggle}
+          onConfirmArrival={handleConfirmArrival}
           onOpenDetails={handleOpenDetails}
         />
       )}

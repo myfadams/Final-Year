@@ -4,10 +4,13 @@ import {
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
+import { subscribeToCurrentRespondingEmergency } from "@/backend/emergencies";
+import { globalState } from "@/constants/globalState";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     Inter_400Regular,
@@ -17,6 +20,12 @@ export default function RootLayout() {
   });
 
   useEffect(() => {
+    // Start active responding emergency realtime listener to update globalState
+    const unsubscribeResponding = subscribeToCurrentRespondingEmergency((data) => {
+      globalState.activeEmergencyId = data?.emergency?.id || null;
+      globalState.activeEmergencyPerson = data?.person || null;
+    });
+
     // Suppress redbox popups for network connection errors when offline
     if (typeof global !== "undefined" && (global as any).ErrorUtils) {
       const defaultHandler = (global as any).ErrorUtils.getGlobalHandler?.();
@@ -40,6 +49,10 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
     console.log("Fonts loaded:", fontsLoaded);
+
+    return () => {
+      unsubscribeResponding();
+    };
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {

@@ -1,8 +1,9 @@
+import { Person } from "@/constants/interfaces";
+import { globalState } from "@/constants/globalState";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
-import { getCurrentUser, UserProfile } from "./auth";
+import { fetchUserProfileById, getCurrentUser, UserProfile } from "./auth";
 import { supabase } from "./supabaseConfig";
-import { Person } from "@/constants/interfaces";
 
 export interface EmergencyRecord {
   id: string;
@@ -353,3 +354,562 @@ export function mapEmergencyRecordToPerson(
     knownHealthProblems: creatorProfile?.known_health_problems || ["None"],
   };
 }
+
+export interface EmergencyResponderRecord {
+  id?: string;
+  emergency_id: string;
+  responder_id: string;
+  status: "responding" | "arrived";
+  responded_at?: string | null;
+  arrived_at?: string | null;
+}
+
+export interface EmergencyResponseHistoryRecord {
+  id?: string;
+  emergency_id: string;
+  responder_id: string;
+  transport_mode: string;
+  estimated_arrival_seconds?: number | null;
+  estimated_arrival_at?: string | null;
+  responded_at?: string | null;
+  actual_arrival_at?: string | null;
+  cancelled_at?: string | null;
+  status: "responding" | "arrived" | "cancelled";
+  created_at?: string | null;
+}
+
+/**
+ * Creates/upserts responder record in emergency_responders table
+ * and inserts a new attempt record into emergency_response_history table.
+ */
+export async function recordEmergencyResponse(params: {
+  emergencyId: string;
+  transportMode: string;
+  estimatedArrivalSeconds: number;
+}): Promise<{ success: boolean; error: Error | null }> {
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: new Error("User not authenticated.") };
+    }
+
+    const userId = user.id;
+    const nowIso = new Date().toISOString();
+    const estimatedArrivalAt = new Date(
+      Date.now() + params.estimatedArrivalSeconds * 1000
+    ).toISOString();
+
+    // 1. Upsert current relationship in emergency_responders table
+    const { error: responderErr } = await supabase
+      .from("emergency_responders")
+      .upsert(
+        {
+          emergency_id: params.emergencyId,
+          responder_id: userId,
+          status: "responding",
+          responded_at: nowIso,
+          arrived_at: null,
+        },
+        { onConflict: "emergency_id,responder_id" }
+      );
+
+    if (responderErr) {
+      console.warn("emergency_responders upsert warning:", responderErr.message);
+    }
+
+    // 2. Insert new attempt record into emergency_response_history table
+    const { error: historyErr } = await supabase
+      .from("emergency_response_history")
+      .insert([
+        {
+          emergency_id: params.emergencyId,
+          responder_id: userId,
+          transport_mode: params.transportMode,
+          estimated_arrival_seconds: params.estimatedArrivalSeconds,
+          estimated_arrival_at: estimatedArrivalAt,
+          responded_at: nowIso,
+          status: "responding",
+          created_at: nowIso,
+        },
+      ]);
+
+    if (historyErr) {
+      console.warn("emergency_response_history insert warning:", historyErr.message);
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("recordEmergencyResponse error:", err);
+    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Marks responder as arrived in emergency_responders & emergency_response_history tables.
+ */
+export async function confirmEmergencyArrival(params: {
+  emergencyId: string;
+}): Promise<{ success: boolean; error: Error | null }> {
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: new Error("User not authenticated.") };
+    }
+
+    const userId = user.id;
+    const nowIso = new Date().toISOString();
+
+    // 1. Update emergency_responders status to 'arrived'
+    const { error: responderErr } = await supabase
+      .from("emergency_responders")
+      .update({
+        status: "arrived",
+        arrived_at: nowIso,
+      })
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId);
+
+    if (responderErr) {
+      console.warn("confirmEmergencyArrival emergency_responders warning:", responderErr.message);
+    }
+
+    // 2. Update active history record in emergency_response_history
+    const { error: historyErr } = await supabase
+      .from("emergency_response_history")
+      .update({
+        status: "arrived",
+        actual_arrival_at: nowIso,
+      })
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId)
+      .eq("status", "responding");
+
+    if (historyErr) {
+      console.warn("confirmEmergencyArrival emergency_response_history warning:", historyErr.message);
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("confirmEmergencyArrival error:", err);
+    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Cancels emergency response attempt by removing the responder from emergency_responders table
+ * and updating the attempt status to 'cancelled' in emergency_response_history table.
+ */
+export async function cancelEmergencyResponse(params: {
+  emergencyId: string;
+}): Promise<{ success: boolean; error: Error | null }> {
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) {
+      return { success: false, error: new Error("User not authenticated.") };
+    }
+
+    const userId = user.id;
+    const nowIso = new Date().toISOString();
+
+    // 1. REMOVE user from emergency_responders table (User is NO LONGER an active responder)
+    const { error: responderErr } = await supabase
+      .from("emergency_responders")
+      .delete()
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId);
+
+    if (responderErr) {
+      console.warn("cancelEmergencyResponse emergency_responders delete warning:", responderErr.message);
+    }
+
+    // 2. Update active history record in emergency_response_history table (Archive / Audit trail only)
+    const { error: historyErr } = await supabase
+      .from("emergency_response_history")
+      .update({
+        status: "cancelled",
+        cancelled_at: nowIso,
+      })
+      .eq("emergency_id", params.emergencyId)
+      .eq("responder_id", userId)
+      .eq("status", "responding");
+
+    if (historyErr) {
+      console.warn("cancelEmergencyResponse emergency_response_history warning:", historyErr.message);
+    }
+
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.error("cancelEmergencyResponse error:", err);
+    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Fetches total count of current active responders directly from emergency_responders table.
+ */
+export async function fetchActiveRespondersCount(
+  emergencyId: string
+): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from("emergency_responders")
+      .select("id", { count: "exact", head: true })
+      .eq("emergency_id", emergencyId);
+
+    if (error) return 0;
+    return count || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+/**
+ * Fetches all active responders for a given emergency strictly from emergency_responders table,
+ * joined with user profile details from users table.
+ */
+export async function fetchEmergencyResponders(
+  emergencyId: string
+): Promise<{ data: any[]; error: Error | null }> {
+  try {
+    const { data: responders, error } = await supabase
+      .from("emergency_responders")
+      .select("*")
+      .eq("emergency_id", emergencyId);
+
+    if (error) {
+      console.warn("fetchEmergencyResponders warning:", error.message);
+      return { data: [], error: new Error(error.message) };
+    }
+
+    if (!responders || responders.length === 0) {
+      return { data: [], error: null };
+    }
+
+    const userIds = responders.map((r: any) => r.responder_id).filter(Boolean);
+    let usersMap: Record<string, any> = {};
+
+    if (userIds.length > 0) {
+      const { data: usersData } = await supabase
+        .from("users")
+        .select("*")
+        .in("id", userIds);
+
+      if (usersData) {
+        usersData.forEach((u: any) => {
+          usersMap[u.id] = u;
+        });
+      }
+    }
+
+    const result = responders.map((r: any) => {
+      const u = usersMap[r.responder_id];
+      return {
+        ...r,
+        responderName: u?.name || "Responder",
+        responderRole: (u?.role || "RESPONDER").toUpperCase(),
+        responderPhone: u?.phone || null,
+        profile_img_url: u?.profile_img_url || null,
+      };
+    });
+
+    return { data: result, error: null };
+  } catch (err: any) {
+    console.error("fetchEmergencyResponders exception:", err);
+    return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Fetches the emergency that the currently authenticated user is responding to from emergency_responders table.
+ * Returns the responder record, emergency record, and mapped Person object if found, or null if not actively responding.
+ */
+export async function getCurrentRespondingEmergency(): Promise<{
+  data: {
+    responderRecord: EmergencyResponderRecord;
+    emergency: EmergencyRecord;
+    person: Person;
+  } | null;
+  error: Error | null;
+}> {
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) {
+      globalState.activeEmergencyId = null;
+      globalState.activeEmergencyPerson = null;
+      return { data: null, error: null };
+    }
+
+    // 1. Fetch active responder record for current user from emergency_responders table
+    const { data: responderRecord, error: responderErr } = await supabase
+      .from("emergency_responders")
+      .select("*")
+      .eq("responder_id", user.id)
+      .maybeSingle();
+
+    if (responderErr) {
+      console.warn("getCurrentRespondingEmergency responder fetch warning:", responderErr.message);
+      return { data: null, error: new Error(responderErr.message) };
+    }
+
+    if (!responderRecord || !responderRecord.emergency_id) {
+      globalState.activeEmergencyId = null;
+      globalState.activeEmergencyPerson = null;
+      return { data: null, error: null };
+    }
+
+    // 2. Fetch emergency details from emergencies table
+    const { data: emergencyRecord, error: empErr } = await fetchEmergencyById(
+      responderRecord.emergency_id
+    );
+
+    if (empErr || !emergencyRecord || emergencyRecord.is_resolved) {
+      globalState.activeEmergencyId = null;
+      globalState.activeEmergencyPerson = null;
+      return { data: null, error: empErr || null };
+    }
+
+    // 3. Fetch creator profile for complete Person object mapping if creator_id exists
+    let creatorProfile = null;
+    if (emergencyRecord.creator_id) {
+      creatorProfile = await fetchUserProfileById(emergencyRecord.creator_id);
+    }
+
+    const person = mapEmergencyRecordToPerson(emergencyRecord, creatorProfile);
+
+    // Sync globalState with active responding emergency
+    globalState.activeEmergencyId = responderRecord.emergency_id;
+    globalState.activeEmergencyPerson = person;
+
+    return {
+      data: {
+        responderRecord,
+        emergency: emergencyRecord,
+        person,
+      },
+      error: null,
+    };
+  } catch (err: any) {
+    console.error("getCurrentRespondingEmergency error:", err);
+    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+  }
+}
+
+/**
+ * Subscribes to real-time changes on emergency_responders and emergencies tables for the current user.
+ * Automatically updates globalState.activeEmergencyId and globalState.activeEmergencyPerson in real-time.
+ * Returns an unsubscribe cleanup function.
+ */
+export function subscribeToCurrentRespondingEmergency(
+  onUpdate?: (data: {
+    responderRecord: EmergencyResponderRecord;
+    emergency: EmergencyRecord;
+    person: Person;
+  } | null) => void
+): () => void {
+  let responderChannel: any = null;
+  let emergencyChannel: any = null;
+  let isSubscribed = true;
+
+  const refreshState = async () => {
+    if (!isSubscribed) return;
+    const res = await getCurrentRespondingEmergency();
+    
+    // Explicitly set globalState properties
+    globalState.activeEmergencyId = res.data?.emergency?.id || null;
+    globalState.activeEmergencyPerson = res.data?.person || null;
+
+    if (onUpdate && isSubscribed) {
+      onUpdate(res.data);
+    }
+    return res.data;
+  };
+
+  // Immediate initial sync
+  refreshState();
+
+  (async () => {
+    try {
+      const { user } = await getCurrentUser();
+      if (!user || !isSubscribed) return;
+
+      const uid = user.id;
+      const nonce = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // 1. Channel for user's responder record changes
+      const responderChannelName = `resp-sub-${uid}-${nonce}`;
+      responderChannel = supabase
+        .channel(responderChannelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "emergency_responders",
+            filter: `responder_id=eq.${uid}`,
+          },
+          () => {
+            refreshState();
+          }
+        )
+        .subscribe();
+
+      // 2. Channel for emergency record updates (e.g. resolution)
+      const emergencyChannelName = `emp-sub-${uid}-${nonce}`;
+      emergencyChannel = supabase
+        .channel(emergencyChannelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "emergencies",
+          },
+          (payload) => {
+            if (
+              globalState.activeEmergencyId &&
+              payload.new &&
+              (payload.new as any).id === globalState.activeEmergencyId
+            ) {
+              refreshState();
+            }
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.warn("subscribeToCurrentRespondingEmergency setup error:", err);
+    }
+  })();
+
+  return () => {
+    isSubscribed = false;
+    if (responderChannel) {
+      try {
+        supabase.removeChannel(responderChannel);
+      } catch (_) {}
+    }
+    if (emergencyChannel) {
+      try {
+        supabase.removeChannel(emergencyChannel);
+      } catch (_) {}
+    }
+  };
+}
+
+/**
+ * Fetches emergency record along with creator user profile and active responders.
+ */
+export async function fetchEmergencyDetails(emergencyId: string): Promise<{
+  emergency: EmergencyRecord | null;
+  creator: UserProfile | null;
+  responders: any[];
+  error: Error | null;
+}> {
+  try {
+    const { data: emergency, error: empError } = await fetchEmergencyById(emergencyId);
+    if (empError) {
+      return { emergency: null, creator: null, responders: [], error: empError };
+    }
+    if (!emergency) {
+      return { emergency: null, creator: null, responders: [], error: null };
+    }
+
+    let creator: UserProfile | null = null;
+    if (emergency.creator_id) {
+      creator = await fetchUserProfileById(emergency.creator_id);
+    }
+
+    const { data: responders } = await fetchEmergencyResponders(emergencyId);
+
+    return {
+      emergency,
+      creator,
+      responders: responders || [],
+      error: null,
+    };
+  } catch (err: any) {
+    return {
+      emergency: null,
+      creator: null,
+      responders: [],
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
+  }
+}
+
+/**
+ * Subscribes to real-time changes for a single emergency record by ID.
+ */
+export function subscribeToEmergencyById(
+  emergencyId: string,
+  onUpdate: (updatedRecord: Partial<EmergencyRecord>) => void
+) {
+  try {
+    const channelName = `incident-detail-${emergencyId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "emergencies",
+          filter: `id=eq.${emergencyId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            onUpdate(payload.new as Partial<EmergencyRecord>);
+          }
+        }
+      )
+      .subscribe();
+
+    return channel;
+  } catch (err) {
+    console.warn("subscribeToEmergencyById setup warning:", err);
+    return null;
+  }
+}
+
+/**
+ * Subscribes to real-time changes on emergency_responders table for a specific emergency.
+ */
+export function subscribeToEmergencyResponders(
+  emergencyId: string,
+  onUpdate: () => void
+) {
+  try {
+    const channelName = `incident-responders-${emergencyId}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "emergency_responders",
+          filter: `emergency_id=eq.${emergencyId}`,
+        },
+        () => {
+          onUpdate();
+        }
+      )
+      .subscribe();
+
+    return channel;
+  } catch (err) {
+    console.warn("subscribeToEmergencyResponders setup warning:", err);
+    return null;
+  }
+}
+
+/**
+ * Unsubscribes and removes a Supabase realtime channel.
+ */
+export function unsubscribeChannel(channel: any) {
+  if (channel) {
+    try {
+      supabase.removeChannel(channel);
+    } catch (_) { }
+  }
+}
+

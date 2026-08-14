@@ -1,9 +1,18 @@
+import { getCurrentUser } from "@/backend/auth";
+import {
+  cancelEmergencyResponse,
+  fetchEmergencyDetails,
+  fetchEmergencyResponders,
+  recordEmergencyResponse,
+  subscribeToEmergencyById,
+  subscribeToEmergencyResponders,
+  unsubscribeChannel,
+} from "@/backend/emergencies";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
 import Colors from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
-import { supabase } from "@/backend/supabaseConfig";
 import { Audio } from "expo-av";
 import { Image } from "expo-image";
 import * as Location from "expo-location";
@@ -70,6 +79,8 @@ export default function IncidentDetailScreen() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [dbEmergency, setDbEmergency] = useState<any | null>(null);
   const [dbCreator, setDbCreator] = useState<any | null>(null);
+  const [dbResponders, setDbResponders] = useState<any[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const fetchDetails = useCallback(async (isRefetch = false) => {
     if (!isRefetch) setLoading(true);
@@ -83,37 +94,24 @@ export default function IncidentDetailScreen() {
         return;
       }
 
-      // 1. Fetch emergency from 'emergencies' table
-      const { data: emergency, error: empError } = await supabase
-        .from("emergencies")
-        .select("*")
-        .eq("id", targetId)
-        .maybeSingle();
+      const { user: currentUser } = await getCurrentUser();
+      if (currentUser) {
+        setCurrentUserId(currentUser.id);
+      }
 
-      if (empError) {
-        console.error("Supabase emergency fetch error:", empError);
-        setFetchError(empError.message || "Failed to fetch emergency record.");
+      const { emergency, creator, responders, error } = await fetchEmergencyDetails(targetId);
+
+      if (error) {
+        console.error("Emergency fetch error:", error);
+        setFetchError(error.message || "Failed to fetch emergency record.");
       } else if (!emergency) {
         if (!params.title && !params.location) {
           setFetchError("Emergency record not found.");
         }
       } else {
         setDbEmergency(emergency);
-
-        // 2. Fetch creator info from 'users' table
-        if (emergency.creator_id) {
-          const { data: userData, error: userError } = await supabase
-            .from("users")
-            .select("*")
-            .eq("id", emergency.creator_id)
-            .maybeSingle();
-
-          if (userError) {
-            console.warn("Supabase user profile fetch warning:", userError);
-          } else {
-            setDbCreator(userData);
-          }
-        }
+        setDbCreator(creator);
+        setDbResponders(responders || []);
       }
     } catch (err: any) {
       console.error("Exception fetching emergency details:", err);
@@ -129,22 +127,18 @@ export default function IncidentDetailScreen() {
 
     if (!targetId) return;
 
-    // Realtime postgres changes channel for emergencies table
-    const channel = supabase
-      .channel(`incident-detail-${targetId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "emergencies", filter: `id=eq.${targetId}` },
-        (payload) => {
-          if (payload.new) {
-            setDbEmergency((prev: any) => ({ ...prev, ...payload.new }));
-          }
-        }
-      )
-      .subscribe();
+    const channel = subscribeToEmergencyById(targetId, (updatedFields) => {
+      setDbEmergency((prev: any) => ({ ...prev, ...updatedFields }));
+    });
+
+    const respondersChannel = subscribeToEmergencyResponders(targetId, async () => {
+      const { data: updatedResponders } = await fetchEmergencyResponders(targetId);
+      setDbResponders(updatedResponders || []);
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribeChannel(channel);
+      unsubscribeChannel(respondersChannel);
     };
   }, [targetId, fetchDetails]);
 
@@ -165,6 +159,7 @@ export default function IncidentDetailScreen() {
         voiceNotes: dbEmergency.voice_notes || null,
         latitude: typeof dbEmergency.latitude === "number" ? dbEmergency.latitude : parseFloat(dbEmergency.latitude) || 6.675155,
         longitude: typeof dbEmergency.longitude === "number" ? dbEmergency.longitude : parseFloat(dbEmergency.longitude) || -1.571569,
+        nearest_landmark: dbEmergency.nearest_landmark || null,
       };
     }
     return {
@@ -219,7 +214,7 @@ export default function IncidentDetailScreen() {
           const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           setUserCoords({ latitude: loc.coords.latitude, longitude: loc.coords.longitude });
         }
-      } catch (_) {}
+      } catch (_) { }
     })();
   }, []);
 
@@ -306,7 +301,7 @@ export default function IncidentDetailScreen() {
     return { distanceText, durationText: `${mins} min${mins > 1 ? "s" : ""}`, totalSeconds: seconds };
   }, [userCoords, latitude, longitude, travelMode]);
 
-  const handleRespondToggle = () => {
+  const handleRespondToggle = async () => {
     if (!isResponding && incident.severity === "Critical" && calculatedEta.totalSeconds / 60 > 8) {
       Alert.alert(
         "Too Far Out to Respond",
@@ -324,7 +319,8 @@ export default function IncidentDetailScreen() {
           {
             text: "Yes, Cancel Response",
             style: "destructive",
-            onPress: () => {
+            onPress: async () => {
+              await cancelEmergencyResponse({ emergencyId: incident.id });
               globalState.activeEmergencyId = null;
               globalState.activeEmergencyPerson = null;
               setIsResponding(false);
@@ -344,7 +340,12 @@ export default function IncidentDetailScreen() {
           { text: "Cancel", style: "cancel" },
           {
             text: "Confirm Response",
-            onPress: () => {
+            onPress: async () => {
+              await recordEmergencyResponse({
+                emergencyId: incident.id,
+                transportMode: travelMode,
+                estimatedArrivalSeconds: calculatedEta.totalSeconds,
+              });
               globalState.activeEmergencyId = incident.id;
               setIsResponding(true);
 
@@ -446,7 +447,7 @@ export default function IncidentDetailScreen() {
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: false,
-    }).catch(() => {});
+    }).catch(() => { });
 
     return () => {
       isMountedRef.current = false;
@@ -454,7 +455,7 @@ export default function IncidentDetailScreen() {
       soundRef.current = null;
       if (sound) {
         sound.setOnPlaybackStatusUpdate(null);
-        sound.unloadAsync().catch(() => {});
+        sound.unloadAsync().catch(() => { });
       }
     };
   }, []);
@@ -477,7 +478,7 @@ export default function IncidentDetailScreen() {
             );
             setNoteDurations((prev) => ({ ...prev, [note.id]: exactSeconds }));
           }
-          await sound.unloadAsync().catch(() => {});
+          await sound.unloadAsync().catch(() => { });
         } catch (e) {
           console.log("Error loading audio duration:", e);
         }
@@ -498,8 +499,8 @@ export default function IncidentDetailScreen() {
         soundRef.current = null;
         if (sound) {
           sound.setOnPlaybackStatusUpdate(null);
-          sound.stopAsync().catch(() => {});
-          sound.unloadAsync().catch(() => {});
+          sound.stopAsync().catch(() => { });
+          sound.unloadAsync().catch(() => { });
         }
         setPlayingNoteId(null);
         setPausedNoteId(null);
@@ -516,10 +517,10 @@ export default function IncidentDetailScreen() {
       sound.setOnPlaybackStatusUpdate(null);
       try {
         await sound.stopAsync();
-      } catch (e) {}
+      } catch (e) { }
       try {
         await sound.unloadAsync();
-      } catch (e) {}
+      } catch (e) { }
     }
   };
 
@@ -571,7 +572,7 @@ export default function IncidentDetailScreen() {
       );
 
       if (!status.isLoaded) {
-        await sound.unloadAsync().catch(() => {});
+        await sound.unloadAsync().catch(() => { });
         throw new Error("Failed to load audio");
       }
 
@@ -615,7 +616,7 @@ export default function IncidentDetailScreen() {
             soundRef.current = null;
           }
           sound.setOnPlaybackStatusUpdate(null);
-          sound.unloadAsync().catch(() => {});
+          sound.unloadAsync().catch(() => { });
         }
       });
     } catch (err) {
@@ -627,9 +628,9 @@ export default function IncidentDetailScreen() {
     }
   };
 
-  // Active responders dataset (dynamic live responder status)
+  // Active responders dataset (dynamic live responder status from emergency_responders table)
   const respondersData = useMemo(() => {
-    const data: Array<{
+    const list: Array<{
       id: string;
       name: string;
       role: string;
@@ -644,8 +645,47 @@ export default function IncidentDetailScreen() {
       mode: "driving" | "running" | "walking";
     }> = [];
 
-    if (isResponding) {
-      data.push({
+    let currentUserInDb = false;
+
+    if (dbResponders && dbResponders.length > 0) {
+      dbResponders.forEach((r: any) => {
+        const isMe = currentUserId && r.responder_id === currentUserId;
+        if (isMe) currentUserInDb = true;
+
+        let displayName = "Responder";
+        if (isMe) {
+          displayName = r.status === "arrived" ? "You (Arrived)" : "You (Responding)";
+        } else {
+          const rawName = r.responderName || "Responder";
+          const parts = rawName.trim().split(/\s+/);
+          displayName = parts.length >= 2 ? `${parts[0]} ${parts[1]}` : parts[0];
+        }
+
+        const isArrived = r.status === "arrived";
+        const color = isArrived ? "#2E7D32" : "#1976D2";
+
+        list.push({
+          id: r.id || r.responder_id,
+          name: displayName,
+          role: r.responderRole || "RESPONDER",
+          status: isArrived ? "Arrived" : "En route",
+          statusColor: color,
+          icon: User,
+          lat: latitude,
+          lng: longitude,
+          color,
+          statusText: isArrived ? "Arrived on scene" : "En route to scene",
+          timeText: r.responded_at
+            ? new Date(r.responded_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "Recently",
+          mode: (r.transport_mode || "running") as any,
+        });
+      });
+    }
+
+    // Fallback: If current user responded locally before DB subscription payload arrives
+    if (isResponding && !currentUserInDb) {
+      list.unshift({
         id: "resp_current_user",
         name: "You (Responding)",
         role: "RESPONDER",
@@ -661,8 +701,8 @@ export default function IncidentDetailScreen() {
       });
     }
 
-    return data;
-  }, [isResponding, userCoords, latitude, longitude, calculatedEta, travelMode]);
+    return list;
+  }, [dbResponders, currentUserId, isResponding, userCoords, latitude, longitude, calculatedEta, travelMode]);
 
   const handleCallServices = () => {
     Alert.alert(
@@ -830,7 +870,7 @@ export default function IncidentDetailScreen() {
             <View style={styles.metaItem}>
               <MapPin size={16} color="#64748B" />
               <Text style={styles.metaText} numberOfLines={1}>
-                {incident.location}
+                {incident.nearest_landmark}
               </Text>
             </View>
           </View>
@@ -1018,7 +1058,7 @@ export default function IncidentDetailScreen() {
         {/* Responder Status Timeline */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Responders ({dbEmergency?.responders_count ?? respondersData.length})
+            Responders ({respondersData.length})
           </Text>
           <View style={styles.timelineCard}>
             {respondersData.length > 0 ? (
@@ -1318,8 +1358,8 @@ export default function IncidentDetailScreen() {
       {/* Bottom Fixed Navigation Actions */}
       <View style={styles.bottomBarContainer}>
         {incident.severity === "Critical" &&
-        calculatedEta.totalSeconds / 60 > 8 &&
-        !isResponding ? (
+          calculatedEta.totalSeconds / 60 > 8 &&
+          !isResponding ? (
           <View style={styles.restrictedRespondBadge}>
             <X size={16} color="#94A3B8" style={{ marginRight: 6 }} />
             <Text style={styles.restrictedRespondBadgeText}>
@@ -1333,10 +1373,10 @@ export default function IncidentDetailScreen() {
               styles.respondButton,
               isResponding
                 ? {
-                    backgroundColor: Colors.URGENCY_BACKGROUND.critical,
-                    borderWidth: 1.5,
-                    borderColor: Colors.URGENCY_COLORS.critical,
-                  }
+                  backgroundColor: Colors.URGENCY_BACKGROUND.critical,
+                  borderWidth: 1.5,
+                  borderColor: Colors.URGENCY_COLORS.critical,
+                }
                 : { backgroundColor: severityColors.color },
             ]}
             activeOpacity={0.85}
@@ -1451,7 +1491,7 @@ const styles = StyleSheet.create({
     fontFamily: typography.bold,
   },
   metaRow: {
-    flexDirection: "row",
+    flexDirection: "column",
     flexWrap: "wrap",
     marginTop: 14,
     gap: 16,

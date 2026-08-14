@@ -147,7 +147,7 @@ export default function ContactsScreen() {
       if (channel) {
         try {
           supabase.removeChannel(channel);
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, [loadFriends]);

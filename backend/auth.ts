@@ -192,8 +192,8 @@ export async function resendVerificationEmail(email: string) {
 }
 
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { globalState } from "@/constants/globalState";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const CACHE_KEY_USER_PROFILE = "@resq_cached_user_profile";
 
@@ -261,7 +261,7 @@ export function subscribeToUserProfileChanges(userId: string, onUpdate?: (profil
     try {
       supabase.removeChannel(realtimeProfileChannel);
       realtimeProfileChannel = null;
-    } catch (e) {}
+    } catch (e) { }
   }
 
   try {
@@ -315,9 +315,13 @@ export async function signOutUser() {
 
     const { error } = await supabase.auth.signOut();
     await clearCachedUserProfile();
+    globalState.activeEmergencyId = null;
+    globalState.activeEmergencyPerson = null;
+    globalState.activeSharedLocation = null;
+    globalState.userProfile = null;
     try {
       await AsyncStorage.removeItem("@pending_verify_credentials");
-    } catch (e) {}
+    } catch (e) { }
 
     if (error) {
       console.warn("Supabase signOut notice:", error.message);

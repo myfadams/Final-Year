@@ -15,19 +15,23 @@ const AlertCasesComponent: React.FC<AlertProp> = ({
   text,
 }) => {
   let borderColor: string = ResQColors.border;
+  let bgTint: string = "rgba(248, 250, 252, 0.8)";
 
   if (text.toLowerCase().includes("critical")) {
-    borderColor = ResQColors.redLight;
+    borderColor = "#FCA5A5";
+    bgTint = "rgba(254, 226, 226, 0.3)";
   } else if (text.toLowerCase().includes("moderate")) {
-    borderColor = ResQColors.amberLight;
+    borderColor = "#FCD34D";
+    bgTint = "rgba(254, 243, 199, 0.3)";
   } else if (text.toLowerCase().includes("resolved")) {
-    borderColor = ResQColors.greenBg;
+    borderColor = "#86EFAC";
+    bgTint = "rgba(220, 252, 231, 0.3)";
   }
 
   return (
-    <View style={[styles.card, { borderColor }]}>
+    <View style={[styles.card, { borderColor, backgroundColor: bgTint }]}>
       <Text style={[styles.numberText, { color }]}>{caseNumber}</Text>
-      <Text style={[styles.labelText, { color }]}>{text}</Text>
+      <Text style={[styles.labelText, { color }]} numberOfLines={1}>{text}</Text>
     </View>
   );
 };
@@ -35,22 +39,26 @@ const AlertCasesComponent: React.FC<AlertProp> = ({
 const styles = StyleSheet.create({
   card: {
     flex: 1,
-    backgroundColor: ResQColors.cardSurface,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 8,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 1.5,
-    borderRadius: 20,
+    borderRadius: 16,
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   numberText: {
-    fontSize: 26,
+    fontSize: 24,
     fontFamily: typography.bold,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   labelText: {
-    fontSize: 12,
-    fontFamily: typography.regular,
+    fontSize: 11.5,
+    fontFamily: typography.semibold,
     textAlign: "center",
   },
 });

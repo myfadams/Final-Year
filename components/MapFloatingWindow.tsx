@@ -1,7 +1,7 @@
 import Colors from "@/constants/Colors";
 import { Person } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
-import { Clock, MapPin, MoreHorizontal, Siren, X } from "lucide-react-native";
+import { Check, Clock, MapPin, MoreHorizontal, Siren, X } from "lucide-react-native";
 import React from "react";
 import {
   Platform,
@@ -22,8 +22,11 @@ interface MapFloatingWindowProps {
   activeEmergency: Person | null;
   distance: string;
   duration: string;
+  isNearLocation?: boolean;
+  isArrived?: boolean;
   onClose: () => void;
   onRespondToggle: () => void;
+  onConfirmArrival?: () => void;
   onOpenDetails: () => void;
 }
 
@@ -32,8 +35,11 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
   activeEmergency,
   distance,
   duration,
+  isNearLocation = false,
+  isArrived = false,
   onClose,
   onRespondToggle,
+  onConfirmArrival,
   onOpenDetails,
 }) => {
   const isResponding = activeEmergency?.id === selectedPerson.id;
@@ -115,37 +121,61 @@ export const MapFloatingWindow: React.FC<MapFloatingWindowProps> = ({
                   : "Too Far Out to Respond"}
               </Text>
             </View>
+          ) : isResponding ? (
+            isArrived ? (
+              // Arrived Badge
+              <View style={styles.arrivedCTAButton}>
+                <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.arrivedCTAText}>Arrived at Scene</Text>
+              </View>
+            ) : isNearLocation ? (
+              // Proximity Triggered "I Have Arrived" Button
+              <TouchableOpacity
+                style={styles.arriveCTAButton}
+                onPress={onConfirmArrival}
+                activeOpacity={0.85}
+              >
+                <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.arriveCTAText}>I Have Arrived</Text>
+              </TouchableOpacity>
+            ) : (
+              // Cancel Response Button
+              <TouchableOpacity
+                style={[styles.respondCTAButton, styles.respondCTAActive]}
+                onPress={onRespondToggle}
+                activeOpacity={0.85}
+              >
+                <Siren
+                  size={16}
+                  color={Colors.URGENCY_COLORS.critical}
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.respondCTAText,
+                    { color: Colors.URGENCY_COLORS.critical },
+                  ]}
+                >
+                  Cancel Response
+                </Text>
+              </TouchableOpacity>
+            )
           ) : (
             // Normal Primary Respond Button
             <TouchableOpacity
               style={[
                 styles.respondCTAButton,
-                isResponding
-                  ? styles.respondCTAActive
-                  : {
-                      backgroundColor:
-                        Colors.URGENCY_COLORS[selectedPerson.urgency],
-                    },
+                {
+                  backgroundColor:
+                    Colors.URGENCY_COLORS[selectedPerson.urgency],
+                },
               ]}
               onPress={onRespondToggle}
               activeOpacity={0.85}
             >
-              <Siren
-                size={16}
-                color={
-                  isResponding ? Colors.URGENCY_COLORS.critical : "#FFFFFF"
-                }
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                style={[
-                  styles.respondCTAText,
-                  isResponding
-                    ? { color: Colors.URGENCY_COLORS.critical }
-                    : { color: "#FFFFFF" },
-                ]}
-              >
-                {isResponding ? "Cancel Response" : "Respond Now"}
+              <Siren size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+              <Text style={[styles.respondCTAText, { color: "#FFFFFF" }]}>
+                Respond Now
               </Text>
             </TouchableOpacity>
           )}
@@ -284,5 +314,33 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+  },
+  arriveCTAButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#16A34A",
+  },
+  arriveCTAText: {
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+    color: "#FFFFFF",
+  },
+  arrivedCTAButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#15803D",
+  },
+  arrivedCTAText: {
+    fontSize: 13.5,
+    fontFamily: typography.semibold,
+    color: "#FFFFFF",
   },
 });

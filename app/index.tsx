@@ -1,4 +1,5 @@
 import { getCachedUserProfile, getCurrentUser, getUserProfile } from "@/backend/auth";
+import { subscribeToCurrentRespondingEmergency } from "@/backend/emergencies";
 import AnimatedEmergencyLogo from "@/components/AnimatedEmergencyLogo";
 import { globalState } from "@/constants/globalState";
 import { useRouter } from "expo-router";
@@ -9,6 +10,11 @@ export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
+    // Realtime subscription for active responding emergency
+    const unsubscribe = subscribeToCurrentRespondingEmergency((data) => {
+      globalState.activeEmergencyId = data?.emergency?.id || null;
+      globalState.activeEmergencyPerson = data?.person || null;
+    });
     async function checkAuthAndNavigate() {
       try {
         // Pre-warm cache
@@ -33,6 +39,10 @@ export default function Index() {
     }
 
     checkAuthAndNavigate();
+
+    return () => {
+      unsubscribe();
+    };
   }, [router]);
 
   return (
