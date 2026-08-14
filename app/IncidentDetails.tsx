@@ -277,10 +277,14 @@ export default function IncidentDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      setIsResponding(globalState.activeEmergencyId === incident.id);
+      const active = globalState.activeEmergencyId === incident.id;
+      setIsResponding(active);
       if (incident.id) {
         fetchUserEmergencyStatus(incident.id).then((status) => {
           setResponderStatus(status as any);
+          if (status === "responding" || status === "arrived") {
+            setIsResponding(true);
+          }
         });
       }
     }, [incident.id])
@@ -1564,18 +1568,20 @@ export default function IncidentDetailScreen() {
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={handleMessage}
-            style={styles.messageButton}
-            activeOpacity={0.85}
-          >
-            <MessageSquare
-              size={14}
-              color="#0F172A"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.messageButtonText}>Message</Text>
-          </TouchableOpacity>
+          {isResponding && (
+            <TouchableOpacity
+              onPress={handleMessage}
+              style={styles.messageButton}
+              activeOpacity={0.85}
+            >
+              <MessageSquare
+                size={14}
+                color="#0F172A"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.messageButtonText}>Message</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             onPress={handleRefresh}

@@ -6,14 +6,16 @@ import {
 } from "@/backend/userEmergencies";
 import { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { formatTimeAgo, getSeverityColors } from "@/externalFunctions/functions";
+import { useRouter } from "expo-router";
 import {
   AlertTriangle,
   CheckCircle2,
   Clock,
   MapPin,
+  MessageSquare,
   ShieldAlert,
   Users,
-  X
+  X,
 } from "lucide-react-native";
 import React, { useState } from "react";
 import {
@@ -42,6 +44,8 @@ export const EmergencyDetailsModal: React.FC<EmergencyDetailsModalProps> = ({
   historyItem,
   onStatusUpdated,
 }) => {
+  const router = useRouter();
+
   // Confirmation step state for False Alarm
   const [showConfirmFalseAlarm, setShowConfirmFalseAlarm] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -115,6 +119,19 @@ export const EmergencyDetailsModal: React.FC<EmergencyDetailsModalProps> = ({
       if (onStatusUpdated) onStatusUpdated();
       onClose();
     }
+  };
+
+  const handleOpenChat = () => {
+    onClose();
+    router.push({
+      pathname: "/emergencyChat",
+      params: {
+        incidentId: emergencyId,
+        title,
+        severity: rawSeverity,
+        location: locationText,
+      },
+    });
   };
 
   return (
@@ -284,6 +301,18 @@ export const EmergencyDetailsModal: React.FC<EmergencyDetailsModalProps> = ({
 
             {/* ACTION CONTROLS */}
             <View style={styles.actionsContainer}>
+              {/* Emergency Chat Button (only for emergencies created by you) */}
+              {isCreated && emergencyId && !isFalseAlarm ? (
+                <TouchableOpacity
+                  style={styles.chatBtn}
+                  onPress={handleOpenChat}
+                  activeOpacity={0.85}
+                >
+                  <MessageSquare size={16} color="#0F172A" style={{ marginRight: 6 }} />
+                  <Text style={styles.chatBtnText}>Open Emergency Chat</Text>
+                </TouchableOpacity>
+              ) : null}
+
               {/* For Created Emergencies: False Alarm & Resolve buttons if active */}
               {isCreated && !isResolved && !isFalseAlarm ? (
                 <>
@@ -565,6 +594,21 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 8,
     marginBottom: 20,
+  },
+  chatBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F1F5F9",
+    borderWidth: 1.5,
+    borderColor: "#CBD5E1",
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  chatBtnText: {
+    color: "#0F172A",
+    fontSize: 14,
+    fontWeight: "700",
   },
   falseAlarmBtn: {
     flexDirection: "row",
