@@ -78,6 +78,65 @@ const getDistanceInMeters = (
   return R * c;
 };
 
+// Calculates perpendicular distance from a point to a line segment in meters
+const getDistanceToSegmentInMeters = (
+  p: { latitude: number; longitude: number },
+  a: { latitude: number; longitude: number },
+  b: { latitude: number; longitude: number },
+) => {
+  const latRad = (a.latitude * Math.PI) / 180;
+  const metersPerDegreeLat = 111139;
+  const metersPerDegreeLon = 111139 * Math.cos(latRad);
+
+  const px = (p.longitude - a.longitude) * metersPerDegreeLon;
+  const py = (p.latitude - a.latitude) * metersPerDegreeLat;
+
+  const bx = (b.longitude - a.longitude) * metersPerDegreeLon;
+  const by = (b.latitude - a.latitude) * metersPerDegreeLat;
+
+  const segmentSqLength = bx * bx + by * by;
+  if (segmentSqLength === 0) {
+    return Math.hypot(px, py);
+  }
+
+  let t = (px * bx + py * by) / segmentSqLength;
+  t = Math.max(0, Math.min(1, t));
+
+  const projX = t * bx;
+  const projY = t * by;
+
+  return Math.hypot(px - projX, py - projY);
+};
+
+// Calculates minimum distance from a location point to a polyline route in meters
+const getMinDistanceToPolyline = (
+  point: { latitude: number; longitude: number },
+  polyline: { latitude: number; longitude: number }[],
+) => {
+  if (!polyline || polyline.length === 0) return Infinity;
+  if (polyline.length === 1) {
+    return getDistanceInMeters(
+      point.latitude,
+      point.longitude,
+      polyline[0].latitude,
+      polyline[0].longitude,
+    );
+  }
+
+  let minDistance = Infinity;
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const dist = getDistanceToSegmentInMeters(
+      point,
+      polyline[i],
+      polyline[i + 1],
+    );
+    if (dist < minDistance) {
+      minDistance = dist;
+    }
+  }
+  return minDistance;
+};
+
 // Fallback grid route generator
 const generateSimulatedRoute = (
   start: { latitude: number; longitude: number },
@@ -209,6 +268,20 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
   const hasCentered = useRef(false);
 
+  // Smart ORS routing tracking refs & concurrency lock
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isFetchingRouteRef = useRef<boolean>(false);
+  const lastCalculatedLocationRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const lastTargetLocationRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const lastTravelModeRef = useRef<string | null>(null);
+  const currentRouteCoordsRef = useRef<any[]>([]);
+
   // Dynamic helper for person coordinates
   const getAdjustedPerson = React.useCallback(
     (p: Person | null): Person | null => {
@@ -239,7 +312,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     return allEmergenciesList.map((p) => getAdjustedPerson(p) as Person);
   }, [allEmergenciesList, getAdjustedPerson]);
 
-  // Initialize and watch current GPS location of the user (the attender)
+  // Initialize and watch current GPS location of the user (every 5s or 10 meters)
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -250,10 +323,23 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       watchRef.current = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          timeInterval: 3000, // Watch every 3 seconds
-          distanceInterval: 5, // Trigger update if moved 5 meters
+          timeInterval: 5000, // Watch every 5 seconds (5-10s requirement)
+          distanceInterval: 10, // Minimum movement 10 meters
         },
-        (loc) => setLocation(loc.coords),
+        (loc) => {
+          setLocation((prev: any) => {
+            if (prev) {
+              const d = getDistanceInMeters(
+                prev.latitude,
+                prev.longitude,
+                loc.coords.latitude,
+                loc.coords.longitude,
+              );
+              if (d < 3) return prev; // Filter small GPS jitter
+            }
+            return loc.coords;
+          });
+        },
       );
     })();
     return () => {
@@ -261,11 +347,21 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     };
   }, []);
 
-  // Fetch Route from ORS API
+  // Fetch Route from ORS API with AbortController cancellation & request lock
   const updateRoute = async (
     start: { latitude: number; longitude: number },
     end: { latitude: number; longitude: number },
+    mode: string,
   ) => {
+    // Abort previous in-flight ORS request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    isFetchingRouteRef.current = true;
+
     try {
       if (!ORS_API_KEY) {
         throw new Error("No ORS_API_KEY configured.");
@@ -284,6 +380,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
             Authorization: ORS_API_KEY,
             "Content-Type": "application/json",
           },
+          signal: controller.signal,
         },
       );
 
@@ -294,24 +391,34 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           longitude: lng,
         }),
       );
+
       setRouteCoords(coords);
+      currentRouteCoordsRef.current = coords;
+      lastCalculatedLocationRef.current = start;
+      lastTargetLocationRef.current = end;
+      lastTravelModeRef.current = mode;
 
       const summary = feature.properties.summary;
       const distanceVal = `${(summary.distance / 1000).toFixed(1)} km`;
 
-      // Calculate duration dynamically based on travel mode
       let durationFactor = 1.0;
-      if (travelMode === "driving")
-        durationFactor = 0.5; // driving is faster than standard ORS
-      else if (travelMode === "running") durationFactor = 1.6;
-      else if (travelMode === "walking") durationFactor = 4.0;
+      if (mode === "driving") durationFactor = 0.5;
+      else if (mode === "running") durationFactor = 1.6;
+      else if (mode === "walking") durationFactor = 4.0;
 
       const durationVal = `${Math.ceil((summary.duration * durationFactor) / 60)} min`;
 
       setDistance(distanceVal);
       setDuration(durationVal);
       onRouteCalculated?.(distanceVal, durationVal);
-    } catch (error) {
+    } catch (error: any) {
+      if (
+        axios.isCancel(error) ||
+        error?.name === "CanceledError" ||
+        error?.name === "AbortError"
+      ) {
+        return; // Request was aborted cleanly
+      }
       console.log("ORS API Error, using fallback route:", error);
 
       const rawDistance = getDistanceInMeters(
@@ -320,18 +427,16 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         end.latitude,
         end.longitude,
       );
-      const roadDistance = rawDistance * 1.35; // account for curves
+      const roadDistance = rawDistance * 1.35;
       const distanceVal =
         roadDistance < 1000
           ? `${Math.round(roadDistance)} m`
           : `${(roadDistance / 1000).toFixed(1)} km`;
 
-      let speed = 4.5; // default for running speed
-      if (travelMode === "driving")
-        speed = 12.0; // driving ~43 km/h
-      else if (travelMode === "running")
-        speed = 4.5; // running ~16 km/h
-      else if (travelMode === "walking") speed = 1.4; // walking ~5 km/h
+      let speed = 4.5;
+      if (mode === "driving") speed = 12.0;
+      else if (mode === "running") speed = 4.5;
+      else if (mode === "walking") speed = 1.4;
 
       const seconds = roadDistance / speed;
       const durationVal = `${Math.max(1, Math.ceil(seconds / 60))} min`;
@@ -340,13 +445,19 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       setDuration(durationVal);
       onRouteCalculated?.(distanceVal, durationVal);
 
-      // Generate grid fallback route
       const fallback = generateSimulatedRoute(start, end);
       setRouteCoords(fallback);
+      currentRouteCoordsRef.current = fallback;
+      lastCalculatedLocationRef.current = start;
+      lastTargetLocationRef.current = end;
+      lastTravelModeRef.current = mode;
+    } finally {
+      isFetchingRouteRef.current = false;
     }
   };
 
-  // Recalculate route whenever user location, activeEmergency, selectedPerson, activeSharedLocation or travelMode changes
+  // Smart Reroute Decision Logic:
+  // Location update -> Moved >=15m? -> Is route still usable (off route <=40m)? -> Request ORS
   useEffect(() => {
     if (!location) return;
 
@@ -368,17 +479,84 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     }
 
     if (targetLat === null || targetLng === null) {
-      setRouteCoords([]);
-      setDistance("");
-      setDuration("");
-      onRouteCalculated?.("--", "--");
+      if (routeCoords.length > 0) {
+        setRouteCoords([]);
+        currentRouteCoordsRef.current = [];
+        setDistance("");
+        setDuration("");
+        onRouteCalculated?.("--", "--");
+        lastCalculatedLocationRef.current = null;
+        lastTargetLocationRef.current = null;
+        lastTravelModeRef.current = null;
+      }
       return;
     }
 
-    updateRoute(location, {
-      latitude: targetLat,
-      longitude: targetLng,
-    });
+    const currentTarget = { latitude: targetLat, longitude: targetLng };
+    const currentStart = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+
+    const MIN_MOVEMENT_METERS = 15; // Minimum 15m user movement to evaluate rerouting
+    const OFF_ROUTE_METERS = 40;     // Off-route threshold: 40 meters
+    const TARGET_MOVED_METERS = 20;  // Target location shifted threshold
+
+    // 1. Check if no route exists yet
+    const hasExistingRoute = currentRouteCoordsRef.current.length > 0;
+    if (!hasExistingRoute) {
+      updateRoute(currentStart, currentTarget, travelMode);
+      return;
+    }
+
+    // 2. Check if travel mode changed
+    if (lastTravelModeRef.current !== travelMode) {
+      updateRoute(currentStart, currentTarget, travelMode);
+      return;
+    }
+
+    // 3. Check if target location moved significantly
+    if (lastTargetLocationRef.current) {
+      const targetMovement = getDistanceInMeters(
+        lastTargetLocationRef.current.latitude,
+        lastTargetLocationRef.current.longitude,
+        currentTarget.latitude,
+        currentTarget.longitude,
+      );
+      if (targetMovement > TARGET_MOVED_METERS) {
+        updateRoute(currentStart, currentTarget, travelMode);
+        return;
+      }
+    }
+
+    // 4. Has user moved significantly from previous route calculation origin?
+    if (lastCalculatedLocationRef.current) {
+      const startMovement = getDistanceInMeters(
+        lastCalculatedLocationRef.current.latitude,
+        lastCalculatedLocationRef.current.longitude,
+        currentStart.latitude,
+        currentStart.longitude,
+      );
+
+      // User has NOT moved significantly (<15m) -> DO NOT reroute!
+      if (startMovement < MIN_MOVEMENT_METERS) {
+        return;
+      }
+    }
+
+    // 5. User moved >15m. Check if current route is still usable (off-route test)
+    const offRouteDistance = getMinDistanceToPolyline(
+      currentStart,
+      currentRouteCoordsRef.current,
+    );
+
+    // If user is within 40m of existing route polyline, keep existing route!
+    if (offRouteDistance <= OFF_ROUTE_METERS) {
+      return;
+    }
+
+    // 6. User is >40m off route -> Request ORS route recalculation
+    updateRoute(currentStart, currentTarget, travelMode);
   }, [
     location,
     adjustedActiveEmergency,
@@ -609,6 +787,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
               }}
               anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => onSelectPerson(p)}
+              tracksViewChanges={isActive || isSelected}
             >
               <View style={mapStyles.victimWrapper}>
                 {/* Custom Pulse Ring for active response alerts */}
@@ -694,7 +873,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   );
 };
 
-export default MapViewComponent;
+export default React.memo(MapViewComponent);
 
 // =====================================================
 // SILVER MAP STYLE (Light Theme)

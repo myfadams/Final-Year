@@ -449,6 +449,39 @@ export default function LocationScreen() {
     });
   };
 
+  const handleSelectPerson = React.useCallback(
+    (p: Person) => {
+      setSelectedPerson(p);
+      if (globalState.activeSharedLocation) {
+        const updated = {
+          ...globalState.activeSharedLocation,
+          cardDismissed: true,
+        };
+        globalState.activeSharedLocation = updated;
+        setActiveSharedLocation(updated);
+      }
+    },
+    [],
+  );
+
+  const handleSelectSharedPin = React.useCallback(
+    (pin: SharedLocationPin) => {
+      setSelectedPerson(null);
+      const updated = { ...pin, cardDismissed: false };
+      globalState.activeSharedLocation = updated;
+      setActiveSharedLocation(updated);
+    },
+    [],
+  );
+
+  const handleRouteCalculated = React.useCallback(
+    (dist: string, dur: string) => {
+      setDistance(dist);
+      setDuration(dur);
+    },
+    [],
+  );
+
   return (
     <View style={styles.screen}>
       <StatusBar
@@ -467,24 +500,9 @@ export default function LocationScreen() {
         categoryFilter={categoryFilter}
         searchQuery={searchQuery}
         travelMode={travelMode}
-        onSelectPerson={(p) => {
-          setSelectedPerson(p);
-          if (activeSharedLocation) {
-            const updated = { ...activeSharedLocation, cardDismissed: true };
-            globalState.activeSharedLocation = updated;
-            setActiveSharedLocation(updated);
-          }
-        }}
-        onSelectSharedPin={(pin) => {
-          setSelectedPerson(null);
-          const updated = { ...pin, cardDismissed: false };
-          globalState.activeSharedLocation = updated;
-          setActiveSharedLocation(updated);
-        }}
-        onRouteCalculated={(dist, dur) => {
-          setDistance(dist);
-          setDuration(dur);
-        }}
+        onSelectPerson={handleSelectPerson}
+        onSelectSharedPin={handleSelectSharedPin}
+        onRouteCalculated={handleRouteCalculated}
       />
 
       {/* FLOATING SEARCH & FILTER ROW */}
