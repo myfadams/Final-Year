@@ -1,6 +1,7 @@
 import { getCurrentUser } from "./auth";
 import { EmergencyRecord } from "./emergencies";
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+import { safeLogError } from "./safeRequest";
 
 
 export interface CreatedEmergencyRecord extends EmergencyRecord {
@@ -57,7 +58,7 @@ export async function fetchEmergenciesCreatedByUser(
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("fetchEmergenciesCreatedByUser error:", error.message);
+      safeLogError("fetchEmergenciesCreatedByUser error:", error);
       return { data: [], error: new Error(error.message) };
     }
 
@@ -90,7 +91,7 @@ export async function fetchEmergenciesCreatedByUser(
 
     return { data: result, error: null };
   } catch (err: any) {
-    console.error("fetchEmergenciesCreatedByUser exception:", err);
+    safeLogError("fetchEmergenciesCreatedByUser exception:", err);
     return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -119,7 +120,7 @@ export async function fetchUserResponderHistory(
       .order("created_at", { ascending: false });
 
     if (historyErr) {
-      console.error("fetchUserResponderHistory error:", historyErr.message);
+      safeLogError("fetchUserResponderHistory error:", historyErr);
       return { data: [], error: new Error(historyErr.message) };
     }
 
@@ -197,7 +198,7 @@ export async function fetchUserResponderHistory(
 
     return { data: result, error: null };
   } catch (err: any) {
-    console.error("fetchUserResponderHistory exception:", err);
+    safeLogError("fetchUserResponderHistory exception:", err);
     return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -267,13 +268,13 @@ export async function markEmergencyFalseAlarm(
       .eq("creator_id", user.id);
 
     if (error) {
-      console.error("markEmergencyFalseAlarm error:", error.message);
+      safeLogError("markEmergencyFalseAlarm error:", error);
       return { success: false, error: new Error(error.message) };
     }
 
     return { success: true, error: null };
   } catch (err: any) {
-    console.error("markEmergencyFalseAlarm exception:", err);
+    safeLogError("markEmergencyFalseAlarm exception:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -302,13 +303,13 @@ export async function markEmergencyResolved(
       .eq("creator_id", user.id);
 
     if (error) {
-      console.error("markEmergencyResolved error:", error.message);
+      safeLogError("markEmergencyResolved error:", error);
       return { success: false, error: new Error(error.message) };
     }
 
     return { success: true, error: null };
   } catch (err: any) {
-    console.error("markEmergencyResolved exception:", err);
+    safeLogError("markEmergencyResolved exception:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }

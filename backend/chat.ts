@@ -4,6 +4,7 @@ import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { getCurrentUser } from "./auth";
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+import { safeSupabaseRequest } from "./safeRequest";
 
 
 export interface PrivateChat {
@@ -213,10 +214,13 @@ export async function fetchChatMessages(
       query = query.lt("created_at", beforeCreatedAt);
     }
 
-    const { data, error } = await query;
+    const { data, error } = await safeSupabaseRequest<any[]>(
+      () => query,
+      { retryId: `fetchChatMessages_${chatId}` }
+    );
 
     if (error) {
-      console.warn("Fetch chat messages notice (falling back to cache):", error.message);
+      console.warn("Fetch chat messages notice (falling back to cache):", error.message || error);
       const cached = await getCachedChatMessages(chatId);
       return { messages: cached, hasMore: false, error: null };
     }

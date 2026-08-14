@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
 import { NetworkOfflineBanner } from "./NetworkOfflineBanner";
 
+import { flushAutoRetryQueue, setGlobalOfflineState } from "@/backend/safeRequest";
+
 export interface NetworkContextType {
   isOffline: boolean;
   lastError: string | null;
@@ -20,6 +22,7 @@ let globalHandleNetworkError: ((error: any) => boolean) | null = null;
  */
 export const isNetworkError = (error: any): boolean => {
   if (!error) return false;
+  if (error?.isNetworkError === true) return true;
   const msg = String(
     error?.message ||
     error?.error_description ||
@@ -73,6 +76,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({
   const clearNetworkError = useCallback(() => {
     setIsOffline(false);
     setLastError(null);
+    setGlobalOfflineState(false);
   }, []);
 
   const handleNetworkError = useCallback((error: any): boolean => {
@@ -81,6 +85,7 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({
       console.warn("⚡ Network Context intercepted offline error:", msg);
       setIsOffline(true);
       setLastError(msg);
+      setGlobalOfflineState(true);
       return true;
     }
     return false;
@@ -90,8 +95,8 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({
 
   const retryConnection = useCallback(() => {
     console.log("⚡ Network Context retrying connection...");
-    // Reset state to trigger re-check
     clearNetworkError();
+    flushAutoRetryQueue();
   }, [clearNetworkError]);
 
   // Hook into global ErrorUtils & unhandled promise rejections in React Native to suppress redbox popups for network failures

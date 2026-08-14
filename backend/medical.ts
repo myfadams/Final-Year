@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseConfig";
+import { safeLogError } from "./safeRequest";
 
 export interface MedicalRecord {
   id?: string;
@@ -35,13 +36,13 @@ export async function getMedicalInfo(userId: string): Promise<{
       .maybeSingle();
 
     if (error) {
-      console.error("Error fetching medical info:", error.message || error);
+      safeLogError("Error fetching medical info:", error);
       return { data: null, error };
     }
 
     return { data, error: null };
   } catch (err) {
-    console.error("Exception fetching medical info:", err);
+    safeLogError("Exception fetching medical info:", err);
     return { data: null, error: err };
   }
 }
@@ -71,13 +72,13 @@ export async function saveMedicalInfo(
       .maybeSingle();
 
     if (error) {
-      console.error("Error saving medical info:", error.message || error);
+      safeLogError("Error saving medical info:", error);
       return { data: null, error };
     }
 
     return { data, error: null };
   } catch (err) {
-    console.error("Exception saving medical info:", err);
+    safeLogError("Exception saving medical info:", err);
     return { data: null, error: err };
   }
 }

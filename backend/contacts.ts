@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseConfig";
+import { safeLogError } from "./safeRequest";
 
 export interface TrustedContactRecord {
   id: string;
@@ -24,13 +25,13 @@ export async function getTrustedContacts(userId: string): Promise<{
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching trusted contacts:", error.message || error);
+      safeLogError("Error fetching trusted contacts:", error);
       return { data: null, error };
     }
 
     return { data: data || [], error: null };
   } catch (err) {
-    console.error("Exception fetching trusted contacts:", err);
+    safeLogError("Exception fetching trusted contacts:", err);
     return { data: null, error: err };
   }
 }
@@ -61,13 +62,13 @@ export async function addTrustedContact(
       .single();
 
     if (error) {
-      console.error("Error adding trusted contact:", error.message || error);
+      safeLogError("Error adding trusted contact:", error);
       return { data: null, error };
     }
 
     return { data, error: null };
   } catch (err) {
-    console.error("Exception adding trusted contact:", err);
+    safeLogError("Exception adding trusted contact:", err);
     return { data: null, error: err };
   }
 }
@@ -85,13 +86,13 @@ export async function deleteTrustedContact(contactId: string): Promise<{
       .eq("id", contactId);
 
     if (error) {
-      console.error("Error deleting trusted contact:", error.message || error);
+      safeLogError("Error deleting trusted contact:", error);
       return { error };
     }
 
     return { error: null };
   } catch (err) {
-    console.error("Exception deleting trusted contact:", err);
+    safeLogError("Exception deleting trusted contact:", err);
     return { error: err };
   }
 }

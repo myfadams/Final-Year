@@ -1,4 +1,5 @@
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+import { safeSupabaseRequest } from "./safeRequest";
 import { getVerifyRedirectUrl } from "../externalFunctions/expoFunctions";
 
 
@@ -652,11 +653,15 @@ export async function uploadStudentIdCard(
 export async function fetchUserProfileById(userId: string): Promise<UserProfile | null> {
   if (!userId) return null;
   try {
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("id", userId)
-      .maybeSingle();
+    const { data, error } = await safeSupabaseRequest<UserProfile>(
+      () =>
+        supabase
+          .from("users")
+          .select("*")
+          .eq("id", userId)
+          .maybeSingle(),
+      { retryId: `fetchUserProfileById_${userId}` }
+    );
 
     if (error || !data) return null;
     return data as UserProfile;

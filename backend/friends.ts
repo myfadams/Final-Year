@@ -1,5 +1,6 @@
 import { FriendSearchResult } from "@/constants/interfaces";
 import { supabase } from "./supabaseConfig";
+import { safeLogError } from "./safeRequest";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,7 @@ export async function searchUsers(
     });
 
     if (error) {
-      console.error("searchUsers RPC error:", error.message);
+      safeLogError("searchUsers RPC error:", error);
       return { data: [], error: error.message };
     }
 
@@ -40,7 +41,7 @@ export async function searchUsers(
   } catch (err: any) {
     const msg =
       err?.message ?? (typeof err === "string" ? err : "Search failed");
-    console.error("searchUsers exception:", msg);
+    safeLogError("searchUsers exception:", err);
     return { data: [], error: msg };
   }
 }
@@ -60,7 +61,7 @@ export async function getSuggestedUsers(
     });
 
     if (error) {
-      console.error("getSuggestedUsers RPC error:", error.message);
+      safeLogError("getSuggestedUsers RPC error:", error);
       return { data: [], error: error.message };
     }
 
@@ -72,7 +73,7 @@ export async function getSuggestedUsers(
     const msg =
       err?.message ??
       (typeof err === "string" ? err : "Failed to load suggestions");
-    console.error("getSuggestedUsers exception:", msg);
+    safeLogError("getSuggestedUsers exception:", err);
     return { data: [], error: msg };
   }
 }
@@ -118,7 +119,7 @@ export async function getPendingRequests(): Promise<{
       .eq("status", "pending");
 
     if (friendsError) {
-      console.error("getPendingRequests friends query error:", friendsError.message);
+      safeLogError("getPendingRequests friends query error:", friendsError);
       return { data: [], error: friendsError.message };
     }
 
@@ -135,7 +136,7 @@ export async function getPendingRequests(): Promise<{
       .in("id", requesterIds);
 
     if (usersError) {
-      console.error("getPendingRequests users query error:", usersError.message);
+      safeLogError("getPendingRequests users query error:", usersError);
       return { data: [], error: usersError.message };
     }
 
@@ -152,7 +153,7 @@ export async function getPendingRequests(): Promise<{
     const msg =
       err?.message ??
       (typeof err === "string" ? err : "Failed to load pending requests");
-    console.error("getPendingRequests exception:", msg);
+    safeLogError("getPendingRequests exception:", err);
     return { data: [], error: msg };
   }
 }
@@ -186,7 +187,7 @@ export async function sendFriendRequest(
       if (error.code === "23505") {
         return { error: null }; // treat as success (idempotent)
       }
-      console.error("sendFriendRequest error:", error.message);
+      safeLogError("sendFriendRequest error:", error);
       return { error: error.message };
     }
 
@@ -195,7 +196,7 @@ export async function sendFriendRequest(
     const msg =
       err?.message ??
       (typeof err === "string" ? err : "Failed to send friend request");
-    console.error("sendFriendRequest exception:", msg);
+    safeLogError("sendFriendRequest exception:", err);
     return { error: msg };
   }
 }
@@ -226,7 +227,7 @@ export async function acceptFriendRequest(
       .eq("status", "pending");
 
     if (error) {
-      console.error("acceptFriendRequest error:", error.message);
+      safeLogError("acceptFriendRequest error:", error);
       return { error: error.message };
     }
 
@@ -235,7 +236,7 @@ export async function acceptFriendRequest(
     const msg =
       err?.message ??
       (typeof err === "string" ? err : "Failed to accept friend request");
-    console.error("acceptFriendRequest exception:", msg);
+    safeLogError("acceptFriendRequest exception:", err);
     return { error: msg };
   }
 }
@@ -281,7 +282,7 @@ export async function removeFriendRequest(
     const msg =
       err?.message ??
       (typeof err === "string" ? err : "Failed to remove friend request");
-    console.error("removeFriendRequest exception:", msg);
+    safeLogError("removeFriendRequest exception:", err);
     return { error: msg };
   }
 }
@@ -330,7 +331,7 @@ export async function getFriends(): Promise<{
       .eq("status", "accepted");
 
     if (outErr) {
-      console.error("getFriends outgoing query error:", outErr.message);
+      safeLogError("getFriends outgoing query error:", outErr);
       return { data: [], error: outErr.message };
     }
 
@@ -342,7 +343,7 @@ export async function getFriends(): Promise<{
       .eq("status", "accepted");
 
     if (inErr) {
-      console.error("getFriends incoming query error:", inErr.message);
+      safeLogError("getFriends incoming query error:", inErr);
       return { data: [], error: inErr.message };
     }
 
@@ -382,7 +383,7 @@ export async function getFriends(): Promise<{
       .in("id", otherIds);
 
     if (usersErr) {
-      console.error("getFriends users query error:", usersErr.message);
+      safeLogError("getFriends users query error:", usersErr);
       return { data: [], error: usersErr.message };
     }
 
@@ -412,7 +413,7 @@ export async function getFriends(): Promise<{
   } catch (err: any) {
     const msg =
       err?.message ?? (typeof err === "string" ? err : "Failed to load friends");
-    console.error("getFriends exception:", msg);
+    safeLogError("getFriends exception:", err);
     return { data: [], error: msg };
   }
 }
@@ -494,13 +495,13 @@ export async function updateTrustedNetworkStatus(
       .eq("id", friendshipId);
 
     if (error) {
-      console.error("updateTrustedNetworkStatus error:", error.message);
+      safeLogError("updateTrustedNetworkStatus error:", error);
       return { error: error.message };
     }
     return { error: null };
   } catch (err: any) {
     const msg = err?.message ?? "Failed to update trusted network status";
-    console.error("updateTrustedNetworkStatus exception:", msg);
+    safeLogError("updateTrustedNetworkStatus exception:", err);
     return { error: msg };
   }
 }

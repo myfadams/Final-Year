@@ -4,6 +4,7 @@ import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { fetchUserProfileById, getCurrentUser, UserProfile } from "./auth";
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+import { safeSupabaseRequest, safeLogError } from "./safeRequest";
 
 
 export interface EmergencyRecord {
@@ -224,13 +225,13 @@ export async function createEmergencyReport(
       .single();
 
     if (error) {
-      console.error("Supabase insert emergency error:", error);
+      safeLogError("Supabase insert emergency error:", error);
       return { data: null, error: new Error(error.message || "Failed to create emergency record.") };
     }
 
     return { data: data as EmergencyRecord, error: null };
   } catch (err: any) {
-    console.error("Error creating emergency report:", err);
+    safeLogError("Error creating emergency report:", err);
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -243,15 +244,19 @@ export async function fetchEmergencies(
   excludeUserId: string
 ): Promise<{ data: EmergencyRecord[]; error: Error | null }> {
   try {
-    const { data, error } = await supabase
-      .from("emergencies")
-      .select("*")
-      .neq("creator_id", excludeUserId)
-      .order("created_at", { ascending: false });
+    const { data, error } = await safeSupabaseRequest<EmergencyRecord[]>(
+      () =>
+        supabase
+          .from("emergencies")
+          .select("*")
+          .neq("creator_id", excludeUserId)
+          .order("created_at", { ascending: false }),
+      { retryId: `fetchEmergencies_${excludeUserId}` }
+    );
 
     if (error) {
-      console.error("fetchEmergencies error:", error);
-      return { data: [], error: new Error(error.message) };
+      safeLogError("fetchEmergencies error:", error);
+      return { data: [], error: new Error(error.message || String(error)) };
     }
 
     if (!data || data.length === 0) {
@@ -270,7 +275,7 @@ export async function fetchEmergencies(
 
     return { data: (data as EmergencyRecord[]) || [], error: null };
   } catch (err: any) {
-    console.error("fetchEmergencies exception:", err);
+    safeLogError("fetchEmergencies exception:", err);
     return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -316,14 +321,18 @@ export async function fetchEmergencyById(
   id: string
 ): Promise<{ data: EmergencyRecord | null; error: Error | null }> {
   try {
-    const { data, error } = await supabase
-      .from("emergencies")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
+    const { data, error } = await safeSupabaseRequest<EmergencyRecord>(
+      () =>
+        supabase
+          .from("emergencies")
+          .select("*")
+          .eq("id", id)
+          .maybeSingle(),
+      { retryId: `fetchEmergencyById_${id}` }
+    );
 
     if (error) {
-      return { data: null, error: new Error(error.message) };
+      return { data: null, error: new Error(error.message || String(error)) };
     }
     return { data: (data as EmergencyRecord) || null, error: null };
   } catch (err: any) {
@@ -450,7 +459,7 @@ export async function recordEmergencyResponse(params: {
 
     return { success: true, error: null };
   } catch (err: any) {
-    console.error("recordEmergencyResponse error:", err);
+    safeLogError("recordEmergencyResponse error:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -514,7 +523,7 @@ export async function confirmEmergencyArrival(params: {
 
     return { success: true, error: null };
   } catch (err: any) {
-    console.error("confirmEmergencyArrival error:", err);
+    safeLogError("confirmEmergencyArrival error:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -562,7 +571,7 @@ export async function markEmergencyResponseDone(params: {
 
     return { success: true, error: null };
   } catch (err: any) {
-    console.error("markEmergencyResponseDone error:", err);
+    safeLogError("markEmergencyResponseDone error:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -666,7 +675,7 @@ export async function cancelEmergencyResponse(params: {
 
     return { success: true, error: null };
   } catch (err: any) {
-    console.error("cancelEmergencyResponse error:", err);
+    safeLogError("cancelEmergencyResponse error:", err);
     return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -741,7 +750,7 @@ export async function fetchEmergencyResponders(
 
     return { data: result, error: null };
   } catch (err: any) {
-    console.error("fetchEmergencyResponders exception:", err);
+    safeLogError("fetchEmergencyResponders exception:", err);
     return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
@@ -816,7 +825,7 @@ export async function getCurrentRespondingEmergency(): Promise<{
       error: null,
     };
   } catch (err: any) {
-    console.error("getCurrentRespondingEmergency error:", err);
+    safeLogError("getCurrentRespondingEmergency error:", err);
     return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
   }
 }
