@@ -3,16 +3,19 @@ import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
   Search,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Newspaper,
+  SearchX
 } from "lucide-react-native";
 import { showPopupAlert } from "@/components/popupAlert";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator
 } from "react-native";
 
 import {
@@ -25,23 +28,74 @@ import CustomInput from "@/components/CustomInput";
 import NewsCard from "@/components/NewsCard";
 import NewsDetailModal from "@/components/NewsDetailModal";
 import { Article } from "@/constants/interfaces";
-import { articles } from "@/constants/tempData";
-// import NewsCard, { Article } from "@/components/NewsCard";
-// import NewsDetailModal from "@/components/NewsDetailModal";
+import { fetchPublishedNews } from "@/backend/news";
+import { fetchKnustUpdates } from "@/backend/externalNews";
+
+const FILTERS = ["All", "Campus Safety Alert", "Security Notice", "Emergency Update", "General Safety News"];
 
 export default function NewsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<
-    "All" | "OFFICIAL" | "ADVISORY" | "COMMUNITY"
-  >("All");
+  const [activeFilter, setActiveFilter] = useState("All");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  
+  const [newsList, setNewsList] = useState<Article[]>([]);
+  const [knustUpdates, setKnustUpdates] = useState<Article[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock news articles matching the mockup design
+  useEffect(() => {
+    async function loadNews() {
+      try {
+        const [data, externalData] = await Promise.all([
+          fetchPublishedNews(),
+          fetchKnustUpdates()
+        ]);
+        
+        setKnustUpdates(externalData);
+        const mapped: Article[] = data.map((item) => {
+          let catColor = "#3B82F6"; // Default Blue
+          let catBg = "#DBEAFE";
+          
+          if (item.category === "Campus Safety Alert") {
+            catColor = "#EF4444";
+            catBg = "#FEE2E2";
+          } else if (item.category === "Security Notice") {
+            catColor = "#F59E0B";
+            catBg = "#FEF3C7";
+          } else if (item.category === "Emergency Update") {
+            catColor = "#B91C1C";
+            catBg = "#FECACA";
+          } else if (item.category === "Road Closure") {
+            catColor = "#6B7280";
+            catBg = "#F3F4F6";
+          }
+
+          return {
+            id: item.id,
+            title: item.title,
+            category: item.category,
+            categoryColor: catColor,
+            categoryBg: catBg,
+            publisher: item.users?.name ? item.users.name : "System Admin",
+            time: item.published_at ? new Date(item.published_at).toLocaleDateString() : "Just now",
+            image: item.image_url || "https://images.unsplash.com/photo-1541888075782-b7e3e9d8995a",
+            content: item.content,
+            isFeatured: item.category === "Emergency Update" || item.category === "Campus Safety Alert"
+          };
+        });
+        setNewsList(mapped);
+      } catch (err) {
+        console.error("Failed to load news", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadNews();
+  }, []);
 
   // Filtering logic
-  const filteredArticles = articles.filter((article) => {
+  const filteredArticles = newsList.filter((article) => {
     const matchesSearch = article.title
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
@@ -50,15 +104,13 @@ export default function NewsScreen() {
     return matchesSearch && matchesFilter;
   });
 
-  const featuredArticle = articles.find((a) => a.isFeatured);
+  const hotspots = newsList.filter((a) => a.isFeatured).slice(0, 5); // top 5 hotspots
   const regularArticles = filteredArticles.filter(
     (a) => !a.isFeatured || activeFilter !== "All",
   );
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Top Header Navigation */}
-      {/* <HomeTabBar pageTitle="news" activePage="news" /> */}
       <AnotherNavBarHeader />
 
       {/* Search and Filters */}
@@ -69,7 +121,6 @@ export default function NewsScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
             Icon={<Search size={20} color="#9CA3AF" />}
-          // borderColor="#E5E7EB"
           />
         </View>
         <TouchableOpacity
@@ -90,13 +141,9 @@ export default function NewsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScrollView}
         >
-          {(["All", "OFFICIAL", "ADVISORY", "COMMUNITY"] as const).map(
+          {FILTERS.map(
             (filter) => {
               const isActive = activeFilter === filter;
-              const displayName =
-                filter === "All"
-                  ? "All"
-                  : filter.charAt(0) + filter.slice(1).toLowerCase() + "s";
               return (
                 <TouchableOpacity
                   key={filter}
@@ -113,7 +160,7 @@ export default function NewsScreen() {
                       isActive && styles.filterPillTextActive,
                     ]}
                   >
-                    {displayName}
+                    {filter}
                   </Text>
                 </TouchableOpacity>
               );
@@ -123,40 +170,104 @@ export default function NewsScreen() {
       </View>
 
       {/* News List */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: 100 + insets.bottom },
-        ]}
-      >
-        {/* Featured Story Hero Card - Only show when "All" or ADVISORY is filtered */}
-        {activeFilter === "All" && featuredArticle && (
-          <NewsCard
-            article={featuredArticle}
-            variant="featured"
-            onPress={() => setSelectedArticle(featuredArticle)}
-          />
-        )}
+      {isLoading ? (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={Colors.light.accent} />
+          <Text style={[styles.emptyText, { marginTop: 16 }]}>Loading news...</Text>
+        </View>
+      ) : (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 100 + insets.bottom },
+          ]}
+        >
+          {/* Hotspots Section */}
+          {activeFilter === "All" && hotspots.length > 0 && (
+            <View style={{ marginBottom: 24 }}>
+              <Text style={styles.hotspotsTitle}>Hotspots</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 20 }}
+              >
+                {hotspots.map((article) => (
+                  <View key={article.id} style={{ width: 300, marginRight: 16 }}>
+                    <NewsCard
+                      article={article}
+                      variant="featured"
+                      onPress={() => setSelectedArticle(article)}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
-        {/* Regular News Items List */}
-        {regularArticles.map((article) => (
-          <NewsCard
-            key={article.id}
-            article={article}
-            variant="regular"
-            onPress={() => setSelectedArticle(article)}
-          />
-        ))}
+          {/* KNUST Updates Section */}
+          {activeFilter === "All" && knustUpdates.length > 0 && (
+            <View style={{ marginBottom: 24 }}>
+              <Text style={styles.hotspotsTitle}>KNUST Updates</Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 20 }}
+              >
+                {knustUpdates.map((article) => (
+                  <View key={article.id} style={{ width: 300, marginRight: 16 }}>
+                    <NewsCard
+                      article={article}
+                      variant="featured"
+                      onPress={() => setSelectedArticle(article)}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
-        {filteredArticles.length === 0 && (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>
-              No news found matching your query.
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+          {/* Regular News Items List */}
+          {regularArticles.map((article) => (
+            <NewsCard
+              key={article.id}
+              article={article}
+              variant="regular"
+              onPress={() => setSelectedArticle(article)}
+            />
+          ))}
+
+          {filteredArticles.length === 0 && (
+            <View style={styles.emptyContainer}>
+              {newsList.length === 0 ? (
+                <>
+                  <View style={styles.emptyIconContainer}>
+                    <Newspaper size={32} color={Colors.light.accent} />
+                  </View>
+                  <Text style={[styles.emptyText, { fontSize: 16, color: Colors.light.text, fontFamily: typography.semibold }]}>
+                    You're all caught up!
+                  </Text>
+                  <Text style={[styles.emptyText, { marginTop: 6, textAlign: 'center', lineHeight: 20 }]}>
+                    There are no recent safety alerts or news items at the moment.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.emptyIconContainer, { backgroundColor: '#F3F4F6' }]}>
+                    <SearchX size={32} color="#6B7280" />
+                  </View>
+                  <Text style={[styles.emptyText, { fontSize: 16, color: Colors.light.text, fontFamily: typography.semibold }]}>
+                    No matches found
+                  </Text>
+                  <Text style={[styles.emptyText, { marginTop: 6, textAlign: 'center', lineHeight: 20 }]}>
+                    We couldn't find any news matching your search or active filter.
+                  </Text>
+                </>
+              )}
+            </View>
+          )}
+        </ScrollView>
+      )}
 
       {/* Article Detail Modal View */}
       <NewsDetailModal
@@ -266,11 +377,27 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: 40,
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  emptyIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   emptyText: {
     color: Colors.light.textMuted,
     fontFamily: typography.medium,
     fontSize: 14,
+  },
+  hotspotsTitle: {
+    fontSize: 18,
+    fontFamily: typography.bold,
+    color: Colors.light.text,
+    marginBottom: 12,
   },
 });

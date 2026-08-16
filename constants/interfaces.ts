@@ -84,7 +84,7 @@ export interface SuggestedResponder {
 export interface Article {
   id: string;
   title: string;
-  category: "ADVISORY" | "OFFICIAL" | "COMMUNITY";
+  category: string;
   categoryColor: string;
   categoryBg: string;
   publisher: string;
