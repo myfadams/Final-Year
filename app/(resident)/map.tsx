@@ -8,10 +8,21 @@ import {
   mapEmergencyRecordToPerson,
   recordEmergencyResponse,
 } from "@/backend/emergencies";
+import {
+  fetchLatestSosLocation,
+  fetchSosAlertById,
+  parseGeoPoint,
+  subscribeToSosLocationUpdates,
+  updateSosResponderStatus,
+  withdrawSosResponse,
+} from "@/backend/sos";
 import { MapFloatingWindow } from "@/components/MapFloatingWindow";
-import MapViewComponent from "@/components/MapViewComponent";
+import MapViewComponent, {
+  ActiveSosMonitoringPin,
+} from "@/components/MapViewComponent";
 import { showPopupAlert } from "@/components/popupAlert";
 import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatingWindow";
+import { SosMonitoringFloatingWindow } from "@/components/sos/SosMonitoringFloatingWindow";
 import Colors from "@/constants/Colors";
 import { globalState, SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
@@ -28,8 +39,9 @@ import {
   SlidersHorizontal,
   Zap,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   StatusBar,
@@ -50,6 +62,10 @@ export default function LocationScreen() {
   const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
   const [activeSharedLocation, setActiveSharedLocation] =
     useState<SharedLocationPin | null>(null);
+  const [activeSosMonitoring, setActiveSosMonitoring] =
+    useState<ActiveSosMonitoringPin | null>(null);
+  const [isSosRoutingActive, setIsSosRoutingActive] = useState<boolean>(false);
+  const [isLoadingSosRoute, setIsLoadingSosRoute] = useState<boolean>(false);
   const [realEmergencies, setRealEmergencies] = useState<Person[]>([]);
   const [distance, setDistance] = useState("--");
   const [duration, setDuration] = useState("--");
@@ -60,6 +76,7 @@ export default function LocationScreen() {
   >("running");
 
   const params = useLocalSearchParams<{
+    sosAlertId?: string;
     personId?: string;
     action?: string;
     recenter?: string;
@@ -164,6 +181,7 @@ export default function LocationScreen() {
 
         // 3. Handle deep link / parameter changes
         const {
+          sosAlertId,
           personId,
           action,
           recenter,
@@ -185,7 +203,74 @@ export default function LocationScreen() {
           location: locationParam,
         } = params;
 
-        if (recenter) {
+        if (sosAlertId) {
+          // Entering SOS Monitoring Mode
+          setSelectedPerson(null);
+          globalState.activeEmergencyId = null;
+          globalState.activeEmergencyPerson = null;
+          setActiveEmergency(null);
+          setIsSosRoutingActive(false);
+
+          let initialLat = lat ? parseFloat(lat) : 0;
+          let initialLng = lng ? parseFloat(lng) : 0;
+
+          const initialPin: ActiveSosMonitoringPin = {
+            sosId: sosAlertId,
+            senderName: senderName || "Active SOS Broadcast",
+            senderAvatar: senderAvatar || null,
+            latitude: initialLat,
+            longitude: initialLng,
+            isRoutingActive: false, // Routing is NOT started automatically!
+          };
+
+          setActiveSosMonitoring(initialPin);
+
+          // Fetch full alert and fresh location from DB
+          (async () => {
+            const [alertRes, latestLocRes] = await Promise.all([
+              fetchSosAlertById(sosAlertId),
+              fetchLatestSosLocation(sosAlertId),
+            ]);
+
+            if (isAlive) {
+              const freshName =
+                alertRes.data?.sender_profile?.name ||
+                senderName ||
+                "Someone in Distress";
+              const freshAvatar =
+                alertRes.data?.sender_profile?.avatar_url ||
+                senderAvatar ||
+                null;
+              const freshCoords =
+                latestLocRes.data ||
+                (alertRes.data ? parseGeoPoint(alertRes.data.location) : null);
+
+              setActiveSosMonitoring((prev) =>
+                prev && prev.sosId === sosAlertId
+                  ? {
+                    ...prev,
+                    senderName: freshName,
+                    senderAvatar: freshAvatar,
+                    ...(freshCoords
+                      ? {
+                        latitude: freshCoords.latitude,
+                        longitude: freshCoords.longitude,
+                      }
+                      : {}),
+                  }
+                  : prev
+              );
+            }
+          })();
+
+          router.setParams({
+            sosAlertId: undefined,
+            senderName: undefined,
+            senderAvatar: undefined,
+            lat: undefined,
+            lng: undefined,
+          });
+        } else if (recenter) {
           setSelectedPerson(null);
           globalState.activeEmergencyId = null;
           globalState.activeEmergencyPerson = null;
@@ -279,8 +364,8 @@ export default function LocationScreen() {
                 address: locationParam || "Location details",
                 avatarColor: "#AF101A",
                 markerColor: "#AF101A",
-                latitude: lat ? parseFloat(lat) : 6.675155,
-                longitude: lng ? parseFloat(lng) : -1.571569,
+                latitude: lat ? parseFloat(lat) : 0,
+                longitude: lng ? parseFloat(lng) : 0,
                 urgency,
                 description: description || title || "",
                 requesterDesc: description || `${title} near ${locationParam}`,
@@ -316,6 +401,29 @@ export default function LocationScreen() {
     }, [params]),
   );
 
+  // Dedicated real-time SOS location streaming subscription (monotonic guarded)
+  useEffect(() => {
+    const sosId = activeSosMonitoring?.sosId;
+    if (!sosId) return;
+
+    const unsubscribe = subscribeToSosLocationUpdates(sosId, (coords) => {
+      setActiveSosMonitoring((prev) => {
+        if (prev && prev.sosId === sosId) {
+          return {
+            ...prev,
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+          };
+        }
+        return prev;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [activeSosMonitoring?.sosId]);
+
   // 5-minute pin auto-dismissal timer for snapshot location sharing pins
   useEffect(() => {
     if (
@@ -346,6 +454,74 @@ export default function LocationScreen() {
       }
     }
   }, [activeSharedLocation]);
+
+  // SOS Monitoring Mode Handlers
+  const handleToggleSosRoute = () => {
+    setIsSosRoutingActive((prev) => {
+      const nextState = !prev;
+      setActiveSosMonitoring((current) =>
+        current ? { ...current, isRoutingActive: nextState } : null
+      );
+      return nextState;
+    });
+  };
+
+  const handleConfirmSosArrival = async () => {
+    if (!activeSosMonitoring) return;
+    const sosId = activeSosMonitoring.sosId;
+
+    const { error } = await updateSosResponderStatus(sosId, "arrived");
+    if (error) {
+      console.warn("updateSosResponderStatus error:", error);
+    }
+
+    globalState.activeSosMonitoring = null;
+    setActiveSosMonitoring(null);
+    setIsSosRoutingActive(false);
+
+    showPopupAlert(
+      "Arrival Confirmed",
+      "Your arrival at the SOS emergency location has been recorded. Thank you for your support!",
+      [{ text: "OK" }],
+      undefined,
+      "success"
+    );
+  };
+
+  const handleStopSosResponse = () => {
+    if (!activeSosMonitoring) return;
+    const sosId = activeSosMonitoring.sosId;
+
+    Alert.alert(
+      "Stop Responding",
+      "Are you sure you want to withdraw your response to this SOS emergency?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Withdraw",
+          style: "destructive",
+          onPress: async () => {
+            const { error } = await withdrawSosResponse(sosId);
+            if (error) {
+              console.warn("withdrawSosResponse error:", error);
+            }
+
+            globalState.activeSosMonitoring = null;
+            setActiveSosMonitoring(null);
+            setIsSosRoutingActive(false);
+
+            showPopupAlert(
+              "Response Withdrawn",
+              "You are no longer marked as responding to this SOS alert.",
+              undefined,
+              undefined,
+              "info"
+            );
+          },
+        },
+      ]
+    );
+  };
 
   const isNearLocation = React.useMemo(() => {
     if (!distance || distance === "--") return false;
@@ -500,6 +676,16 @@ export default function LocationScreen() {
     [],
   );
 
+  const handleSelectSosPin = React.useCallback(
+    (pin: ActiveSosMonitoringPin) => {
+      setSelectedPerson(null);
+      const updated = { ...pin, cardDismissed: false };
+      globalState.activeSosMonitoring = updated;
+      setActiveSosMonitoring(updated);
+    },
+    [],
+  );
+
   const handleRouteCalculated = React.useCallback(
     (dist: string, dur: string) => {
       setDistance(dist);
@@ -521,6 +707,7 @@ export default function LocationScreen() {
         selectedPerson={selectedPerson}
         activeEmergency={activeEmergency}
         activeSharedLocation={activeSharedLocation}
+        activeSosMonitoring={activeSosMonitoring}
         realEmergencies={realEmergencies}
         recenterNonce={recenterNonce}
         categoryFilter={categoryFilter}
@@ -528,6 +715,7 @@ export default function LocationScreen() {
         travelMode={travelMode}
         onSelectPerson={handleSelectPerson}
         onSelectSharedPin={handleSelectSharedPin}
+        onSelectSosPin={handleSelectSosPin}
         onRouteCalculated={handleRouteCalculated}
       />
 
@@ -633,7 +821,8 @@ export default function LocationScreen() {
           styles.travelModeContainer,
           {
             bottom:
-              selectedPerson ||
+              activeSosMonitoring ||
+                selectedPerson ||
                 (activeSharedLocation &&
                   !activeSharedLocation.cardDismissed &&
                   !activeSharedLocation.dismissed)
@@ -677,7 +866,8 @@ export default function LocationScreen() {
           styles.recenterFloatButton,
           {
             bottom:
-              selectedPerson ||
+              activeSosMonitoring ||
+                selectedPerson ||
                 (activeSharedLocation &&
                   !activeSharedLocation.cardDismissed &&
                   !activeSharedLocation.dismissed)
@@ -694,6 +884,26 @@ export default function LocationScreen() {
       >
         <Compass size={22} color={Colors.light.accent} />
       </TouchableOpacity>
+
+      {/* DEDICATED FLOATING SOS MONITORING WINDOW */}
+      {activeSosMonitoring && !activeSosMonitoring.cardDismissed && (
+        <SosMonitoringFloatingWindow
+          senderName={activeSosMonitoring.senderName}
+          senderAvatar={activeSosMonitoring.senderAvatar}
+          distance={distance}
+          isRoutingActive={isSosRoutingActive}
+          isLoadingRoute={isLoadingSosRoute}
+          onToggleRoute={handleToggleSosRoute}
+          onConfirmArrival={handleConfirmSosArrival}
+          onStopResponding={handleStopSosResponse}
+          onClose={() => {
+            // Ephemeral local-only dismissal: closes the floating card but keeps map tracking and pin alive!
+            setActiveSosMonitoring((prev) =>
+              prev ? { ...prev, cardDismissed: true } : null
+            );
+          }}
+        />
+      )}
 
       {/* FLOATING CARD OVERLAY FOR INCIDENTS (MapFloatingWindow Component) */}
       {selectedPerson && (

@@ -1,10 +1,10 @@
-import Colors from "@/constants/Colors";
 import { SharedLocationPinMarker } from "@/components/SharedLocationPinMarker";
+import Colors, { ResQColors } from "@/constants/Colors";
 import { SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
 import axios from "axios";
 import * as Location from "expo-location";
-import { BriefcaseMedical, Flame, Shield } from "lucide-react-native";
+import { BriefcaseMedical, Flame, Shield, ShieldAlert } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -229,13 +229,25 @@ const PulseRing: React.FC<{ color: string }> = ({ color }) => {
 // =====================================================
 // MAP COMPONENT
 // =====================================================
+export interface ActiveSosMonitoringPin {
+  sosId: string;
+  senderName?: string;
+  senderAvatar?: string | null;
+  latitude: number;
+  longitude: number;
+  isRoutingActive: boolean;
+  cardDismissed?: boolean;
+}
+
 interface MapViewComponentProps {
   selectedPerson: Person | null;
   activeEmergency: Person | null;
   activeSharedLocation?: SharedLocationPin | null;
+  activeSosMonitoring?: ActiveSosMonitoringPin | null;
   realEmergencies?: Person[];
   onSelectPerson: (p: Person) => void;
   onSelectSharedPin?: (pin: SharedLocationPin) => void;
+  onSelectSosPin?: (pin: ActiveSosMonitoringPin) => void;
   onRouteCalculated?: (distance: string, duration: string) => void;
   recenterNonce?: string | null;
   categoryFilter?: string; // category filter state passed from parent
@@ -247,9 +259,11 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   selectedPerson,
   activeEmergency,
   activeSharedLocation,
+  activeSosMonitoring,
   realEmergencies,
   onSelectPerson,
   onSelectSharedPin,
+  onSelectSosPin,
   onRouteCalculated,
   recenterNonce,
   categoryFilter,
@@ -466,8 +480,13 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
     let targetLat: number | null = null;
     let targetLng: number | null = null;
+    let shouldRoute = true;
 
-    if (
+    if (activeSosMonitoring) {
+      targetLat = activeSosMonitoring.latitude;
+      targetLng = activeSosMonitoring.longitude;
+      shouldRoute = activeSosMonitoring.isRoutingActive;
+    } else if (
       activeSharedLocation?.isTrackingActive &&
       !activeSharedLocation.dismissed
     ) {
@@ -515,6 +534,17 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     const estMin = Math.max(1, Math.ceil(directDist / 80));
     const durVal = directDist <= 50 ? "< 1 min" : `${estMin} min`;
     onRouteCalculated?.(immediateVal, durVal);
+
+    if (!shouldRoute) {
+      if (routeCoords.length > 0) {
+        setRouteCoords([]);
+        currentRouteCoordsRef.current = [];
+        lastCalculatedLocationRef.current = null;
+        lastTargetLocationRef.current = null;
+        lastTravelModeRef.current = null;
+      }
+      return;
+    }
 
     const MIN_MOVEMENT_METERS = 15; // Minimum 15m user movement to evaluate rerouting
     const OFF_ROUTE_METERS = 40;     // Off-route threshold: 40 meters
@@ -580,6 +610,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     adjustedActiveEmergency,
     adjustedSelectedPerson,
     activeSharedLocation,
+    activeSosMonitoring,
     travelMode,
   ]);
 
@@ -634,13 +665,23 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   useEffect(() => {
     if (!mapRef.current) return;
 
-    const isSharedLocationCardActive = Boolean(
-      activeSharedLocation &&
-      !activeSharedLocation.dismissed &&
-      !activeSharedLocation.cardDismissed,
-    );
-
-    if (isSharedLocationCardActive && activeSharedLocation) {
+    if (activeSosMonitoring && location) {
+      // Fit responder and SOS sender location in view
+      mapRef.current.fitToCoordinates(
+        [
+          location,
+          {
+            latitude: activeSosMonitoring.latitude,
+            longitude: activeSosMonitoring.longitude,
+          },
+        ],
+        {
+          edgePadding: { top: 120, right: 80, bottom: 260, left: 80 },
+          animated: true,
+        },
+      );
+      hasCentered.current = false;
+    } else if (activeSharedLocation) {
       if (activeSharedLocation.isTrackingActive && location) {
         // Fit responder and shared location in view when tracking route
         mapRef.current.fitToCoordinates(
@@ -853,9 +894,61 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         />
       )}
 
+      {/* Active SOS Monitoring Sender Marker */}
+      {activeSosMonitoring && (
+        <Marker
+          key={`active-sos-marker-${activeSosMonitoring.sosId}`}
+          coordinate={{
+            latitude: activeSosMonitoring.latitude,
+            longitude: activeSosMonitoring.longitude,
+          }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={true}
+          onPress={() => onSelectSosPin?.(activeSosMonitoring)}
+        >
+          <View style={mapStyles.victimWrapper}>
+            <PulseRing color={ResQColors.primaryRed} />
+            <View
+              style={[
+                mapStyles.customMarkerCircle,
+                {
+                  backgroundColor: ResQColors.primaryRed,
+                  transform: [{ scale: 1.25 }],
+                  borderColor: "#FFFFFF",
+                  borderWidth: 2.5,
+                },
+              ]}
+            >
+              <ShieldAlert size={18} color="#FFFFFF" />
+            </View>
+            <View
+              style={[
+                mapStyles.markerLabelContainer,
+                { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
+              ]}
+            >
+              <Text
+                style={[
+                  mapStyles.markerLabelText,
+                  { color: ResQColors.primaryRed, fontFamily: "Inter_700Bold" },
+                ]}
+                numberOfLines={1}
+              >
+                🚨 SOS: {activeSosMonitoring.senderName || "In Distress"}
+              </Text>
+            </View>
+          </View>
+        </Marker>
+      )}
+
       {/* Responder Location Marker */}
       {location && (
-        <Marker coordinate={location} anchor={{ x: 0.5, y: 0.5 }}>
+        <Marker
+          key="current-user-responder-location-marker"
+          coordinate={location}
+          anchor={{ x: 0.5, y: 0.5 }}
+          tracksViewChanges={true}
+        >
           <View style={mapStyles.responderWrapper}>
             <PulseRing color="#4ECDC4" />
             <View style={mapStyles.responderCore}>
@@ -867,7 +960,9 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
       {/* Polyline Route */}
       {routeCoords.length > 0 &&
-        (adjustedActiveEmergency || activeSharedLocation?.isTrackingActive) && (
+        (adjustedActiveEmergency ||
+          activeSharedLocation?.isTrackingActive ||
+          activeSosMonitoring?.isRoutingActive) && (
           <>
             <Polyline
               coordinates={routeCoords}

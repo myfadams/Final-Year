@@ -4,6 +4,16 @@ import { getCachedUserProfile, getCurrentUser, getUserProfile, UserProfile } fro
 import { getTrustedContacts, TrustedContactRecord } from "@/backend/contacts";
 import { FriendContact, getFriends } from "@/backend/friends";
 import { getMedicalInfo, MedicalRecord } from "@/backend/medical";
+import {
+  cancelSosAlert,
+  createSosAlert,
+  fetchActiveSosForUser,
+  parseGeoPoint,
+  SosAlert,
+  SosResponder,
+  subscribeToSosResponders,
+  updateSosLocation
+} from "@/backend/sos";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import HeartBeatWave from "@/components/HeartBeatWave";
@@ -16,6 +26,8 @@ import { globalState } from "@/constants/globalState";
 import { ContactsProp } from "@/constants/interfaces";
 import { DEFAULT_CONTACTS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
+import * as LocalAuthentication from "expo-local-authentication";
+import * as Location from "expo-location";
 import { useFocusEffect, useRouter } from "expo-router";
 import {
   AlertTriangle,
@@ -28,6 +40,7 @@ import {
   Phone,
   Plus,
   Radio,
+  RefreshCw,
   Search,
   ShieldAlert,
   Siren,
@@ -35,19 +48,25 @@ import {
   UserMinus,
   UserPlus,
   Users,
-  X
+  X,
 } from "lucide-react-native";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Animated,
+  AppState,
+  AppStateStatus,
+  Image,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 const AVATAR_COLORS = [
@@ -70,6 +89,7 @@ const Home = () => {
   const router = useRouter();
   const [appContacts, setAppContacts] =
     useState<ContactsProp[]>(DEFAULT_CONTACTS);
+  const [contactSearchQuery, setContactSearchQuery] = useState("");
   const [userProfile, setUserProfile] = useState<UserProfile | null>(
     globalState.userProfile
   );
@@ -97,6 +117,35 @@ const Home = () => {
     fetchUserProfileOnHome();
   }, []);
 
+  // Modal Visibility & Medical ID States
+  const [medicalIdVisible, setMedicalIdVisible] = useState(false);
+  const [medicalInfo, setMedicalInfo] = useState<MedicalRecord | null>(null);
+  const [medicalContacts, setMedicalContacts] = useState<TrustedContactRecord[]>([]);
+  const [isLoadingMedicalId, setIsLoadingMedicalId] = useState(false);
+
+  const [checkInVisible, setCheckInVisible] = useState(false);
+  const [callModalVisible, setCallModalVisible] = useState(false);
+  const [locationSharedVisible, setLocationSharedVisible] = useState(false);
+  const [addResponderVisible, setAddResponderVisible] = useState(false);
+  const [manageModalVisible, setManageModalVisible] = useState(false);
+
+  const fetchMedicalIdData = useCallback(async () => {
+    if (!userProfile?.id) return;
+    setIsLoadingMedicalId(true);
+    try {
+      const [medRes, contactsRes] = await Promise.all([
+        getMedicalInfo(userProfile.id),
+        getTrustedContacts(userProfile.id),
+      ]);
+      if (medRes.data) setMedicalInfo(medRes.data);
+      if (contactsRes.data) setMedicalContacts(contactsRes.data);
+    } catch (err) {
+      console.error("Error fetching medical ID data:", err);
+    } finally {
+      setIsLoadingMedicalId(false);
+    }
+  }, [userProfile?.id]);
+
   // Trusted Network Fetched Data States
   const [trustedFriends, setTrustedFriends] = useState<FriendContact[]>([]);
   const [isLoadingTrusted, setIsLoadingTrusted] = useState<boolean>(true);
@@ -123,56 +172,243 @@ const Home = () => {
     }, [fetchTrustedNetwork])
   );
 
-  // SOS Countdown States
+  // Active SOS Feature States
   const [isCountingDown, setIsCountingDown] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(2);
   const [alertActive, setAlertActive] = useState(false);
+  const [activeSos, setActiveSos] = useState<SosAlert | null>(null);
+  const [sosResponders, setSosResponders] = useState<SosResponder[]>([]);
+  const [isLocationPaused, setIsLocationPaused] = useState<boolean>(false);
+  const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [sosBroadcastState, setSosBroadcastState] = useState<
+    "locating" | "uploading" | "broadcasting" | "failed"
+  >("locating");
+  const [sosBroadcastError, setSosBroadcastError] = useState<string | null>(null);
+
   const countdownInterval = useRef<any>(null);
+  const activeLocationWatcher = useRef<Location.LocationSubscription | null>(null);
+  const heartbeatRef = useRef<any>(null);
+  const lastLocationRef = useRef<Location.LocationObject | null>(null);
+  const lastWriteAtRef = useRef<number>(0);
 
-  // Modal States
-  const [callModalVisible, setCallModalVisible] = useState(false);
-  const [locationSharedVisible, setLocationSharedVisible] = useState(false);
-  const [medicalIdVisible, setMedicalIdVisible] = useState(false);
-  const [checkInVisible, setCheckInVisible] = useState(false);
+  const MOVEMENT_DISTANCE_M = 12;
+  const MIN_WRITE_INTERVAL_MS = 5000;
+  const HEARTBEAT_MS = 25000;
 
-  // Medical ID Fetched Data States
-  const [medicalInfo, setMedicalInfo] = useState<MedicalRecord | null>(null);
-  const [medicalContacts, setMedicalContacts] = useState<TrustedContactRecord[]>([]);
-  const [isLoadingMedicalId, setIsLoadingMedicalId] = useState<boolean>(false);
+  const maybeSendUpdate = useCallback(async (loc: Location.LocationObject) => {
+    if (!activeSos?.id) return;
+    const now = Date.now();
+    lastLocationRef.current = loc;
+    
+    // Immediate local state update for dynamic UI coordinates display
+    setCurrentCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
 
-  const fetchMedicalIdData = async () => {
-    setIsLoadingMedicalId(true);
-    try {
-      const { user } = await getCurrentUser();
-      if (user) {
-        const [medRes, contactsRes] = await Promise.all([
-          getMedicalInfo(user.id),
-          getTrustedContacts(user.id),
-        ]);
+    if (now - lastWriteAtRef.current < MIN_WRITE_INTERVAL_MS) return;
+    lastWriteAtRef.current = now;
 
-        if (medRes.data) {
-          setMedicalInfo(medRes.data);
-        } else {
-          setMedicalInfo(null);
-        }
+    await updateSosLocation(
+      activeSos.id,
+      loc.coords.latitude,
+      loc.coords.longitude,
+      new Date(now).toISOString()
+    );
+  }, [activeSos?.id]);
 
-        if (contactsRes.data) {
-          setMedicalContacts(contactsRes.data);
-        } else {
-          setMedicalContacts([]);
+  // Check if current user already has an active SOS created
+  useEffect(() => {
+    async function checkExistingSos() {
+      const { data } = await fetchActiveSosForUser();
+      if (data) {
+        setActiveSos(data);
+        setAlertActive(true);
+        setSosBroadcastState("broadcasting");
+        const parsed = parseGeoPoint(data.location);
+        if (parsed) {
+          setCurrentCoords({ lat: parsed.latitude, lng: parsed.longitude });
         }
       }
-    } catch (err) {
-      console.error("Failed to fetch medical ID modal data:", err);
-    } finally {
-      setIsLoadingMedicalId(false);
+    }
+    checkExistingSos();
+  }, []);
+
+  // Handle active SOS responder subscription & foreground location updates
+  useEffect(() => {
+    const stopWatcherAndHeartbeat = () => {
+      if (activeLocationWatcher.current) {
+        console.log("[SOS] Removing active location watcher subscription");
+        activeLocationWatcher.current.remove();
+        activeLocationWatcher.current = null;
+      }
+      if (heartbeatRef.current) {
+        console.log("[SOS] Removing active heartbeat timer");
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+    };
+
+    if (!alertActive || !activeSos) {
+      stopWatcherAndHeartbeat();
+      return;
+    }
+
+    // Subscribe to real-time responder updates
+    const unsubscribeResponders = subscribeToSosResponders(
+      activeSos.id,
+      (responders) => {
+        setSosResponders(responders);
+      }
+    );
+
+    let isSubscribed = true;
+
+    const startWatcher = async () => {
+      stopWatcherAndHeartbeat(); // Strictly ensure no duplicate watcher exists
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") return;
+
+        console.log("[SOS] Starting single location watcher for session:", activeSos.id);
+        activeLocationWatcher.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            distanceInterval: MOVEMENT_DISTANCE_M,
+            timeInterval: MIN_WRITE_INTERVAL_MS,
+          },
+          (loc) => {
+            if (!isSubscribed) return;
+            maybeSendUpdate(loc);
+          }
+        );
+
+        // independent heartbeat: re-sends the last known fix on a fixed
+        // clock. maybeSendUpdate's own floor means this is a no-op whenever
+        // a movement update already fired recently, so there's no risk of
+        // double-writing near the boundary.
+        heartbeatRef.current = setInterval(() => {
+          if (lastLocationRef.current && isSubscribed) {
+            maybeSendUpdate(lastLocationRef.current);
+          }
+        }, HEARTBEAT_MS);
+
+      } catch (err) {
+        console.warn("[SOS] Location watcher error:", err);
+      }
+    };
+
+    if (AppState.currentState === "active") {
+      setIsLocationPaused(false);
+      startWatcher();
+    } else {
+      setIsLocationPaused(true);
+    }
+
+    const appStateSub = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        if (nextState === "active") {
+          setIsLocationPaused(false);
+          startWatcher();
+        } else {
+          setIsLocationPaused(true);
+          stopWatcherAndHeartbeat();
+        }
+      }
+    );
+
+    return () => {
+      isSubscribed = false;
+      unsubscribeResponders();
+      appStateSub.remove();
+      stopWatcherAndHeartbeat();
+    };
+  }, [alertActive, activeSos, maybeSendUpdate]);
+
+  // Non-blocking SOS creation with BestForNavigation + 7s timeout guard + background upload
+  const triggerSosAlertCreation = async () => {
+    try {
+      setSosBroadcastState("locating");
+      setSosBroadcastError(null);
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setSosBroadcastState("failed");
+        setSosBroadcastError("Location permission required to broadcast SOS alert.");
+        return;
+      }
+
+      // 1. Race BestForNavigation against a 7-second timeout
+      const bestFixPromise = Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.BestForNavigation,
+      });
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), 7000)
+      );
+
+      let lat: number | null = null;
+      let lng: number | null = null;
+      let usedFallback = false;
+
+      const fix = await Promise.race([bestFixPromise, timeoutPromise]);
+      if (fix && fix.coords) {
+        lat = fix.coords.latitude;
+        lng = fix.coords.longitude;
+      } else {
+        usedFallback = true;
+        // Fast fallback to last known or balanced
+        const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+        if (lastKnown && lastKnown.coords) {
+          lat = lastKnown.coords.latitude;
+          lng = lastKnown.coords.longitude;
+        } else {
+          const quickFix = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          }).catch(() => null);
+          if (quickFix && quickFix.coords) {
+            lat = quickFix.coords.latitude;
+            lng = quickFix.coords.longitude;
+          }
+        }
+      }
+
+      if (lat === null || lng === null) {
+        setSosBroadcastState("failed");
+        setSosBroadcastError("Unable to acquire device GPS coordinates. Please ensure location is enabled.");
+        return;
+      }
+
+      setCurrentCoords({ lat, lng });
+      setSosBroadcastState("uploading");
+
+      // Non-blocking upload to Supabase
+      const { data, error } = await createSosAlert(lat, lng);
+      if (error || !data) {
+        setSosBroadcastState("failed");
+        setSosBroadcastError(error || "Failed to broadcast SOS alert.");
+        return;
+      }
+
+      setActiveSos(data);
+      setSosBroadcastState("broadcasting");
+
+      // If initial alert used fallback, update with BestForNavigation once resolved
+      if (usedFallback) {
+        bestFixPromise
+          .then(async (accurateFix) => {
+            if (accurateFix?.coords && data.id) {
+              const accLat = accurateFix.coords.latitude;
+              const accLng = accurateFix.coords.longitude;
+              setCurrentCoords({ lat: accLat, lng: accLng });
+              await updateSosLocation(data.id, accLat, accLng);
+            }
+          })
+          .catch(() => { });
+      }
+    } catch (err: any) {
+      console.error("Failed to trigger SOS alert creation:", err);
+      setSosBroadcastState("failed");
+      setSosBroadcastError(err?.message || "An error occurred broadcasting SOS.");
     }
   };
-
-  // Trusted Network Modal States
-  const [addResponderVisible, setAddResponderVisible] = useState(false);
-  const [manageModalVisible, setManageModalVisible] = useState(false);
-  const [contactSearchQuery, setContactSearchQuery] = useState("");
 
   // SOS Countdown Animation
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -180,11 +416,11 @@ const Home = () => {
   // SOS button handlers
   const handleSOSPressIn = () => {
     setIsCountingDown(true);
-    setCountdown(3);
+    setCountdown(2);
     Animated.sequence([
       Animated.timing(scaleAnim, {
         toValue: 1.2,
-        duration: 3000,
+        duration: 2000,
         useNativeDriver: true,
       }),
     ]).start();
@@ -194,7 +430,12 @@ const Home = () => {
         if (prev <= 1) {
           clearInterval(countdownInterval.current);
           setIsCountingDown(false);
+          // Show SOS active overlay synchronously BEFORE location fetch / insert starts!
           setAlertActive(true);
+          setSosBroadcastState("locating");
+          setSosBroadcastError(null);
+          // Run location fetch and insert in parallel behind the rendered overlay
+          triggerSosAlertCreation();
           return 0;
         }
         return prev - 1;
@@ -206,14 +447,48 @@ const Home = () => {
     if (isCountingDown) {
       clearInterval(countdownInterval.current);
       setIsCountingDown(false);
-      setCountdown(3);
+      setCountdown(2);
       scaleAnim.setValue(1);
     }
   };
 
-  const stopSOSBroadcast = () => {
-    setAlertActive(false);
-    scaleAnim.setValue(1);
+  // Biometric-gated cancellation
+  const stopSOSBroadcast = async () => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      let authenticated = false;
+      if (hasHardware && isEnrolled) {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: "Authenticate to cancel SOS emergency alert",
+          fallbackLabel: "Use Passcode",
+          cancelLabel: "Cancel",
+        });
+        authenticated = result.success;
+      } else {
+        authenticated = true;
+      }
+
+      if (authenticated) {
+        if (activeSos) {
+          await cancelSosAlert(activeSos.id, "Cancelled by user verification");
+        }
+        setAlertActive(false);
+        setActiveSos(null);
+        setSosResponders([]);
+        scaleAnim.setValue(1);
+        setSosBroadcastState("locating");
+        setSosBroadcastError(null);
+      } else {
+        Alert.alert(
+          "Authentication Required",
+          "Biometric verification or passcode is required to stop an active emergency broadcast."
+        );
+      }
+    } catch (err) {
+      console.error("Biometric cancellation error:", err);
+    }
   };
 
   // Derived Trusted Network contacts
@@ -426,45 +701,176 @@ const Home = () => {
       </Modal>
 
       {/* SOS BROADCASTING OVERLAY */}
-      <Modal visible={alertActive} transparent={true} animationType="slide">
-        <View
-          style={[styles.overlayBg, { backgroundColor: Colors.light.primary }]}
-        >
-          <View style={styles.broadcastContainer}>
-            <Radio
-              size={80}
-              color={Colors.light.textInverse}
-              style={styles.broadcastIcon}
-            />
-            <Text style={styles.broadcastTitle}>
-              EMERGENCY BROADCAST ACTIVE
-            </Text>
-            <Text style={styles.broadcastSub}>
-              Your live location is being monitored in real time by KNUST
-              security and verified responders
-            </Text>
+      <Modal visible={alertActive} transparent={true} animationType="slide" statusBarTranslucent>
+        <View style={styles.senderOverlayBg}>
+          <ScrollView
+            contentContainerStyle={styles.senderScrollContent}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
+            <View style={styles.senderContentWrapper}>
+              {/* Top Emergency Icon with glowing circular badge */}
+              <View style={styles.senderIconWrapper}>
+                <Radio
+                  size={36}
+                  color="#FFFFFF"
+                />
+              </View>
 
-            <View style={styles.broadcastCard}>
-              <Text style={styles.broadcastCardTitle}>Broadcast Details</Text>
-              <Text style={styles.broadcastCardText}>
-                • Location: Science Block Area
+              {/* Top Header Badge */}
+              <View style={styles.senderBadgeContainer}>
+                <Radio size={13} color="#FFFFFF" />
+                <Text style={styles.senderBadgeText}>
+                  EMERGENCY SOS BROADCAST ACTIVE
+                </Text>
+              </View>
+
+              {/* Main Alert Headline */}
+              <Text style={styles.senderModalTitle}>
+                🚨 YOUR SOS BEACON IS LIVE
               </Text>
-              <Text style={styles.broadcastCardText}>
-                • Coords: 6.6751° N, 1.5715° W
-              </Text>
-              <Text style={styles.broadcastCardText}>
-                • Status: Security Dispatched
-              </Text>
+
+              {/* Rich Caller Profile Card */}
+              <View style={styles.senderProfileRow}>
+                {userProfile?.profile_image_url ? (
+                  <Image
+                    source={{ uri: userProfile.profile_image_url }}
+                    style={styles.senderProfileAvatar}
+                  />
+                ) : (
+                  <View style={styles.senderProfileAvatarPlaceholder}>
+                    <Text style={styles.senderProfileAvatarInitial}>
+                      {(userProfile?.name || "U").charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.senderProfileTextCol}>
+                  <Text style={styles.senderProfileName}>
+                    {userProfile?.name || "You (ResQ Resident)"}
+                  </Text>
+                  <Text style={styles.senderProfileSubtext}>
+                    {userProfile?.program_of_study
+                      ? `${userProfile.program_of_study} • `
+                      : userProfile?.role
+                        ? `${userProfile.role.toUpperCase()} • `
+                        : ""}
+                    Broadcasting Safety Circle & Security
+                  </Text>
+                </View>
+              </View>
+
+              {/* In-Overlay Live Progress Status Pill */}
+              <View style={styles.statusIndicatorRow}>
+                {sosBroadcastState === "locating" && (
+                  <View style={styles.statusPill}>
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.statusPillText}>Locating precise GPS fix…</Text>
+                  </View>
+                )}
+                {sosBroadcastState === "uploading" && (
+                  <View style={styles.statusPill}>
+                    <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.statusPillText}>Transmitting alert to dispatch…</Text>
+                  </View>
+                )}
+                {sosBroadcastState === "broadcasting" && (
+                  <View style={[styles.statusPill, styles.statusPillActive]}>
+                    <CheckCircle2 size={15} color="#4ADE80" style={{ marginRight: 6 }} />
+                    <Text style={styles.statusPillText}>Live continuous GPS stream active</Text>
+                  </View>
+                )}
+                {sosBroadcastState === "failed" && (
+                  <View style={[styles.statusPill, styles.statusPillFailed]}>
+                    <AlertTriangle size={15} color="#FCA5A5" style={{ marginRight: 6 }} />
+                    <Text style={styles.statusPillText}>
+                      {sosBroadcastError || "Alert broadcast failed"}
+                    </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Background Location Paused Warning Banner */}
+              {isLocationPaused && (
+                <View style={styles.pausedBanner}>
+                  <AlertTriangle size={18} color="#9A3412" />
+                  <Text style={styles.pausedBannerText}>
+                    Live location stream paused while app is backgrounded. Reopen app to keep updating location.
+                  </Text>
+                </View>
+              )}
+
+              {/* Live Location / Coordinates Info Box */}
+              <View style={styles.senderInfoBox}>
+                <View style={styles.senderInfoRow}>
+                  <MapPin size={18} color="#FFFFFF" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.senderInfoRowHeader}>Live GPS Coordinates (Google Maps format)</Text>
+                    <Text style={styles.senderCoordinatesText}>
+                      {currentCoords
+                        ? `${currentCoords.lat.toFixed(6)}, ${currentCoords.lng.toFixed(6)}`
+                        : "Acquiring live GPS..."}
+                    </Text>
+                  </View>
+                  <View style={styles.livePulsingDot} />
+                </View>
+
+                <View style={styles.senderInfoRow}>
+                  <ShieldAlert size={18} color="#FFFFFF" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.senderInfoRowHeader}>Security Dispatch</Text>
+                    <Text style={styles.senderInfoText}>
+                      KNUST Campus Security & Safety Circle Notified
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Retry Button if broadcast failed */}
+              {sosBroadcastState === "failed" && (
+                <TouchableOpacity
+                  style={styles.retryButton}
+                  onPress={() => triggerSosAlertCreation()}
+                >
+                  <RefreshCw size={16} color="#FFFFFF" />
+                  <Text style={styles.retryButtonText}>RETRY BROADCAST</Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Realtime Responders List */}
+              <View style={styles.respondersCard}>
+                <Text style={styles.respondersTitle}>
+                  Active Responders ({sosResponders.length})
+                </Text>
+                {sosResponders.length > 0 ? (
+                  <ScrollView style={{ maxHeight: 85 }} nestedScrollEnabled>
+                    {sosResponders.map((res) => (
+                      <View key={res.id} style={styles.responderRow}>
+                        <UserCheck size={16} color="#4ADE80" />
+                        <Text style={styles.responderName}>{res.name}</Text>
+                        <Text style={styles.responderSourceBadge}>
+                          {res.responder_source === "trusted_contact"
+                            ? "Trusted Network"
+                            : "Nearby ResQ User"}
+                        </Text>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Text style={styles.noRespondersText}>
+                    Waiting for nearby users or trusted contacts to commit help...
+                  </Text>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={styles.stopButton}
+                onPress={stopSOSBroadcast}
+              >
+                <ShieldAlert size={20} color={ResQColors.primaryRed} />
+                <Text style={styles.stopButtonText}>STOP BROADCAST</Text>
+              </TouchableOpacity>
             </View>
-
-            <TouchableOpacity
-              style={styles.stopButton}
-              onPress={stopSOSBroadcast}
-            >
-              <X size={20} color={Colors.light.primary} />
-              <Text style={styles.stopButtonText}>STOP BROADCAST</Text>
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -963,64 +1369,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontFamily: typography.regular,
   },
-  broadcastContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 24,
-  },
-  broadcastIcon: {
-    marginBottom: 20,
-  },
-  broadcastTitle: {
-    color: Colors.light.textInverse,
-    fontSize: 24,
-    fontFamily: typography.bold,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  broadcastSub: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 14,
-    fontFamily: typography.regular,
-    textAlign: "center",
-    lineHeight: 20,
-    marginBottom: 30,
-  },
-  broadcastCard: {
-    backgroundColor: "rgba(255,255,255,0.15)",
-    padding: 20,
-    borderRadius: 16,
-    width: "100%",
-    marginBottom: 40,
-    gap: 8,
-  },
-  broadcastCardTitle: {
-    color: Colors.light.textInverse,
-    fontSize: 16,
-    fontFamily: typography.bold,
-    marginBottom: 4,
-  },
-  broadcastCardText: {
-    color: Colors.light.textInverse,
-    fontSize: 14,
-    fontFamily: typography.medium,
-  },
-  stopButton: {
-    backgroundColor: ResQColors.cardSurface,
-    flexDirection: "row",
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 30,
-    alignItems: "center",
-    elevation: 4,
-  },
-  stopButtonText: {
-    color: Colors.light.primary,
-    fontFamily: typography.bold,
-    fontSize: 16,
-  },
+
   callingCard: {
     backgroundColor: Colors.light.primary,
     padding: 30,
@@ -1402,6 +1751,278 @@ const styles = StyleSheet.create({
     color: Colors.light.textMuted,
     textAlign: "center",
     lineHeight: 17,
+  },
+  pausedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#FFEDD5",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#FDBA74",
+  },
+  pausedBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: typography.medium,
+    color: "#9A3412",
+    lineHeight: 16,
+  },
+  respondersCard: {
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.12)",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 20,
+  },
+  respondersTitle: {
+    fontSize: 13,
+    fontFamily: typography.bold,
+    color: Colors.light.textInverse,
+    marginBottom: 8,
+  },
+  responderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 6,
+    borderBottomWidth: 0.5,
+    borderBottomColor: "rgba(255,255,255,0.2)",
+  },
+  responderName: {
+    fontSize: 13,
+    fontFamily: typography.semibold,
+    color: Colors.light.textInverse,
+    flex: 1,
+  },
+  responderSourceBadge: {
+    fontSize: 10,
+    fontFamily: typography.medium,
+    color: Colors.light.textInverse,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  noRespondersText: {
+    fontSize: 12,
+    fontFamily: typography.regular,
+    color: "rgba(255, 255, 255, 0.8)",
+    fontStyle: "italic",
+  },
+  senderOverlayBg: {
+    flex: 1,
+    backgroundColor: ResQColors.primaryRed,
+  },
+  senderScrollContent: {
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: Platform.OS === "android" ? 36 : 24,
+  },
+  senderContentWrapper: {
+    width: "100%",
+    maxWidth: 420,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  senderIconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+  },
+  senderBadgeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  senderBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11.5,
+    fontFamily: typography.bold,
+    letterSpacing: 0.8,
+  },
+  senderModalTitle: {
+    fontSize: 21,
+    fontFamily: typography.bold,
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 14,
+  },
+  senderProfileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    padding: 14,
+    borderRadius: 16,
+    width: "100%",
+    marginBottom: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  senderProfileAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  senderProfileAvatarPlaceholder: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  senderProfileAvatarInitial: {
+    fontSize: 18,
+    fontFamily: typography.bold,
+    color: "#FFFFFF",
+  },
+  senderProfileTextCol: {
+    flex: 1,
+  },
+  senderProfileName: {
+    fontSize: 16,
+    fontFamily: typography.bold,
+    color: "#FFFFFF",
+  },
+  senderProfileSubtext: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.85)",
+    fontFamily: typography.regular,
+    marginTop: 2,
+  },
+  senderInfoBox: {
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  senderInfoRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  senderInfoRowHeader: {
+    fontSize: 11,
+    fontFamily: typography.bold,
+    color: "rgba(255, 255, 255, 0.9)",
+    letterSpacing: 0.4,
+  },
+  senderCoordinatesText: {
+    fontSize: 13.5,
+    fontFamily: typography.bold,
+    color: "#FFFFFF",
+    marginTop: 1,
+  },
+  senderInfoText: {
+    fontSize: 12.5,
+    fontFamily: typography.medium,
+    color: "rgba(255, 255, 255, 0.9)",
+    marginTop: 1,
+  },
+  livePulsingDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#4ADE80",
+    borderWidth: 1.5,
+    borderColor: "#FFFFFF",
+  },
+  statusIndicatorRow: {
+    width: "100%",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.25)",
+  },
+  statusPillActive: {
+    backgroundColor: "rgba(74, 222, 128, 0.25)",
+    borderColor: "#86EFAC",
+  },
+  statusPillFailed: {
+    backgroundColor: "rgba(239, 68, 68, 0.35)",
+    borderColor: "#FCA5A5",
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontFamily: typography.semibold,
+    color: "#FFFFFF",
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  retryButtonText: {
+    fontSize: 13,
+    fontFamily: typography.bold,
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
+  stopButton: {
+    width: "100%",
+    backgroundColor: "#FFFFFF",
+    flexDirection: "row",
+    gap: 8,
+    paddingVertical: 15,
+    borderRadius: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    marginTop: 4,
+  },
+  stopButtonText: {
+    color: ResQColors.primaryRed,
+    fontFamily: typography.bold,
+    fontSize: 15,
+    letterSpacing: 0.5,
   },
 });
 

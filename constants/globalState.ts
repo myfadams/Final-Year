@@ -1,5 +1,6 @@
 import { UserProfile } from "@/backend/auth";
 import { Person } from "@/constants/interfaces";
+import type { ActiveSosMonitoringPin } from "@/components/MapViewComponent";
 
 export interface SharedLocationPin {
   id: string;
@@ -22,6 +23,7 @@ export const globalState = {
   activeEmergencyId: null as string | null,
   activeEmergencyPerson: null as Person | null,
   activeSharedLocation: null as SharedLocationPin | null,
+  activeSosMonitoring: null as ActiveSosMonitoringPin | null,
   isWalkSafeRoutingActive: false as boolean,
   userProfile: null as UserProfile | null,
 };
