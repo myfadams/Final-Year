@@ -17,6 +17,8 @@ import ChatMessageItem from "@/components/chat/ChatMessageItem";
 import ChatPillsRow, { PillItem } from "@/components/chat/ChatPillsRow";
 import ContactDetailsModal from "@/components/chat/ContactDetailsModal";
 import MediaViewerModal from "@/components/chat/MediaViewerModal";
+import { showPopupAlert } from "@/components/popupAlert";
+import { useWalkSafe } from "@/components/WalkSafeContext";
 import { ResQColors } from "@/constants/Colors";
 import { ChatMessage } from "@/constants/interfaces";
 import { typography } from "@/constants/typograyph";
@@ -24,16 +26,14 @@ import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { MapPin } from "lucide-react-native";
-import { showPopupAlert } from "@/components/popupAlert";
+import { MapPin, ShieldAlert, CheckCircle } from "lucide-react-native";
+import { supabase } from "@/backend/supabaseConfig";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Keyboard,
   KeyboardAvoidingView,
   NativeScrollEvent,
-
   NativeSyntheticEvent,
   Platform,
   ScrollView,
@@ -68,6 +68,8 @@ export default function ContactChatScreen() {
   // State Management
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
+  
+  const { activeSessionMessageId, startWalkSafeTracking, stopWalkSafeTracking } = useWalkSafe();
   const [contactModalVisible, setContactModalVisible] = useState(false);
 
   // Loading & Pagination State
@@ -176,6 +178,7 @@ export default function ContactChatScreen() {
 
           if (chat) {
             resolvedChatId = chat.id;
+            setIsWalkSafeActive(chat.safewalk_active || false);
           } else if (chatErr) {
             console.warn("Could not create/get chat row:", chatErr);
           }
@@ -246,6 +249,9 @@ export default function ContactChatScreen() {
               });
 
               setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+            },
+            (updatedChat) => {
+              setIsWalkSafeActive(updatedChat.safewalk_active || false);
             }
           );
         }
@@ -988,11 +994,13 @@ export default function ContactChatScreen() {
       pathname: "/(resident)/map",
       params: {
         sharedLocationId: `loc_${msg.id}`,
+        chatId: activeChatId,
+        senderId: msg.senderId || currentUserId,
         senderName,
         senderAvatar,
         lat: coords.latitude.toString(),
         lng: coords.longitude.toString(),
-        locationType: "location_share",
+        locationType: msg.type === "walk_safe" ? "walk_safe" : "location_share",
         timestampText: msg.locationTimestampText || "Shared Location",
         createdAt: (msg.createdTimestamp || Date.now()).toString(),
         hasImOkay: "false",
@@ -1000,6 +1008,9 @@ export default function ContactChatScreen() {
       },
     });
   };
+
+  const latestWalkSafeMsg = [...messages].reverse().find(m => m.type === "walk_safe");
+  const amISendingWalkSafe = latestWalkSafeMsg?.sender === "me";
 
   const handleShareLocation = async () => {
     let coords = { latitude: 6.6751, longitude: -1.5715 };
@@ -1058,8 +1069,162 @@ export default function ContactChatScreen() {
     }
   };
 
-  // Quick Action Pills (ignoring walk_safe and im_okay)
+  const handleWalkSafe = async () => {
+    if (isWalkSafeActive) {
+      // Stop Walk Safe
+      setIsWalkSafeActive(false);
+      stopWalkSafeTracking();
+      
+      if (!activeChatId || !currentUserId) return;
+      await supabase.from("private_chat").update({ safewalk_active: false, safewalk_ended_at: new Date().toISOString() }).eq("id", activeChatId);
+
+      await sendChatMessage({
+        chatId: activeChatId,
+        senderId: currentUserId,
+        senderName: currentUserName,
+        senderRole: currentUserRole,
+        senderAvatarUrl: currentUserAvatar,
+        type: "walk_safe",
+        textContent: `${currentUserName} ended their Walk Safe session.`,
+      });
+      return;
+    }
+
+    // Start Walk Safe
+    setIsWalkSafeActive(true);
+
+    let coords = { latitude: 6.6751, longitude: -1.5715 };
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status === "granted") {
+        const currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        coords = { latitude: currentLoc.coords.latitude, longitude: currentLoc.coords.longitude };
+      }
+    } catch (err) {
+      console.warn("GPS fallback:", err);
+    }
+
+    if (!activeChatId || !currentUserId) {
+      const walkMsg: ChatMessage = {
+        id: Date.now().toString(),
+        sender: "me",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        type: "walk_safe",
+        text: `${currentUserName} requested a Walk Safe session • Track live movement on map`,
+        locationTimestampText: "Live GPS • Tracking Started",
+        locationCoords: coords,
+        createdTimestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, walkMsg]);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
+
+    await supabase.from("private_chat").update({ safewalk_active: true, safewalk_started_at: new Date().toISOString() }).eq("id", activeChatId);
+
+    const { message, error } = await sendChatMessage({
+      chatId: activeChatId,
+      senderId: currentUserId,
+      senderName: currentUserName,
+      senderRole: currentUserRole,
+      senderAvatarUrl: currentUserAvatar,
+      type: "walk_safe",
+      locationLat: coords.latitude,
+      locationLng: coords.longitude,
+      locationLabel: "Live Walk Safe Tracker",
+      locationTimestampText: "Live GPS • Tracking Started",
+      textContent: `${currentUserName} requested a Walk Safe session • Track live movement on map`,
+    });
+
+    if (error) {
+      showPopupAlert("Walk Safe Error", error, undefined, undefined, "error");
+      setIsWalkSafeActive(false);
+      stopWalkSafeTracking();
+      await supabase.from("private_chat").update({ safewalk_active: false }).eq("id", activeChatId);
+    } else if (message) {
+      const realMsg = mapDbMessageToChatMessage(message, currentUserId);
+      startWalkSafeTracking(realMsg.id, "private_chat_messages");
+      setMessages((prev) => (prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg]));
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  };
+
+  const handleImOkay = async () => {
+    if (!amISendingWalkSafe) {
+      showPopupAlert("Permission Denied", "Only the person who started this Walk Safe session can mark it as okay.", undefined, undefined, "warning");
+      return;
+    }
+
+    if (!activeChatId || !currentUserId) {
+      const msg: ChatMessage = {
+        id: Date.now().toString(),
+        sender: "me",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        type: "im_okay",
+        text: "I am okay.",
+      };
+      setMessages((prev) => [...prev, msg]);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      return;
+    }
+
+    const tempId = `temp_${Date.now()}`;
+    const tempMsg: ChatMessage = {
+      id: tempId,
+      chatId: activeChatId,
+      senderId: currentUserId,
+      sender: "me",
+      senderName: currentUserName,
+      senderRole: currentUserRole,
+      senderAvatar: currentUserAvatar,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      type: "im_okay",
+      text: "I am okay. Feeling safe now.",
+      createdTimestamp: Date.now(),
+    };
+
+    setMessages((prev) => [...prev, tempMsg]);
+    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+
+    const nowIso = new Date().toISOString();
+    await supabase.from("private_chat").update({ 
+      im_okay_last_sent_by: currentUserId, 
+      im_okay_sent_at: nowIso,
+      safewalk_active: false,
+      safewalk_ended_at: nowIso
+    }).eq("id", activeChatId);
+
+    setIsWalkSafeActive(false);
+    stopWalkSafeTracking();
+
+    const { message, error } = await sendChatMessage({
+      chatId: activeChatId,
+      senderId: currentUserId,
+      senderName: currentUserName,
+      senderRole: currentUserRole,
+      senderAvatarUrl: currentUserAvatar,
+      type: "im_okay",
+      textContent: "I am okay. Feeling safe now.",
+    });
+
+    if (error) {
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      showPopupAlert("Sending Failed", error, undefined, undefined, "error");
+    } else if (message) {
+      const realMsg = mapDbMessageToChatMessage(message, currentUserId);
+      setMessages((prev) => {
+        const updated = prev.some((m) => m.id === realMsg.id)
+          ? prev.filter((m) => m.id !== tempId)
+          : prev.map((m) => (m.id === tempId ? realMsg : m));
+        if (activeChatId) setCachedChatMessages(activeChatId, updated);
+        return updated;
+      });
+    }
+  };
+
   const contactPills: PillItem[] = [
+    ...(isWalkSafeActive ? [] : [{ label: "Walk Safe", action: "walk_safe", icon: ShieldAlert } as PillItem]),
+    ...(isWalkSafeActive && amISendingWalkSafe ? [{ label: "I'm Okay", action: "im_okay", icon: CheckCircle } as PillItem] : []),
     { label: "Share Location", action: "location", icon: MapPin },
     { label: "On my way", action: "text" },
     { label: "Are you safe?", action: "text" },
@@ -1070,6 +1235,10 @@ export default function ContactChatScreen() {
   const handlePillPress = (item: PillItem) => {
     if (item.action === "location") {
       handleShareLocation();
+    } else if (item.action === "walk_safe") {
+      handleWalkSafe();
+    } else if (item.action === "im_okay") {
+      handleImOkay();
     } else {
       setInputText(item.label);
     }
@@ -1085,7 +1254,7 @@ export default function ContactChatScreen() {
         onBackPress={() => router.back()}
         onCallPress={() => showPopupAlert("Calling", `Initiating direct call to ${headerName}...`, undefined, undefined, "info")}
         onOptionsPress={() => setContactModalVisible(true)}
-        isWalkSafeActive={false}
+        isWalkSafeActive={isWalkSafeActive}
       />
 
       {/* Main Chat Body & Keyboard View */}

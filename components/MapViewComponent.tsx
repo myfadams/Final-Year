@@ -7,7 +7,8 @@ import * as Location from "expo-location";
 import { BriefcaseMedical, Flame, Shield, ShieldAlert } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import MapView, { Marker, Polyline } from "react-native-maps";
+import MapView, { Polyline } from "react-native-maps";
+import { SafeMarker as Marker, isValidCoordinate } from "@/components/SafeMarker";
 
 // Helper to resolve incident category type
 const getIncidentType = (person: Person): "medical" | "fire" | "security" => {
@@ -135,6 +136,30 @@ const getMinDistanceToPolyline = (
     }
   }
   return minDistance;
+};
+
+// Trims a polyline, keeping only the portion from the closest segment to the end
+const trimPolylineToLocation = (
+  point: { latitude: number; longitude: number },
+  polyline: { latitude: number; longitude: number }[]
+) => {
+  if (!polyline || polyline.length <= 1) return polyline;
+
+  let minDistance = Infinity;
+  let closestSegmentIndex = 0;
+
+  // Find the closest line segment
+  for (let i = 0; i < polyline.length - 1; i++) {
+    const dist = getDistanceToSegmentInMeters(point, polyline[i], polyline[i + 1]);
+    if (dist < minDistance) {
+      minDistance = dist;
+      closestSegmentIndex = i;
+    }
+  }
+
+  // Keep the current position as the new start, followed by the remaining nodes
+  const trimmed = [point, ...polyline.slice(closestSegmentIndex + 1)];
+  return trimmed;
 };
 
 // Fallback grid route generator
@@ -295,6 +320,8 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   } | null>(null);
   const lastTravelModeRef = useRef<string | null>(null);
   const currentRouteCoordsRef = useRef<any[]>([]);
+  const lastTrimTimeRef = useRef<number>(0);
+  const lastTrimLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
   // Dynamic helper for person coordinates
   const getAdjustedPerson = React.useCallback(
@@ -614,10 +641,43 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     travelMode,
   ]);
 
-  // Handle active emergency victim position updates and jitter simulation
+  // Live-updating route trimming (throttled)
+  useEffect(() => {
+    if (!location || !isValidCoordinate(location.latitude, location.longitude)) return;
+    if (currentRouteCoordsRef.current.length === 0) return;
+
+    const now = Date.now();
+    const timeSinceLastTrim = now - lastTrimTimeRef.current;
+    
+    let distSinceLastTrim = Infinity;
+    if (lastTrimLocationRef.current) {
+      distSinceLastTrim = getDistanceInMeters(
+        lastTrimLocationRef.current.latitude,
+        lastTrimLocationRef.current.longitude,
+        location.latitude,
+        location.longitude
+      );
+    }
+
+    // Throttle: 5 seconds or 10 meters
+    if (timeSinceLastTrim >= 5000 || distSinceLastTrim >= 10) {
+      lastTrimTimeRef.current = now;
+      lastTrimLocationRef.current = location;
+
+      const trimmedRoute = trimPolylineToLocation(location, currentRouteCoordsRef.current);
+      if (trimmedRoute.length !== currentRouteCoordsRef.current.length || 
+          trimmedRoute[0].latitude !== currentRouteCoordsRef.current[0].latitude) {
+        currentRouteCoordsRef.current = trimmedRoute;
+        setRouteCoords(trimmedRoute);
+      }
+    }
+  }, [location]);
+
+  // Handle active emergency victim position updates without simulated jitter
   useEffect(() => {
     if (victimInterval.current) {
       clearInterval(victimInterval.current);
+      victimInterval.current = null;
     }
 
     if (!adjustedActiveEmergency) {
@@ -631,20 +691,6 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       latitude: adjustedActiveEmergency.latitude,
       longitude: adjustedActiveEmergency.longitude,
     });
-
-    victimInterval.current = setInterval(() => {
-      setVictimLocation((prev: any) => {
-        if (!prev) return prev;
-        return {
-          latitude: prev.latitude + (Math.random() - 0.5) * 0.0001,
-          longitude: prev.longitude + (Math.random() - 0.5) * 0.0001,
-        };
-      });
-    }, 3000);
-
-    return () => {
-      if (victimInterval.current) clearInterval(victimInterval.current);
-    };
   }, [adjustedActiveEmergency]);
 
   // Adjust route's end node to exactly follow the jittering victim location

@@ -44,7 +44,8 @@ import {
   View,
 } from "react-native";
 
-import MapView, { Marker } from "react-native-maps";
+import MapView from "react-native-maps";
+import { SafeMarker as Marker } from "@/components/SafeMarker";
 
 type IncidentType = "Medical" | "Fire" | "Security" | "Accident";
 
@@ -99,18 +100,16 @@ export default function ReportScreen() {
     };
   }, []);
 
-
-  // Default coordinate (KNUST Science block area, matches mock data coordinates)
-  const [locationCoords, setLocationCoords] = useState({
-    latitude: 6.6751,
-    longitude: -1.5715,
-    latitudeDelta: 0.005,
-    longitudeDelta: 0.005,
-  });
+  const [locationCoords, setLocationCoords] = useState<{
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  } | null>(null);
 
   const [address, setAddress] = useState({
-    line1: "123 Emergency Way",
-    line2: "New York, NY 10001",
+    line1: "",
+    line2: "",
   });
 
   // Incident types mapping icons & colors using system theme tokens
@@ -184,7 +183,7 @@ export default function ReportScreen() {
     } catch (error) {
       showPopupAlert(
         "Error",
-        "Could not fetch current coordinates. Defaulting to mock location.",
+        "Could not fetch current coordinates. Please ensure location services are enabled.",
         undefined,
         undefined,
         "error"
@@ -715,37 +714,39 @@ export default function ReportScreen() {
 
             <View style={[styles.mapCard, { borderColor: themeBgColor }]}>
               <View style={styles.mapContainer}>
-                <MapView
-                  style={StyleSheet.absoluteFillObject}
-                  region={locationCoords}
-                  scrollEnabled={false}
-                  zoomEnabled={false}
-                  pitchEnabled={false}
-                  rotateEnabled={false}
-                >
-                  <Marker coordinate={locationCoords}>
-                    <View style={styles.customMarkerContainer}>
-                      <View
-                        style={[
-                          styles.customMarkerCircle,
-                          { backgroundColor: markerColor },
-                        ]}
-                      >
-                        <MarkerIcon
-                          size={16}
-                          color={ResQColors.cardSurface}
-                          strokeWidth={2.5}
+                {locationCoords && (
+                  <MapView
+                    style={StyleSheet.absoluteFillObject}
+                    region={locationCoords}
+                    scrollEnabled={false}
+                    zoomEnabled={false}
+                    pitchEnabled={false}
+                    rotateEnabled={false}
+                  >
+                    <Marker coordinate={locationCoords}>
+                      <View style={styles.customMarkerContainer}>
+                        <View
+                          style={[
+                            styles.customMarkerCircle,
+                            { backgroundColor: markerColor },
+                          ]}
+                        >
+                          <MarkerIcon
+                            size={16}
+                            color={ResQColors.cardSurface}
+                            strokeWidth={2.5}
+                          />
+                        </View>
+                        <View
+                          style={[
+                            styles.customMarkerArrow,
+                            { borderTopColor: markerColor },
+                          ]}
                         />
                       </View>
-                      <View
-                        style={[
-                          styles.customMarkerArrow,
-                          { borderTopColor: markerColor },
-                        ]}
-                      />
-                    </View>
-                  </Marker>
-                </MapView>
+                    </Marker>
+                  </MapView>
+                )}
               </View>
               <View style={styles.addressBar}>
                 <View style={styles.addressIconCircle}>

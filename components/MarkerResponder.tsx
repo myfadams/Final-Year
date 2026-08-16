@@ -1,7 +1,7 @@
 import { Person } from "@/constants/interfaces";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
-import { Marker } from "react-native-maps";
+import { SafeMarker as Marker } from "@/components/SafeMarker";
 import PulseRing from "./MapPulseRing";
 
 interface ResponderProps {

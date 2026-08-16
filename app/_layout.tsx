@@ -14,6 +14,7 @@ import { NetworkProvider } from "@/components/network";
 import { PopupAlertProvider } from "@/components/popupAlert";
 import { SosAlertProvider } from "@/components/sos/SosAlertContext";
 import { SosAlertOverlay } from "@/components/sos/SosAlertOverlay";
+import { WalkSafeProvider } from "@/components/WalkSafeContext";
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -41,23 +42,25 @@ export default function RootLayout() {
   return (
     <NetworkProvider>
       <PopupAlertProvider>
-        <SosAlertProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="index" />
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(resident)" />
-            <Stack.Screen name="(admin)" />
-            <Stack.Screen name="settingsPage" />
-            <Stack.Screen name="profile" />
-            <Stack.Screen name="report" />
-            <Stack.Screen name="incidentsDetails" />
-            <Stack.Screen name="connect" />
-            <Stack.Screen name="contactChat" />
-            <Stack.Screen name="emergencyChat" />
-            <Stack.Screen name="yourEmergencies" />
-          </Stack>
-          <SosAlertOverlay />
-        </SosAlertProvider>
+        <WalkSafeProvider>
+          <SosAlertProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="index" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(resident)" />
+              <Stack.Screen name="(admin)" />
+              <Stack.Screen name="settingsPage" />
+              <Stack.Screen name="profile" />
+              <Stack.Screen name="report" />
+              <Stack.Screen name="incidentsDetails" />
+              <Stack.Screen name="connect" />
+              <Stack.Screen name="contactChat" />
+              <Stack.Screen name="emergencyChat" />
+              <Stack.Screen name="yourEmergencies" />
+            </Stack>
+            <SosAlertOverlay />
+          </SosAlertProvider>
+        </WalkSafeProvider>
       </PopupAlertProvider>
     </NetworkProvider>
   );

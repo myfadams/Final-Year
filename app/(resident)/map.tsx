@@ -23,6 +23,7 @@ import MapViewComponent, {
 import { showPopupAlert } from "@/components/popupAlert";
 import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatingWindow";
 import { SosMonitoringFloatingWindow } from "@/components/sos/SosMonitoringFloatingWindow";
+import { subscribeToSpecificMessage, subscribeToChatMessages } from "@/backend/chat";
 import Colors from "@/constants/Colors";
 import { globalState, SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
@@ -39,7 +40,7 @@ import {
   SlidersHorizontal,
   Zap,
 } from "lucide-react-native";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Platform,
@@ -58,6 +59,7 @@ export default function LocationScreen() {
   const router = useRouter();
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [activeEmergency, setActiveEmergency] = useState<Person | null>(null);
   const [activeSharedLocation, setActiveSharedLocation] =
@@ -81,6 +83,8 @@ export default function LocationScreen() {
     action?: string;
     recenter?: string;
     sharedLocationId?: string;
+    chatId?: string;
+    senderId?: string;
     senderName?: string;
     senderAvatar?: string;
     lat?: string;
@@ -112,6 +116,7 @@ export default function LocationScreen() {
       (async () => {
         const { user } = await getCurrentUser();
         const userId = user?.id || "";
+        if (isAlive) setCurrentUserId(userId);
 
         const historyMap = userId ? await fetchUserEmergencyHistoryMap(userId) : {};
         if (!userId) return;
@@ -186,6 +191,8 @@ export default function LocationScreen() {
           action,
           recenter,
           sharedLocationId,
+          chatId,
+          senderId,
           senderName,
           senderAvatar,
           lat,
@@ -290,6 +297,8 @@ export default function LocationScreen() {
 
           const newPin: SharedLocationPin = {
             id: sharedLocationId,
+            chatId: chatId,
+            senderId: senderId,
             senderName: senderName || "User",
             senderAvatar: senderAvatar || "",
             latitude,
@@ -311,6 +320,8 @@ export default function LocationScreen() {
 
           router.setParams({
             sharedLocationId: undefined,
+            chatId: undefined,
+            senderId: undefined,
             senderName: undefined,
             senderAvatar: undefined,
             lat: undefined,
@@ -332,20 +343,28 @@ export default function LocationScreen() {
               let creatorName = "Resident in Distress";
               let knownHealth: string[] = [];
 
+              const { data: rec } = await fetchEmergencyById(personId);
+              let finalLat = lat ? parseFloat(lat) : undefined;
+              let finalLng = lng ? parseFloat(lng) : undefined;
+
+              if (rec && (finalLat === undefined || finalLng === undefined)) {
+                if (rec.latitude !== undefined && rec.longitude !== undefined) {
+                  finalLat = rec.latitude;
+                  finalLng = rec.longitude;
+                }
+              }
+
               if (targetCreatorId) {
                 const profile = await fetchUserProfileById(targetCreatorId);
                 if (profile) {
                   creatorName = profile.name;
                   knownHealth = profile.known_health_problems || [];
                 }
-              } else {
-                const { data: rec } = await fetchEmergencyById(personId);
-                if (rec?.creator_id) {
-                  const profile = await fetchUserProfileById(rec.creator_id);
-                  if (profile) {
-                    creatorName = profile.name;
-                    knownHealth = profile.known_health_problems || [];
-                  }
+              } else if (rec?.creator_id) {
+                const profile = await fetchUserProfileById(rec.creator_id);
+                if (profile) {
+                  creatorName = profile.name;
+                  knownHealth = profile.known_health_problems || [];
                 }
               }
 
@@ -356,22 +375,26 @@ export default function LocationScreen() {
               };
               const urgency = urgencyMap[severity || ""] ?? "critical";
 
-              person = {
-                id: personId,
-                name: creatorName,
-                title: title || "Emergency",
-                creatorId: targetCreatorId,
-                address: locationParam || "Location details",
-                avatarColor: "#AF101A",
-                markerColor: "#AF101A",
-                latitude: lat ? parseFloat(lat) : 0,
-                longitude: lng ? parseFloat(lng) : 0,
-                urgency,
-                description: description || title || "",
-                requesterDesc: description || `${title} near ${locationParam}`,
-                knownHealthProblems: knownHealth,
-                falseAlarm: falseAlarmParam === "true",
-              };
+              if (finalLat === undefined || finalLng === undefined) {
+                console.warn("Emergency location is unavailable, skipping map marker generation.");
+              } else {
+                person = {
+                  id: personId,
+                  name: creatorName,
+                  title: title || "Emergency",
+                  creatorId: targetCreatorId,
+                  address: locationParam || "Location details",
+                  avatarColor: "#AF101A",
+                  markerColor: "#AF101A",
+                  latitude: finalLat,
+                  longitude: finalLng,
+                  urgency,
+                  description: description || title || "",
+                  requesterDesc: description || `${title} near ${locationParam}`,
+                  knownHealthProblems: knownHealth,
+                  falseAlarm: falseAlarmParam === "true",
+                };
+              }
             }
 
             if (person) {
@@ -423,6 +446,59 @@ export default function LocationScreen() {
       unsubscribe();
     };
   }, [activeSosMonitoring?.sosId]);
+
+  // Walk Safe Real-time Subscriptions
+  useEffect(() => {
+    const activePin = activeSharedLocation;
+    if (!activePin || activePin.type !== "walk_safe") return;
+
+    // The sharedLocationId is formatted as "loc_${msg.id}".
+    const msgId = activePin.id.replace("loc_", "");
+    
+    // 1. Subscribe to location updates on the specific walk_safe message row
+    const unsubMessage = subscribeToSpecificMessage(msgId, (payload) => {
+      if (payload.location_lat && payload.location_lng) {
+        setActiveSharedLocation((prev) => {
+          if (prev && prev.id === activePin.id) {
+            return {
+              ...prev,
+              latitude: payload.location_lat,
+              longitude: payload.location_lng,
+            };
+          }
+          return prev;
+        });
+      }
+    });
+
+    // 2. Subscribe to chat row for "I'm okay" updates if we have the chatId
+    let unsubChat: (() => void) | null = null;
+    if (activePin.chatId) {
+      unsubChat = subscribeToChatMessages(activePin.chatId, () => {}, (updatedChat) => {
+        if (updatedChat.im_okay_sent_at) {
+          setActiveSharedLocation((prev) => {
+            if (prev && prev.id === activePin.id && !prev.hasImOkay) {
+              return {
+                ...prev,
+                hasImOkay: true,
+                imOkayTimestamp: new Date(updatedChat.im_okay_sent_at).getTime(),
+              };
+            }
+            return prev;
+          });
+        }
+        
+        if (updatedChat.safewalk_active === false && updatedChat.safewalk_ended_at) {
+          // The Walk Safe session ended. We could auto-dismiss the pin, or just leave it.
+        }
+      });
+    }
+
+    return () => {
+      unsubMessage();
+      if (unsubChat) unsubChat();
+    };
+  }, [activeSharedLocation?.id, activeSharedLocation?.type, activeSharedLocation?.chatId]);
 
   // 5-minute pin auto-dismissal timer for snapshot location sharing pins
   useEffect(() => {
@@ -927,6 +1003,7 @@ export default function LocationScreen() {
         !activeSharedLocation.dismissed && (
           <SharedLocationFloatingWindow
             pin={activeSharedLocation}
+            currentUserId={currentUserId}
             distance={distance}
             duration={duration}
             onClose={() => {

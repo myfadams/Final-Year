@@ -14,6 +14,21 @@ export interface PrivateChat {
   contact_name: string | null;
   contact_relationship: string | null;
   contact_avatar_url: string | null;
+  safewalk_active: boolean;
+  safewalk_started_at: string | null;
+  safewalk_ended_at: string | null;
+  safewalk_start_lat: number | null;
+  safewalk_start_lng: number | null;
+  safewalk_destination: string | null;
+  location_share_active: boolean;
+  location_share_user_id: string | null;
+  location_share_lat: number | null;
+  location_share_lng: number | null;
+  location_share_label: string | null;
+  location_share_updated_at: string | null;
+  im_okay_last_sent_by: string | null;
+  im_okay_sent_at: string | null;
+  im_okay_expires_at: string | null;
   last_message_at: string | null;
   last_message_preview: string | null;
   created_at: string;
@@ -26,7 +41,7 @@ export interface SendMessageParams {
   senderName?: string;
   senderRole?: string;
   senderAvatarUrl?: string;
-  type: "text" | "audio" | "media" | "location_share";
+  type: "text" | "audio" | "media" | "location_share" | "walk_safe" | "im_okay";
   textContent?: string;
   audioUrl?: string;
   audioDurationSec?: number;
@@ -309,6 +324,10 @@ export async function sendChatMessage(
       preview = mediaType === "video" ? "🎥 Video Attachment" : "📷 Photo Attachment";
     } else if (type === "location_share") {
       preview = "📍 Shared Location";
+    } else if (type === "walk_safe") {
+      preview = "🚶 Walk Safe Session";
+    } else if (type === "im_okay") {
+      preview = "✅ I'm Okay";
     }
 
     const nowIso = new Date().toISOString();
@@ -442,6 +461,73 @@ export function subscribeToChatMessages(
     };
   } catch (err: any) {
     console.warn("subscribeToChatMessages setup notice:", err?.message || err);
+    return () => { };
+  }
+}
+
+/**
+ * Updates the location coordinates of a specific message in `private_chat_messages` or `emergency_chat_messages`.
+ * Used for Walk Safe real-time movement tracking without schema changes.
+ */
+export async function updateMessageLocation(
+  messageId: string,
+  latitude: number,
+  longitude: number,
+  table: "private_chat_messages" | "emergency_chat_messages" = "private_chat_messages"
+): Promise<{ success: boolean; error: string | null }> {
+  try {
+    if (!messageId) return { success: false, error: "Invalid message ID" };
+
+    const { error } = await supabase
+      .from(table)
+      .update({
+        location_lat: latitude,
+        location_lng: longitude,
+      })
+      .eq("id", messageId);
+
+    if (error) throw error;
+    return { success: true, error: null };
+  } catch (err: any) {
+    console.warn("updateMessageLocation exception:", err?.message || err);
+    return { success: false, error: err?.message || "Failed to update location" };
+  }
+}
+
+/**
+ * Subscribes to Supabase Realtime changes for a specific message row.
+ * Used by the recipient map to track the moving sender.
+ */
+export function subscribeToSpecificMessage(
+  messageId: string,
+  onUpdate: (payload: any) => void,
+  table: "private_chat_messages" | "emergency_chat_messages" = "private_chat_messages"
+): () => void {
+  try {
+    const channel = createSafeRealtimeChannel(`message-tracker-${messageId}`, (ch) =>
+      ch.on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: table,
+          filter: `id=eq.${messageId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            onUpdate(payload.new);
+          }
+        }
+      )
+    );
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch (e) { }
+    };
+  } catch (err: any) {
+    console.warn("subscribeToSpecificMessage setup notice:", err?.message || err);
     return () => { };
   }
 }

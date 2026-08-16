@@ -576,52 +576,39 @@ export function parseGeoPoint(
 ): { latitude: number; longitude: number } | null {
   if (!location) return null;
 
+  const validate = (lat: number, lng: number) => {
+    if (isNaN(lat) || isNaN(lng)) return null;
+    if (lat === 0 && lng === 0) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return { latitude: lat, longitude: lng };
+  };
+
   // Direct coordinate object
   if (typeof location === "object") {
-    if (
-      typeof location.latitude === "number" &&
-      typeof location.longitude === "number"
-    ) {
-      return { latitude: location.latitude, longitude: location.longitude };
+    if (typeof location.latitude === "number" && typeof location.longitude === "number") {
+      return validate(location.latitude, location.longitude);
     }
-    if (
-      typeof location.lat === "number" &&
-      typeof location.lng === "number"
-    ) {
-      return { latitude: location.lat, longitude: location.lng };
+    if (typeof location.lat === "number" && typeof location.lng === "number") {
+      return validate(location.lat, location.lng);
     }
-    if (
-      location.type === "Point" &&
-      Array.isArray(location.coordinates) &&
-      location.coordinates.length >= 2
-    ) {
-      return {
-        latitude: Number(location.coordinates[1]),
-        longitude: Number(location.coordinates[0]),
-      };
+    if (location.type === "Point" && Array.isArray(location.coordinates) && location.coordinates.length >= 2) {
+      return validate(Number(location.coordinates[1]), Number(location.coordinates[0]));
     }
   }
 
   if (typeof location === "string") {
     const trimmed = location.trim();
 
-    // 1. Standard WKT: POINT(lng lat) or POINT Z (lng lat alt)
-    const pointMatch = trimmed.match(
-      /POINT\s*(?:Z|M|ZM)?\s*\(\s*([-\d.]+)\s+([-\d.]+)/i
-    );
+    // 1. Standard WKT: POINT(lng lat)
+    const pointMatch = trimmed.match(/POINT\s*(?:Z|M|ZM)?\s*\(\s*([-\d.]+)\s+([-\d.]+)/i);
     if (pointMatch) {
-      const lng = parseFloat(pointMatch[1]);
-      const lat = parseFloat(pointMatch[2]);
-      if (!isNaN(lat) && !isNaN(lng)) {
-        return { latitude: lat, longitude: lng };
-      }
+      return validate(parseFloat(pointMatch[2]), parseFloat(pointMatch[1]));
     }
 
-    // 2. PostGIS EWKB Hex format (e.g., 0101000020E6100000...)
+    // 2. PostGIS EWKB Hex format
     if (/^[0-9a-fA-F]{32,}$/.test(trimmed)) {
       try {
         const isLittleEndian = trimmed.substring(0, 2) === "01";
-        // Check if SRID flag is present in byte 4 (hex chars 8-10)
         const typeHex = trimmed.substring(2, 10);
         const hasSRID = typeHex.toLowerCase().endsWith("20") || typeHex.toLowerCase().endsWith("a0");
         const offset = hasSRID ? 18 : 10;
@@ -638,19 +625,8 @@ export function parseGeoPoint(
           }
           const xView = new DataView(xBuf.buffer);
           const yView = new DataView(yBuf.buffer);
-          const lng = xView.getFloat64(0, isLittleEndian);
-          const lat = yView.getFloat64(0, isLittleEndian);
-
-          if (
-            !isNaN(lat) &&
-            !isNaN(lng) &&
-            lat >= -90 &&
-            lat <= 90 &&
-            lng >= -180 &&
-            lng <= 180
-          ) {
-            return { latitude: lat, longitude: lng };
-          }
+          
+          return validate(yView.getFloat64(0, isLittleEndian), xView.getFloat64(0, isLittleEndian));
         }
       } catch (_) { }
     }

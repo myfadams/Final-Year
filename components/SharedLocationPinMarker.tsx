@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { MapPin, Radio, User } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import { Marker } from "react-native-maps";
+import { SafeMarker as Marker } from "@/components/SafeMarker";
 
 interface SharedLocationPinMarkerProps {
   pin: SharedLocationPin;

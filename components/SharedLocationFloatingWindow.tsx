@@ -2,28 +2,29 @@ import { SharedLocationPin } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
 import {
-    Clock,
-    MapPin,
-    Navigation,
-    PhoneCall,
-    Radio,
-    ShieldCheck,
-    User,
-    X,
+  Clock,
+  MapPin,
+  Navigation,
+  PhoneCall,
+  Radio,
+  ShieldCheck,
+  User,
+  X,
 } from "lucide-react-native";
 import React from "react";
 import {
-    Alert,
-    Linking,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 interface SharedLocationFloatingWindowProps {
   pin: SharedLocationPin;
+  currentUserId?: string | null;
   distance?: string;
   duration?: string;
   onClose: () => void;
@@ -32,8 +33,10 @@ interface SharedLocationFloatingWindowProps {
 
 export const SharedLocationFloatingWindow: React.FC<
   SharedLocationFloatingWindowProps
-> = ({ pin, distance = "--", duration = "--", onClose, onTrackToggle }) => {
+> = ({ pin, currentUserId, distance = "--", duration = "--", onClose, onTrackToggle }) => {
   const isWalkSafe = pin.type === "walk_safe";
+  const isSender = pin.senderId === currentUserId;
+  const canDismiss = !isWalkSafe || isSender;
   const now = Date.now();
 
   // Calculate elapsed time in minutes
@@ -54,28 +57,32 @@ export const SharedLocationFloatingWindow: React.FC<
   // Show "Call Emergency Services" option if walk safe has no "I am okay" message in 60+ mins (1 hour)
   const canCallEmergency = isWalkSafe && !hasImOkay && elapsedMinutes >= 60;
 
+  const displayName = isSender ? "You" : pin.senderName;
+
   // Resolve card header description
   let cardDescription = pin.messageText;
 
   if (isWalkSafe) {
     if (!cardDescription) {
-      cardDescription = `${pin.senderName} requested a walk safe session live map movement`;
+      cardDescription = isSender 
+        ? `You requested a walk safe session live map movement` 
+        : `${displayName} requested a walk safe session live map movement`;
     }
   } else {
     if (isReopenedSnapshot) {
       cardDescription =
         elapsedMinutes > 0
-          ? `${pin.senderName} was here ${elapsedMinutes} minutes ago`
-          : `${pin.senderName} was here some minutes ago`;
+          ? `${displayName} ${isSender ? "were" : "was"} here ${elapsedMinutes} minutes ago`
+          : `${displayName} ${isSender ? "were" : "was"} here some minutes ago`;
     } else if (!cardDescription) {
-      cardDescription = `${pin.senderName} shared location snapshot`;
+      cardDescription = `${displayName} shared location snapshot`;
     }
   }
 
   const handleEmergencyCall = () => {
     Alert.alert(
       "Emergency Services",
-      `Are you sure you want to call emergency services regarding ${pin.senderName}'s unconfirmed Walk Safe session?`,
+      `Are you sure you want to call emergency services regarding ${displayName}'s unconfirmed Walk Safe session?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -92,6 +99,17 @@ export const SharedLocationFloatingWindow: React.FC<
         },
       ],
     );
+  };
+
+  const handleClose = () => {
+    if (isWalkSafe && !isSender) {
+      Alert.alert(
+        "Permission Denied",
+        "Only the person who started this Walk Safe session can dismiss it."
+      );
+      return;
+    }
+    onClose();
   };
 
   return (
@@ -142,14 +160,16 @@ export const SharedLocationFloatingWindow: React.FC<
           </View>
 
           {/* Close / Dismiss Button */}
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={onClose}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            activeOpacity={0.7}
-          >
-            <X size={15} color="#475569" />
-          </TouchableOpacity>
+          {canDismiss && (
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={handleClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <X size={15} color="#475569" />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Sender Profile Header */}
@@ -168,7 +188,7 @@ export const SharedLocationFloatingWindow: React.FC<
           </View>
           <View style={styles.senderInfo}>
             <Text style={styles.senderName} numberOfLines={1}>
-              {pin.senderName}
+              {displayName}
             </Text>
             <Text style={styles.timeElapsedText}>
               {elapsedMinutes > 0 ? `${elapsedMinutes}m ago` : "Just now"}
@@ -195,7 +215,7 @@ export const SharedLocationFloatingWindow: React.FC<
                   style={{ marginRight: 6 }}
                 />
                 <Text style={styles.safeConfirmationText} numberOfLines={1}>
-                  {pin.senderName} confirmed safe (I'm Okay)
+                  {displayName} confirmed safe (I'm Okay)
                 </Text>
               </View>
             ) : (

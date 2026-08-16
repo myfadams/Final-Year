@@ -4,6 +4,8 @@ import type { ActiveSosMonitoringPin } from "@/components/MapViewComponent";
 
 export interface SharedLocationPin {
   id: string;
+  chatId?: string;
+  senderId?: string;
   senderName: string;
   senderAvatar: string;
   latitude: number;
