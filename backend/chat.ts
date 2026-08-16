@@ -4,6 +4,7 @@ import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { getCurrentUser } from "./auth";
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
+import { getFriends } from "./friends";
 import { safeSupabaseRequest } from "./safeRequest";
 
 
@@ -346,6 +347,78 @@ export async function sendChatMessage(
     return { message: null, error: err.message || "Failed to send message" };
   }
 }
+
+/**
+ * Broadcasts a safety feature (Walk Safe, I'm Okay, Location Share) to all trusted contacts.
+ */
+export async function broadcastToTrustedNetwork(
+  type: "walk_safe" | "im_okay" | "location_share",
+  coords?: { lat: number; lng: number }
+): Promise<{ messageIds: string[]; error: string | null }> {
+  try {
+    const { user: currentUser } = await getCurrentUser();
+    if (!currentUser) return { messageIds: [], error: "Not authenticated" };
+
+    const { data: friends, error: friendsError } = await getFriends();
+    if (friendsError) return { messageIds: [], error: friendsError };
+
+    const trustedFriends = friends.filter((f) => f.is_in_trusted_network);
+    if (trustedFriends.length === 0) return { messageIds: [], error: "No trusted contacts found" };
+
+    const createdMessageIds: string[] = [];
+    const nowIso = new Date().toISOString();
+
+    for (const friend of trustedFriends) {
+      const { chat } = await getOrCreatePrivateChat(friend.userId, {
+        name: friend.name,
+        relationship: friend.relationship,
+        avatarUrl: friend.profile_img_url || undefined,
+      });
+
+      if (!chat) continue;
+
+      let textContent = "";
+      if (type === "walk_safe") {
+        textContent = "I have started a Safe Walk session. You can track my live location here.";
+        await supabase.from("private_chat").update({
+          safewalk_active: true,
+          safewalk_started_at: nowIso,
+          safewalk_start_lat: coords?.lat,
+          safewalk_start_lng: coords?.lng,
+        }).eq("id", chat.id);
+      } else if (type === "im_okay") {
+        textContent = "I am okay. Feeling safe now.";
+        await supabase.from("private_chat").update({
+          safewalk_active: false,
+          safewalk_ended_at: nowIso,
+          im_okay_sent_at: nowIso,
+          im_okay_last_sent_by: currentUser.id,
+        }).eq("id", chat.id);
+      } else if (type === "location_share") {
+        textContent = "I shared my real-time location with you.";
+      }
+
+      const { message, error } = await sendChatMessage({
+        chatId: chat.id,
+        senderId: currentUser.id,
+        type,
+        textContent,
+        locationLat: coords?.lat,
+        locationLng: coords?.lng,
+      });
+
+      if (message && message.id) {
+        createdMessageIds.push(message.id);
+      }
+    }
+
+    return { messageIds: createdMessageIds, error: null };
+  } catch (err: any) {
+    console.error("broadcastToTrustedNetwork exception:", err);
+    return { messageIds: [], error: err.message || "Failed to broadcast" };
+  }
+}
+
 
 /**
  * Uploads a local voice note audio file to Supabase Storage in bucket `images` under `privateChatMedia/audio/`.

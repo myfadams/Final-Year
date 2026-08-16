@@ -14,7 +14,9 @@ import {
   subscribeToSosResponders,
   updateSosLocation
 } from "@/backend/sos";
+import { broadcastToTrustedNetwork } from "@/backend/chat";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
+import { useWalkSafe } from "@/components/WalkSafeContext";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import MedicalInfoModal from "@/components/MedicalInfoModal";
@@ -128,6 +130,93 @@ const Home = () => {
   const [locationSharedVisible, setLocationSharedVisible] = useState(false);
   const [addResponderVisible, setAddResponderVisible] = useState(false);
   const [manageModalVisible, setManageModalVisible] = useState(false);
+
+  // Broadcast Confirmation States
+  const [confirmVisible, setConfirmVisible] = useState(false);
+  const [broadcastActionType, setBroadcastActionType] = useState<"walk_safe" | "im_okay" | "location_share" | null>(null);
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+
+  const { startWalkSafeTracking, stopWalkSafeTracking } = useWalkSafe();
+
+  const initiateBroadcast = (type: "walk_safe" | "im_okay" | "location_share") => {
+    setBroadcastActionType(type);
+    setConfirmVisible(true);
+  };
+
+  const executeBroadcast = async () => {
+    setIsBroadcasting(true);
+    try {
+      if (broadcastActionType === "walk_safe") {
+        await handleHomeSafeWalk();
+      } else if (broadcastActionType === "im_okay") {
+        await handleHomeCheckIn();
+      } else if (broadcastActionType === "location_share") {
+        await handleHomeShareLocation();
+      }
+    } finally {
+      setIsBroadcasting(false);
+      setConfirmVisible(false);
+    }
+  };
+
+  const handleHomeSafeWalk = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Location permission is required for Safe Walk.");
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+      
+      const { messageIds, error } = await broadcastToTrustedNetwork("walk_safe", coords);
+      if (error) {
+        Alert.alert("Error", error);
+      } else if (messageIds.length > 0) {
+        startWalkSafeTracking(messageIds);
+        setLocationSharedVisible(true);
+      } else {
+        Alert.alert("Notice", "No trusted contacts found to broadcast to.");
+      }
+    } catch (err) {
+      console.warn("handleHomeSafeWalk error", err);
+    }
+  };
+
+  const handleHomeCheckIn = async () => {
+    try {
+      const { error } = await broadcastToTrustedNetwork("im_okay");
+      if (error) {
+        Alert.alert("Error", error);
+      } else {
+        stopWalkSafeTracking();
+        setCheckInVisible(true);
+      }
+    } catch (err) {
+      console.warn("handleHomeCheckIn error", err);
+    }
+  };
+
+  const handleHomeShareLocation = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission Denied", "Location permission is required to share location.");
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({});
+      const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
+      
+      const { error } = await broadcastToTrustedNetwork("location_share", coords);
+      if (error) {
+        Alert.alert("Error", error);
+      } else {
+        setLocationSharedVisible(true);
+      }
+    } catch (err) {
+      console.warn("handleHomeShareLocation error", err);
+    }
+  };
 
   const fetchMedicalIdData = useCallback(async () => {
     if (!userProfile?.id) return;
@@ -612,7 +701,7 @@ const Home = () => {
               subText="Share location temporarily"
               icon={<Footprints size={22} color={DESIGN_COLORS.tertiary} />}
               iconBgColor={DESIGN_COLORS.surfaceContainer}
-              onPress={() => setLocationSharedVisible(true)}
+              onPress={() => initiateBroadcast("walk_safe")}
             />
             <PrimaryModuleCard
               title="Medical ID"
@@ -631,7 +720,7 @@ const Home = () => {
               subText="Send a quick status update to your network"
               icon={<UserCheck size={22} color={ResQColors.orangeText} />}
               iconBgColor={ResQColors.orangeBg}
-              onPress={() => setCheckInVisible(true)}
+              onPress={() => initiateBroadcast("im_okay")}
             />
             <PrimaryModuleCard
               title="Your Emergencies 🚨"
@@ -652,7 +741,7 @@ const Home = () => {
               subText="with contacts"
               icon={<MapPin size={22} color={Colors.light.primary} />}
               iconBgColor={ResQColors.primaryRedLight}
-              onPress={() => setLocationSharedVisible(true)}
+              onPress={() => initiateBroadcast("location_share")}
             />
             <EmergencyActionCard
               title="Call security"
@@ -1219,6 +1308,73 @@ const Home = () => {
               <ArrowRight size={16} color={Colors.light.primary} />
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      {/* BROADCAST CONFIRMATION MODAL */}
+      <Modal visible={confirmVisible} transparent={true} animationType="fade">
+        <View style={styles.overlayBg}>
+          {(() => {
+            let icon = <ShieldAlert size={28} color={ResQColors.primaryRed} />;
+            let iconBg = ResQColors.primaryRedLight;
+            let title = "Confirm Broadcast";
+            let text = "Are you sure you want to notify your entire trusted network?";
+            let loaderColor = ResQColors.primaryRed;
+
+            if (broadcastActionType === "walk_safe") {
+              icon = <Footprints size={28} color={DESIGN_COLORS.tertiary} />;
+              iconBg = DESIGN_COLORS.surfaceContainer;
+              title = "Start Safe Walk";
+              text = "This will start broadcasting your live location to your trusted network until you arrive.";
+              loaderColor = DESIGN_COLORS.tertiary;
+            } else if (broadcastActionType === "im_okay") {
+              icon = <UserCheck size={28} color={ResQColors.orangeText} />;
+              iconBg = ResQColors.orangeBg;
+              title = "Send Check-In";
+              text = "Send a quick status update to your trusted network letting them know you are safe.";
+              loaderColor = ResQColors.orangeText;
+            } else if (broadcastActionType === "location_share") {
+              icon = <MapPin size={28} color={Colors.light.primary} />;
+              iconBg = ResQColors.primaryRedLight;
+              title = "Share Location";
+              text = "Send a snapshot of your current location to your trusted network.";
+              loaderColor = Colors.light.primary;
+            }
+
+            return (
+              <View style={styles.successCard}>
+                <View style={[styles.contactModalIconBg, { backgroundColor: iconBg }]}>
+                  {icon}
+                </View>
+                <Text style={styles.successHeader}>{title}</Text>
+                <Text style={styles.successText}>{text}</Text>
+                
+                {isBroadcasting ? (
+                  <View style={{ alignItems: "center", paddingVertical: 20 }}>
+                    <HeartBeatWave width={140} color={loaderColor} thickness={4} />
+                    <Text style={{ color: Colors.light.textMuted, marginTop: 12, fontFamily: typography.medium }}>
+                      Broadcasting...
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={{ flexDirection: "row", gap: 12, marginTop: 10, width: "100%" }}>
+                    <TouchableOpacity
+                      style={[styles.modalPrimaryBtn, { backgroundColor: "#F1F5F9", flex: 1 }]}
+                      onPress={() => setConfirmVisible(false)}
+                    >
+                      <Text style={[styles.modalPrimaryBtnText, { color: "#475569" }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modalPrimaryBtn, { flex: 1, backgroundColor: loaderColor }]}
+                      onPress={executeBroadcast}
+                    >
+                      <Text style={styles.modalPrimaryBtnText}>OK</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </View>
+            );
+          })()}
         </View>
       </Modal>
     </SafeAreaView>

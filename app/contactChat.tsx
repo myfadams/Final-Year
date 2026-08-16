@@ -1143,7 +1143,7 @@ export default function ContactChatScreen() {
       await supabase.from("private_chat").update({ safewalk_active: false }).eq("id", activeChatId);
     } else if (message) {
       const realMsg = mapDbMessageToChatMessage(message, currentUserId);
-      startWalkSafeTracking(realMsg.id, "private_chat_messages");
+      startWalkSafeTracking([realMsg.id], "private_chat_messages");
       setMessages((prev) => (prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg]));
       setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
     }

@@ -3,13 +3,13 @@ import * as Location from "expo-location";
 import { updateMessageLocation } from "@/backend/chat";
 
 interface WalkSafeContextType {
-  activeSessionMessageId: string | null;
-  startWalkSafeTracking: (messageId: string, table?: "private_chat_messages" | "emergency_chat_messages") => void;
+  activeSessionMessageIds: string[];
+  startWalkSafeTracking: (messageIds: string[], table?: "private_chat_messages" | "emergency_chat_messages") => void;
   stopWalkSafeTracking: () => void;
 }
 
 const WalkSafeContext = createContext<WalkSafeContextType>({
-  activeSessionMessageId: null,
+  activeSessionMessageIds: [],
   startWalkSafeTracking: () => {},
   stopWalkSafeTracking: () => {},
 });
@@ -17,14 +17,14 @@ const WalkSafeContext = createContext<WalkSafeContextType>({
 export const useWalkSafe = () => useContext(WalkSafeContext);
 
 export const WalkSafeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activeSessionMessageId, setActiveSessionMessageId] = useState<string | null>(null);
+  const [activeSessionMessageIds, setActiveSessionMessageIds] = useState<string[]>([]);
   const activeTableRef = useRef<"private_chat_messages" | "emergency_chat_messages">("private_chat_messages");
   const locationWatcherRef = useRef<Location.LocationSubscription | null>(null);
   const isUpdatingRef = useRef(false);
   const lastUpdateRef = useRef<number>(0);
 
   const stopWalkSafeTracking = () => {
-    setActiveSessionMessageId(null);
+    setActiveSessionMessageIds([]);
     if (locationWatcherRef.current) {
       locationWatcherRef.current.remove();
       locationWatcherRef.current = null;
@@ -32,11 +32,12 @@ export const WalkSafeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const startWalkSafeTracking = async (
-    messageId: string,
+    messageIds: string[],
     table: "private_chat_messages" | "emergency_chat_messages" = "private_chat_messages"
   ) => {
     stopWalkSafeTracking();
-    setActiveSessionMessageId(messageId);
+    if (!messageIds || messageIds.length === 0) return;
+    setActiveSessionMessageIds(messageIds);
     activeTableRef.current = table;
 
     try {
@@ -53,7 +54,7 @@ export const WalkSafeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           timeInterval: 5000,   // Update at most every 5 seconds
         },
         async (location) => {
-          if (!activeSessionMessageId) return; // Wait, this might refer to stale closure state. I will use the messageId argument.
+          if (!messageIds || messageIds.length === 0) return;
           
           // Simple debounce/throttle
           const now = Date.now();
@@ -61,11 +62,16 @@ export const WalkSafeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
           isUpdatingRef.current = true;
           try {
-            await updateMessageLocation(
-              messageId,
-              location.coords.latitude,
-              location.coords.longitude,
-              activeTableRef.current
+            // Update all active message rows with the new coordinates
+            await Promise.all(
+              messageIds.map(id =>
+                updateMessageLocation(
+                  id,
+                  location.coords.latitude,
+                  location.coords.longitude,
+                  activeTableRef.current
+                )
+              )
             );
             lastUpdateRef.current = Date.now();
           } catch (err) {
@@ -87,7 +93,7 @@ export const WalkSafeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   return (
-    <WalkSafeContext.Provider value={{ activeSessionMessageId, startWalkSafeTracking, stopWalkSafeTracking }}>
+    <WalkSafeContext.Provider value={{ activeSessionMessageIds, startWalkSafeTracking, stopWalkSafeTracking }}>
       {children}
     </WalkSafeContext.Provider>
   );
