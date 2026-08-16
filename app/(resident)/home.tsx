@@ -1,6 +1,7 @@
 // import EmergencyActionCard from "@/components/EmergencyActionCard";
 // import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import { getCachedUserProfile, getCurrentUser, getUserProfile, UserProfile } from "@/backend/auth";
+import { broadcastToTrustedNetwork } from "@/backend/chat";
 import { getTrustedContacts, TrustedContactRecord } from "@/backend/contacts";
 import { FriendContact, getFriends } from "@/backend/friends";
 import { getMedicalInfo, MedicalRecord } from "@/backend/medical";
@@ -14,15 +15,14 @@ import {
   subscribeToSosResponders,
   updateSosLocation
 } from "@/backend/sos";
-import { broadcastToTrustedNetwork } from "@/backend/chat";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
-import { useWalkSafe } from "@/components/WalkSafeContext";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import MedicalInfoModal from "@/components/MedicalInfoModal";
 import PrimaryModuleCard from "@/components/PrimaryModuleCard";
 import ProfileComponent from "@/components/ProfileComponent";
 import PulsatingButton from "@/components/PulsatingButton";
+import { useWalkSafe } from "@/components/WalkSafeContext";
 import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { ContactsProp } from "@/constants/interfaces";
@@ -60,6 +60,7 @@ import {
   AppState,
   AppStateStatus,
   Image,
+  Linking,
   Modal,
   Platform,
   SafeAreaView,
@@ -168,7 +169,7 @@ const Home = () => {
       }
       const loc = await Location.getCurrentPositionAsync({});
       const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
-      
+
       const { messageIds, error } = await broadcastToTrustedNetwork("walk_safe", coords);
       if (error) {
         Alert.alert("Error", error);
@@ -206,7 +207,7 @@ const Home = () => {
       }
       const loc = await Location.getCurrentPositionAsync({});
       const coords = { lat: loc.coords.latitude, lng: loc.coords.longitude };
-      
+
       const { error } = await broadcastToTrustedNetwork("location_share", coords);
       if (error) {
         Alert.alert("Error", error);
@@ -288,7 +289,7 @@ const Home = () => {
     if (!activeSos?.id) return;
     const now = Date.now();
     lastLocationRef.current = loc;
-    
+
     // Immediate local state update for dynamic UI coordinates display
     setCurrentCoords({ lat: loc.coords.latitude, lng: loc.coords.longitude });
 
@@ -606,6 +607,20 @@ const Home = () => {
     const target = DEFAULT_CONTACTS.find((c) => c.id === id);
     if (target) target.isTrustedNetwork = false;
   };
+  const handleCall = () => {
+    const phoneUrl = `tel:233554374807`;
+    Linking.canOpenURL(phoneUrl)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(phoneUrl);
+        } else {
+          Alert.alert("Call Contact", `Calling KNUST security`);
+        }
+      })
+      .catch(() => {
+        Alert.alert("Call Contact", `Calling KNUST security`);
+      });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -748,7 +763,8 @@ const Home = () => {
               subText="Campus Security"
               icon={<Phone size={22} color={Colors.light.primary} />}
               iconBgColor={ResQColors.primaryRedLight}
-              onPress={() => setCallModalVisible(true)}
+              // onPress={() => setCallModalVisible(true)}
+              onPress={handleCall}
             />
             <EmergencyActionCard
               title="Report incident"
@@ -1316,10 +1332,10 @@ const Home = () => {
         <View style={styles.overlayBg}>
           {(() => {
             let icon = <ShieldAlert size={28} color={ResQColors.primaryRed} />;
-            let iconBg = ResQColors.primaryRedLight;
+            let iconBg: string = ResQColors.primaryRedLight;
             let title = "Confirm Broadcast";
             let text = "Are you sure you want to notify your entire trusted network?";
-            let loaderColor = ResQColors.primaryRed;
+            let loaderColor: string = ResQColors.primaryRed;
 
             if (broadcastActionType === "walk_safe") {
               icon = <Footprints size={28} color={DESIGN_COLORS.tertiary} />;
@@ -1348,7 +1364,7 @@ const Home = () => {
                 </View>
                 <Text style={styles.successHeader}>{title}</Text>
                 <Text style={styles.successText}>{text}</Text>
-                
+
                 {isBroadcasting ? (
                   <View style={{ alignItems: "center", paddingVertical: 20 }}>
                     <HeartBeatWave width={140} color={loaderColor} thickness={4} />

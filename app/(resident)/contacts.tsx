@@ -10,6 +10,7 @@ import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import ContactActionModal from "@/components/ContactActionModal";
 import Contacts from "@/components/Contacts";
 import HeartBeatWave from "@/components/HeartBeatWave";
+import { showPopupAlert } from "@/components/popupAlert";
 import { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useFocusEffect, useRouter } from "expo-router";
@@ -20,10 +21,12 @@ import {
   Users,
   UsersRound,
 } from "lucide-react-native";
-import { showPopupAlert } from "@/components/popupAlert";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  Alert,
   Image,
+  Linking,
+  // Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -143,15 +146,29 @@ export default function ContactsScreen() {
       if (channel) {
         try {
           supabase.removeChannel(channel);
-        } catch (e) {}
+        } catch (e) { }
       }
     };
   }, [loadFriends]);
 
 
   // ── Action handlers ─────────────────────────────────────────────────────────
-  const handleCallPress = (name: string) => {
-    showPopupAlert("Emergency Call", `Initiating direct call to ${name}...`, undefined, undefined, "info");
+  // const handleCallPress = (name: string) => {
+  //   showPopupAlert("Emergency Call", `Initiating direct call to ${name}...`, undefined, undefined, "info");
+  // };
+  const handleCall = (contactName: string, contactPhone: string) => {
+
+    Linking.canOpenURL(contactPhone)
+      .then((supported) => {
+        if (supported) {
+          Linking.openURL(contactPhone);
+        } else {
+          Alert.alert("Cant Contact", `Calling ${contactName} at ${contactPhone}`);
+        }
+      })
+      .catch(() => {
+        Alert.alert("Cant Contact", `Calling ${contactName} at ${contactPhone}`);
+      });
   };
 
   const handleChatPress = (name: string, contactObj?: any) => {
@@ -475,7 +492,8 @@ export default function ContactsScreen() {
                 avatarColor={contact.avatarColor}
                 avatarTextColor={contact.avatarTextColor}
                 verified={contact.verified}
-                handleCallPress={handleCallPress}
+                // handleCallPress={handleCallPress}
+                handleCallPress={() => (handleCall(contact.name, contact.phone))}
                 handleChatPress={(name, obj) =>
                   handleChatPress(name, { ...obj, userId: contact.userId })
                 }
