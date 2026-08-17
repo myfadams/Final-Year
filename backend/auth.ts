@@ -201,7 +201,7 @@ export async function resetPassword(email: string) {
   try {
     const redirectUrl = getVerifyRedirectUrl("reset-password");
     const options: any = {};
-    if (typeof redirectUrl === "string" && /^https?:\/\//i.test(redirectUrl)) {
+    if (typeof redirectUrl === "string" && redirectUrl.length > 0) {
       options.redirectTo = redirectUrl;
     }
 

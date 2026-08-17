@@ -18,14 +18,14 @@ import {
   TriangleAlert,
   Users,
 } from "lucide-react-native";
-import React from "react";
+import React, { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import CustomButton from "./CustomButton";
 
 interface CaseComponentProps extends caseProp {
   isActiveResponse?: boolean;
   responderStatus?: string | null;
-  onRespondPress?: () => void;
+  onRespondPress?: () => void | Promise<void>;
   onMapPress?: () => void;
 }
 
@@ -48,9 +48,20 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
 }) => {
   const txtColor = getSeverityColors(severity);
   const router = useRouter();
+  const [isResponding, setIsResponding] = useState(false);
 
   const isArrivedStatus = responderStatus === "arrived";
   const isDisabled = (distance > 800 && !isActiveResponse) || isArrivedStatus || Boolean(falseAlarm);
+
+  const handleRespondPress = async () => {
+    if (!onRespondPress) return;
+    setIsResponding(true);
+    try {
+      await onRespondPress();
+    } finally {
+      setIsResponding(false);
+    }
+  };
 
   return (
     <TouchableOpacity
@@ -313,8 +324,9 @@ const CaseComponent: React.FC<CaseComponentProps> = ({
           </View>
           <View style={{ flex: 1 }}>
             <CustomButton
-              onPress={onRespondPress}
-              disabled={isDisabled}
+              onPress={handleRespondPress}
+              disabled={isDisabled || isResponding}
+              isLoading={isResponding}
               Icon={
                 falseAlarm ? (
                   <TriangleAlert color={ResQColors.orangeText} size={19} />

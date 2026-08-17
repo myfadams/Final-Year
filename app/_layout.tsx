@@ -52,7 +52,7 @@ export default function RootLayout() {
               <Stack.Screen name="settingsPage" />
               <Stack.Screen name="profile" />
               <Stack.Screen name="report" />
-              <Stack.Screen name="incidentsDetails" />
+              <Stack.Screen name="IncidentDetails" />
               <Stack.Screen name="connect" />
               <Stack.Screen name="contactChat" />
               <Stack.Screen name="emergencyChat" />

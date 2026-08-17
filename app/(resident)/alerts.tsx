@@ -4,6 +4,7 @@ import {
   EmergencyRecord,
   fetchEmergencies,
   fetchUserEmergencyHistoryMap,
+  recordEmergencyResponse,
   subscribeToEmergencies,
 } from "@/backend/emergencies";
 import { supabase } from "@/backend/supabaseConfig";
@@ -540,6 +541,21 @@ export default function AlertsScreen() {
                       setActiveEmergencyId(null);
                       await cancelEmergencyResponse({ emergencyId: idStr });
                     } else {
+                      const { error } = await recordEmergencyResponse({
+                        emergencyId: idStr,
+                        transportMode: "running",
+                        estimatedArrivalSeconds: 300,
+                      });
+                      if (error) {
+                        showPopupAlert(
+                          "Response Error",
+                          error.message || "Failed to record your response. Please try again.",
+                          undefined,
+                          undefined,
+                          "error"
+                        );
+                        return;
+                      }
                       globalState.activeEmergencyId = idStr;
                       setActiveEmergencyId(idStr);
                       router.push({

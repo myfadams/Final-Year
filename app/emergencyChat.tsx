@@ -1147,7 +1147,7 @@ export default function EmergencyChatScreen() {
                 }}
                 onNavigateToMap={() => {
                   router.push({
-                    pathname: "/incidentDetails",
+                    pathname: "/IncidentDetails",
                     params: { incidentId: emergencyId },
                   } as any);
                 }}
