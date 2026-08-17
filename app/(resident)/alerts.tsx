@@ -131,6 +131,7 @@ export default function AlertsScreen() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const [locationText, setLocationText] = useState("Locating...");
   // Device GPS location — used to compute real distances to each emergency
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const userLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
@@ -194,8 +195,32 @@ export default function AlertsScreen() {
           loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
           userLocationRef.current = loc;
           setUserLocation(loc);
+
+          try {
+            const geocode = await Location.reverseGeocodeAsync(loc);
+            if (geocode && geocode.length > 0) {
+              const address = geocode[0];
+              console.log(address)
+              // const textParts = [address.street || address.name, address.city || address.district, address.region].filter(Boolean);
+              // const textParts = address.name || "";
+              const textParts = address.region + ", " + address.city || "";
+              // if (textParts.length > 0) {
+              //   setLocationText(textParts.join(", "));
+              // } else {
+              //   setLocationText("Location found");
+              // }
+              setLocationText(textParts)
+            } else {
+              setLocationText("Location found");
+            }
+          } catch (_) {
+            setLocationText("Location found");
+          }
         }
-      } catch (_) { /* location unavailable — distances will show as 0 */ }
+      } catch (_) {
+        setLocationText("Location unavailable");
+        /* location unavailable — distances will show as 0 */
+      }
     }
     // if (userId)
     const { data, error } = await fetchEmergencies(userId);
@@ -339,7 +364,7 @@ export default function AlertsScreen() {
         <View style={styles.locationSubtitleRow}>
           <View style={styles.locationHeaderBox}>
             <MapPin size={14} color="#AF101A" style={{ marginRight: 4 }} />
-            <Text style={styles.locationSubtitleText}>Near KNUST campus</Text>
+            <Text style={styles.locationSubtitleText} numberOfLines={1}>{locationText}</Text>
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
