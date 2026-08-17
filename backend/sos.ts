@@ -1,4 +1,4 @@
-import { safeLogError } from "./safeRequest";
+import { safeLogError, safeSupabaseRequest } from "./safeRequest";
 import { supabase, createSafeRealtimeChannel } from "./supabaseConfig";
 
 export interface SosAlert {
@@ -55,23 +55,29 @@ export async function createSosAlert(
 
     const pointWkt = `POINT(${lng} ${lat})`;
 
-    const { data, error } = await supabase
-      .from("sos_alerts")
-      .insert({
-        user_id: user.id,
-        status: "active",
-        location: pointWkt,
-        radius_meters: radiusMeters,
-      })
-      .select()
-      .single();
+    // autoRetry is off here: a silent background retry on an insert would risk creating a
+    // second SOS alert if the user also manually retries after seeing the offline error.
+    const { data, error } = await safeSupabaseRequest<SosAlert>(
+      () =>
+        supabase
+          .from("sos_alerts")
+          .insert({
+            user_id: user.id,
+            status: "active",
+            location: pointWkt,
+            radius_meters: radiusMeters,
+          })
+          .select()
+          .single(),
+      { autoRetry: false }
+    );
 
     if (error) {
       safeLogError("createSosAlert error:", error);
-      return { data: null, error: error.message };
+      return { data: null, error: error.message ?? "Failed to create SOS alert" };
     }
 
-    return { data: data as SosAlert, error: null };
+    return { data, error: null };
   } catch (err: any) {
     const msg = err?.message ?? "Failed to create SOS alert";
     safeLogError("createSosAlert exception:", err);
@@ -92,20 +98,24 @@ export async function cancelSosAlert(
     } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
-    const { error } = await supabase
-      .from("sos_alerts")
-      .update({
-        status: "cancelled",
-        cancelled_at: new Date().toISOString(),
-        cancelled_by: user.id,
-        cancellation_reason: reason || "User cancelled",
-      })
-      .eq("id", sosId)
-      .eq("user_id", user.id);
+    const { error } = await safeSupabaseRequest(
+      () =>
+        supabase
+          .from("sos_alerts")
+          .update({
+            status: "cancelled",
+            cancelled_at: new Date().toISOString(),
+            cancelled_by: user.id,
+            cancellation_reason: reason || "User cancelled",
+          })
+          .eq("id", sosId)
+          .eq("user_id", user.id),
+      { retryId: `cancelSosAlert_${sosId}` }
+    );
 
     if (error) {
       safeLogError("cancelSosAlert error:", error);
-      return { error: error.message };
+      return { error: error.message ?? "Failed to cancel SOS alert" };
     }
 
     return { error: null };
@@ -128,19 +138,23 @@ export async function resolveSosAlert(
     } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
-    const { error } = await supabase
-      .from("sos_alerts")
-      .update({
-        status: "resolved",
-        resolved_at: new Date().toISOString(),
-        resolved_by: user.id,
-      })
-      .eq("id", sosId)
-      .eq("user_id", user.id);
+    const { error } = await safeSupabaseRequest(
+      () =>
+        supabase
+          .from("sos_alerts")
+          .update({
+            status: "resolved",
+            resolved_at: new Date().toISOString(),
+            resolved_by: user.id,
+          })
+          .eq("id", sosId)
+          .eq("user_id", user.id),
+      { retryId: `resolveSosAlert_${sosId}` }
+    );
 
     if (error) {
       safeLogError("resolveSosAlert error:", error);
-      return { error: error.message };
+      return { error: error.message ?? "Failed to resolve SOS alert" };
     }
 
     return { error: null };
@@ -298,20 +312,24 @@ export async function respondToSos(
     } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
-    const { error } = await supabase.from("sos_response_history").upsert(
-      {
-        sos_id: sosId,
-        responder_id: user.id,
-        status: "committed",
-        responder_source: source,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "sos_id,responder_id" }
+    const { error } = await safeSupabaseRequest(
+      () =>
+        supabase.from("sos_response_history").upsert(
+          {
+            sos_id: sosId,
+            responder_id: user.id,
+            status: "committed",
+            responder_source: source,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "sos_id,responder_id" }
+        ),
+      { retryId: `respondToSos_${sosId}_${user.id}` }
     );
 
     if (error) {
       safeLogError("respondToSos error:", error);
-      return { error: error.message };
+      return { error: error.message ?? "Failed to respond to SOS" };
     }
 
     return { error: null };
@@ -334,18 +352,22 @@ export async function withdrawSosResponse(
     } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
-    const { error } = await supabase
-      .from("sos_response_history")
-      .update({
-        status: "withdrawn",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("sos_id", sosId)
-      .eq("responder_id", user.id);
+    const { error } = await safeSupabaseRequest(
+      () =>
+        supabase
+          .from("sos_response_history")
+          .update({
+            status: "withdrawn",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("sos_id", sosId)
+          .eq("responder_id", user.id),
+      { retryId: `withdrawSosResponse_${sosId}_${user.id}` }
+    );
 
     if (error) {
       safeLogError("withdrawSosResponse error:", error);
-      return { error: error.message };
+      return { error: error.message ?? "Failed to withdraw SOS response" };
     }
 
     return { error: null };
@@ -753,18 +775,22 @@ export async function updateSosResponderStatus(
     } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
-    const { error } = await supabase
-      .from("sos_response_history")
-      .update({
-        status,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("sos_id", sosId)
-      .eq("responder_id", user.id);
+    const { error } = await safeSupabaseRequest(
+      () =>
+        supabase
+          .from("sos_response_history")
+          .update({
+            status,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("sos_id", sosId)
+          .eq("responder_id", user.id),
+      { retryId: `updateSosResponderStatus_${sosId}_${user.id}` }
+    );
 
     if (error) {
       safeLogError("updateSosResponderStatus error:", error);
-      return { error: error.message };
+      return { error: error.message ?? "Failed to update responder status" };
     }
 
     return { error: null };
