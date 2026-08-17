@@ -143,18 +143,15 @@ export const SosAlertProvider: React.FC<{ children: React.ReactNode }> = ({
   const activeIncomingAlerts = alerts.filter((a) => !dismissedIds.has(a.id));
   const currentAlert = activeIncomingAlerts[0] || null;
 
-  // Fallback safety-net interval: re-checks active alerts every 15s ONLY while an overlay is showing
+  // Fallback safety-net interval: constantly re-checks active alerts every 10s
+  // This guarantees SOS alerts arrive even if Supabase Realtime drops or isn't enabled for the table.
   useEffect(() => {
-    if (!currentAlert) return;
-
     const interval = setInterval(() => {
       fetchAlerts();
-    }, 15000);
+    }, 10000);
 
-    return () => {
-      clearInterval(interval);
-    };
-  }, [currentAlert, fetchAlerts]);
+    return () => clearInterval(interval);
+  }, [fetchAlerts]);
 
   const respondToCurrentAlert = async (): Promise<boolean> => {
     if (!currentAlert) return false;

@@ -1,5 +1,5 @@
 import { safeLogError } from "./safeRequest";
-import { supabase } from "./supabaseConfig";
+import { supabase, createSafeRealtimeChannel } from "./supabaseConfig";
 
 export interface SosAlert {
   id: string;
@@ -491,42 +491,46 @@ export function subscribeToSosAlerts(
     alertRow?: any
   ) => void
 ) {
-  const channel = supabase
-    .channel(`sos_alerts_lifecycle_${Date.now()}`)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "sos_alerts" },
-      (payload) => {
-        onAlertChange("new_alert", payload.new);
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "sos_alerts" },
-      (payload) => {
-        const oldStatus = payload.old ? (payload.old as any).status : null;
-        const newStatus = payload.new ? (payload.new as any).status : null;
+  const channel = createSafeRealtimeChannel(
+    "sos_alerts_lifecycle",
+    (ch) =>
+      ch
+        .on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "sos_alerts" },
+          (payload) => {
+            onAlertChange("new_alert", payload.new);
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "sos_alerts" },
+          (payload) => {
+            const oldStatus = payload.old ? (payload.old as any).status : null;
+            const newStatus = payload.new ? (payload.new as any).status : null;
 
-        // Check if status transitioned (e.g. active -> resolved/cancelled/expired)
-        const statusChanged =
-          (oldStatus && oldStatus !== newStatus) ||
-          (newStatus && newStatus !== "active");
+            // Check if status transitioned (e.g. active -> resolved/cancelled/expired)
+            const statusChanged =
+              (oldStatus && oldStatus !== newStatus) ||
+              (newStatus && newStatus !== "active");
 
-        if (statusChanged) {
-          // Status change: re-run eligibility / remove overlay immediately
-          onAlertChange("status_changed", payload.new);
-        }
-        // Else: location-only tick, completely ignore in overlay watcher
-      }
-    )
-    .on(
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table: "sos_alerts" },
-      (payload) => {
-        onAlertChange("deleted", payload.old);
-      }
-    )
-    .subscribe();
+            if (statusChanged) {
+              // Status change: re-run eligibility / remove overlay immediately
+              onAlertChange("status_changed", payload.new);
+            } else {
+              // Treat as new alert check just in case we missed the insert
+              onAlertChange("new_alert", payload.new);
+            }
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "DELETE", schema: "public", table: "sos_alerts" },
+          (payload) => {
+            onAlertChange("deleted", payload.old);
+          }
+        )
+  );
 
   return () => {
     supabase.removeChannel(channel);
