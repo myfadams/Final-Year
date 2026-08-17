@@ -6,6 +6,7 @@ import {
   removeFriendRequest,
   searchUsers,
   sendFriendRequest,
+  getFriends,
 } from "@/backend/friends";
 import { createSafeRealtimeChannel, supabase } from "@/backend/supabaseConfig";
 import ConnectHeader from "@/components/connect/ConnectHeader";
@@ -53,12 +54,20 @@ export default function ConnectScreen() {
   const [suggestedUsers, setSuggestedUsers] = useState<FriendSearchResult[]>(
     [],
   );
+  
+  // Cache of accepted friend IDs to ensure the "Friends" icon shows
+  const [friendsIds, setFriendsIds] = useState<Set<string>>(new Set());
 
   const loadPendingAndSuggested = useCallback(async () => {
-    const [pendingResult, suggestedResult] = await Promise.all([
+    const [pendingResult, suggestedResult, friendsResult] = await Promise.all([
       getPendingRequests(),
       getSuggestedUsers(2),
+      getFriends(),
     ]);
+
+    const fIds = new Set((friendsResult.data || []).map((f) => f.userId));
+    setFriendsIds(fIds);
+
     setPendingRequests(pendingResult.data);
     setIsPendingLoading(false);
     setSuggestedUsers(suggestedResult.data);
@@ -262,6 +271,18 @@ export default function ConnectScreen() {
   // ── Derived state ───────────────────────────────────────────────────────────
   const isSearching = searchQuery.trim().length > 0;
 
+  const mappedSearchResults = React.useMemo(() => {
+    return searchResults.map((u) =>
+      friendsIds.has(u.id) ? { ...u, relationship: "accepted" as const } : u
+    );
+  }, [searchResults, friendsIds]);
+
+  const mappedSuggestedUsers = React.useMemo(() => {
+    return suggestedUsers.map((u) =>
+      friendsIds.has(u.id) ? { ...u, relationship: "accepted" as const } : u
+    );
+  }, [suggestedUsers, friendsIds]);
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       {/* Header */}
@@ -303,12 +324,12 @@ export default function ConnectScreen() {
                 <Text style={styles.emptyTitle}>Something went wrong</Text>
                 <Text style={styles.emptySubtext}>{searchError}</Text>
               </View>
-            ) : searchResults.length > 0 ? (
+            ) : mappedSearchResults.length > 0 ? (
               <>
                 <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>
-                  People ({searchResults.length})
+                  People ({mappedSearchResults.length})
                 </Text>
-                {searchResults.map((item) => (
+                {mappedSearchResults.map((item) => (
                   <FriendSearchResultCard
                     key={item.id}
                     item={item}
@@ -356,13 +377,13 @@ export default function ConnectScreen() {
             )}
 
             {/* Suggested Responders Section */}
-            {suggestedUsers.length > 0 && (
+            {mappedSuggestedUsers.length > 0 && (
               <View style={styles.section}>
                 <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>
                   Suggested Responders
                 </Text>
 
-                {suggestedUsers.map((item) => (
+                {mappedSuggestedUsers.map((item) => (
                   <FriendSearchResultCard
                     key={item.id}
                     item={item}
