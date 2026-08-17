@@ -300,9 +300,15 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   const [routeCoords, setRouteCoords] = useState<any[]>([]);
   const [distance, setDistance] = useState("");
   const [duration, setDuration] = useState("");
+  const [deviceHeading, setDeviceHeading] = useState<number | null>(null);
 
   const mapRef = useRef<any>(null);
   const watchRef = useRef<any>(null);
+  const headingWatchRef = useRef<any>(null);
+  const lastAppliedHeadingRef = useRef<number | null>(null);
+  const lastHeadingApplyTimeRef = useRef<number>(0);
+  const wasNavigatingRef = useRef<boolean>(false);
+  const navigationFitTargetRef = useRef<string | null>(null);
   const victimInterval = useRef<any>(null);
 
   const hasCentered = useRef(false);
@@ -359,7 +365,9 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") return;
       const current = await Location.getCurrentPositionAsync({});
-      setLocation(current.coords);
+      if (isValidCoordinate(current.coords.latitude, current.coords.longitude)) {
+        setLocation(current.coords);
+      }
 
       watchRef.current = await Location.watchPositionAsync(
         {
@@ -368,6 +376,9 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           distanceInterval: 10, // Minimum movement 10 meters
         },
         (loc) => {
+          // Reject GPS glitches / null-island fixes outright — never let a bad
+          // sample overwrite the last known-good location.
+          if (!isValidCoordinate(loc.coords.latitude, loc.coords.longitude)) return;
           setLocation((prev: any) => {
             if (prev) {
               const d = getDistanceInMeters(
@@ -527,8 +538,14 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       }
     }
 
-    if (targetLat === null || targetLng === null) {
-      if (routeCoords.length > 0) {
+    const hasValidTarget =
+      targetLat !== null && targetLng !== null && isValidCoordinate(targetLat, targetLng);
+    const hasValidStart = isValidCoordinate(location.latitude, location.longitude);
+
+    if (!hasValidTarget || !hasValidStart) {
+      // Never route toward/from a null-island or otherwise malformed fix —
+      // just hold the last good route (if any) rather than snapping to (0,0).
+      if (!hasValidTarget && routeCoords.length > 0) {
         setRouteCoords([]);
         currentRouteCoordsRef.current = [];
         setDistance("");
@@ -541,7 +558,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       return;
     }
 
-    const currentTarget = { latitude: targetLat, longitude: targetLng };
+    const currentTarget = { latitude: targetLat as number, longitude: targetLng as number };
     const currentStart = {
       latitude: location.latitude,
       longitude: location.longitude,
@@ -680,7 +697,10 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       victimInterval.current = null;
     }
 
-    if (!adjustedActiveEmergency) {
+    if (
+      !adjustedActiveEmergency ||
+      !isValidCoordinate(adjustedActiveEmergency.latitude, adjustedActiveEmergency.longitude)
+    ) {
       setVictimLocation(null);
       return;
     }
@@ -707,43 +727,75 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     });
   }, [victimLocation]);
 
-  // Center/fit map camera to focus on selected/active pin or fallback to device location when windows are dismissed
+  // True whenever we're actively en-route to a target (as opposed to just previewing a pin).
+  // While navigating, the camera is owned by the heading-follow effect below instead of the
+  // continuous "fit both points" logic, so the two don't fight each other every GPS tick.
+  const isNavigating = !!(
+    adjustedActiveEmergency ||
+    (activeSharedLocation?.isTrackingActive && !activeSharedLocation.dismissed) ||
+    activeSosMonitoring?.isRoutingActive
+  );
+
+  // Center/fit map camera to focus on selected/active pin or fallback to device location when windows are dismissed.
+  // Every branch below is gated on isValidCoordinate() — an invalid/null-island fix must never
+  // reach fitToCoordinates/animateToRegion, since that's what sends the camera (and the pins
+  // riding along with it) flying off to a corner of the world.
   useEffect(() => {
     if (!mapRef.current) return;
 
-    if (activeSosMonitoring && location) {
-      // Fit responder and SOS sender location in view
-      mapRef.current.fitToCoordinates(
-        [
-          location,
-          {
-            latitude: activeSosMonitoring.latitude,
-            longitude: activeSosMonitoring.longitude,
-          },
-        ],
-        {
-          edgePadding: { top: 120, right: 80, bottom: 260, left: 80 },
-          animated: true,
-        },
-      );
-      hasCentered.current = false;
-    } else if (activeSharedLocation) {
-      if (activeSharedLocation.isTrackingActive && location) {
-        // Fit responder and shared location in view when tracking route
+    const validLocation =
+      location && isValidCoordinate(location.latitude, location.longitude) ? location : null;
+
+    if (
+      activeSosMonitoring &&
+      validLocation &&
+      isValidCoordinate(activeSosMonitoring.latitude, activeSosMonitoring.longitude)
+    ) {
+      // Once actively routing, give one overview fit then hand the camera off to the
+      // heading-follow effect so it isn't yanked back to a "fit both" framing every tick.
+      const targetKey = `sos:${activeSosMonitoring.sosId}`;
+      if (!activeSosMonitoring.isRoutingActive || navigationFitTargetRef.current !== targetKey) {
         mapRef.current.fitToCoordinates(
           [
-            location,
+            validLocation,
             {
-              latitude: activeSharedLocation.latitude,
-              longitude: activeSharedLocation.longitude,
+              latitude: activeSosMonitoring.latitude,
+              longitude: activeSosMonitoring.longitude,
             },
           ],
           {
-            edgePadding: { top: 120, right: 100, bottom: 250, left: 100 },
+            edgePadding: { top: 120, right: 80, bottom: 260, left: 80 },
             animated: true,
           },
         );
-      } else {
+        if (activeSosMonitoring.isRoutingActive) navigationFitTargetRef.current = targetKey;
+      }
+      hasCentered.current = false;
+    } else if (
+      activeSharedLocation &&
+      isValidCoordinate(activeSharedLocation.latitude, activeSharedLocation.longitude)
+    ) {
+      if (activeSharedLocation.isTrackingActive && validLocation) {
+        const targetKey = `shared:${activeSharedLocation.id}`;
+        if (navigationFitTargetRef.current !== targetKey) {
+          // Fit responder and shared location in view when tracking route (once per session)
+          mapRef.current.fitToCoordinates(
+            [
+              validLocation,
+              {
+                latitude: activeSharedLocation.latitude,
+                longitude: activeSharedLocation.longitude,
+              },
+            ],
+            {
+              edgePadding: { top: 120, right: 100, bottom: 250, left: 100 },
+              animated: true,
+            },
+          );
+          navigationFitTargetRef.current = targetKey;
+        }
+        hasCentered.current = false;
+      } else if (!activeSharedLocation.isTrackingActive) {
         // Zoom directly to pinned shared location
         mapRef.current.animateToRegion(
           {
@@ -754,14 +806,19 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           },
           1000,
         );
+        hasCentered.current = false;
       }
-      hasCentered.current = false;
-    } else if (adjustedActiveEmergency) {
-      // Active emergency navigation: fit both responder and destination in view
-      if (location) {
+    } else if (
+      adjustedActiveEmergency &&
+      isValidCoordinate(adjustedActiveEmergency.latitude, adjustedActiveEmergency.longitude)
+    ) {
+      // Active emergency navigation: fit both responder and destination in view (once per session),
+      // then let the heading-follow effect own the camera as the responder moves.
+      const targetKey = `emergency:${adjustedActiveEmergency.id}`;
+      if (validLocation && navigationFitTargetRef.current !== targetKey) {
         mapRef.current.fitToCoordinates(
           [
-            location,
+            validLocation,
             {
               latitude: adjustedActiveEmergency.latitude,
               longitude: adjustedActiveEmergency.longitude,
@@ -772,9 +829,13 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
             animated: true,
           },
         );
+        navigationFitTargetRef.current = targetKey;
       }
       hasCentered.current = false;
-    } else if (adjustedSelectedPerson) {
+    } else if (
+      adjustedSelectedPerson &&
+      isValidCoordinate(adjustedSelectedPerson.latitude, adjustedSelectedPerson.longitude)
+    ) {
       // Selected emergency preview: zoom directly to focus on the selected victim marker
       mapRef.current.animateToRegion(
         {
@@ -786,12 +847,12 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         1000,
       );
       hasCentered.current = false;
-    } else if (location) {
+    } else if (validLocation) {
       // Fallback: center on user's device location when no floating window is open
       mapRef.current.animateToRegion(
         {
-          latitude: location.latitude,
-          longitude: location.longitude,
+          latitude: validLocation.latitude,
+          longitude: validLocation.longitude,
           latitudeDelta: 0.008,
           longitudeDelta: 0.008,
         },
@@ -806,23 +867,98 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     activeSharedLocation,
     activeSharedLocation?.cardDismissed,
     activeSharedLocation?.dismissed,
+    activeSosMonitoring,
   ]);
 
-  // Handle manual recenter double-press trigger
+  // Handle manual recenter / compass-tap trigger — always snaps the camera back to a
+  // true north-up, level orientation in addition to recentering, since animateToRegion
+  // alone doesn't reliably clear an existing rotation/tilt on every platform.
   useEffect(() => {
-    if (recenterNonce && mapRef.current && location) {
+    if (recenterNonce && mapRef.current && location && isValidCoordinate(location.latitude, location.longitude)) {
       hasCentered.current = true;
-      mapRef.current.animateToRegion(
+      lastAppliedHeadingRef.current = 0;
+      mapRef.current.animateCamera(
         {
-          latitude: location.latitude,
-          longitude: location.longitude,
-          latitudeDelta: 0.008,
-          longitudeDelta: 0.008,
+          center: { latitude: location.latitude, longitude: location.longitude },
+          heading: 0,
+          pitch: 0,
+          zoom: 17,
         },
-        1000,
+        { duration: 600 },
       );
     }
   }, [recenterNonce]);
+
+  // Track device compass heading while actively navigating, so the map can rotate to match
+  // the direction of travel (heading-up navigation) instead of staying locked north-up.
+  useEffect(() => {
+    if (!isNavigating) {
+      if (headingWatchRef.current) {
+        headingWatchRef.current.remove();
+        headingWatchRef.current = null;
+      }
+      // Navigation just ended — snap the map back to north-up and clear the fit-once guard
+      // so the next navigation session gets a fresh overview fit.
+      navigationFitTargetRef.current = null;
+      if (wasNavigatingRef.current && mapRef.current) {
+        lastAppliedHeadingRef.current = 0;
+        mapRef.current.animateCamera({ heading: 0, pitch: 0 }, { duration: 500 });
+      }
+      wasNavigatingRef.current = false;
+      return;
+    }
+
+    wasNavigatingRef.current = true;
+    let cancelled = false;
+
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted" || cancelled) return;
+      headingWatchRef.current = await Location.watchHeadingAsync((headingData) => {
+        const trueHeading = headingData.trueHeading;
+        const magHeading = headingData.magHeading;
+        const heading =
+          typeof trueHeading === "number" && trueHeading >= 0
+            ? trueHeading
+            : typeof magHeading === "number" && magHeading >= 0
+              ? magHeading
+              : null;
+        if (heading !== null) setDeviceHeading(heading);
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+      if (headingWatchRef.current) {
+        headingWatchRef.current.remove();
+        headingWatchRef.current = null;
+      }
+    };
+  }, [isNavigating]);
+
+  // Apply the tracked heading to the map camera while navigating (throttled so we don't
+  // spam the native bridge on every 1-2 degree compass jitter).
+  useEffect(() => {
+    if (!isNavigating || deviceHeading === null || !mapRef.current) return;
+    if (!location || !isValidCoordinate(location.latitude, location.longitude)) return;
+
+    const prevHeading = lastAppliedHeadingRef.current;
+    const headingDelta =
+      prevHeading === null
+        ? 360
+        : Math.min(Math.abs(deviceHeading - prevHeading), 360 - Math.abs(deviceHeading - prevHeading));
+
+    const now = Date.now();
+    if (headingDelta < 4 && now - lastHeadingApplyTimeRef.current < 1500) return;
+
+    lastAppliedHeadingRef.current = deviceHeading;
+    lastHeadingApplyTimeRef.current = now;
+
+    mapRef.current.animateCamera(
+      { heading: deviceHeading, center: { latitude: location.latitude, longitude: location.longitude } },
+      { duration: 400 },
+    );
+  }, [deviceHeading, isNavigating, location]);
 
   return (
     <MapView

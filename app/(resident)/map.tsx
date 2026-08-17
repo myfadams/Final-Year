@@ -218,8 +218,10 @@ export default function LocationScreen() {
           setActiveEmergency(null);
           setIsSosRoutingActive(false);
 
-          let initialLat = lat ? parseFloat(lat) : 0;
-          let initialLng = lng ? parseFloat(lng) : 0;
+          // NaN (not 0) when unknown — (0,0) is Null Island and would otherwise send the
+          // map camera flying off to the corner of the world until the real fix arrives below.
+          let initialLat = lat ? parseFloat(lat) : NaN;
+          let initialLng = lng ? parseFloat(lng) : NaN;
 
           const initialPin: ActiveSosMonitoringPin = {
             sosId: sosAlertId,
