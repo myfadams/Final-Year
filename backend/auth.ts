@@ -194,6 +194,33 @@ export async function resendVerificationEmail(email: string) {
   }
 }
 
+/**
+ * Send password reset email to user
+ */
+export async function resetPassword(email: string) {
+  try {
+    const redirectUrl = getVerifyRedirectUrl("reset-password");
+    const options: any = {};
+    if (typeof redirectUrl === "string" && /^https?:\/\//i.test(redirectUrl)) {
+      options.redirectTo = redirectUrl;
+    }
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
+
+    if (error) {
+      console.warn("Reset Password Error:", error.message);
+      const msg = error.message || (error as any)?.error_description || "Failed to send reset password email.";
+      return { data: null, error: msg };
+    }
+
+    return { data, error: null };
+  } catch (error: any) {
+    console.warn("Reset Password Exception:", error);
+    const msg = error?.message || (typeof error === "string" ? error : "Failed to send reset password email.");
+    return { data: null, error: msg };
+  }
+}
+
 
 import { globalState } from "@/constants/globalState";
 import AsyncStorage from "@react-native-async-storage/async-storage";
