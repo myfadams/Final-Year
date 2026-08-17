@@ -172,7 +172,21 @@ export default function AlertsScreen() {
     }));
 
     setAll(mapped);
-    setResolved(filterByProperty(mapped, "isResolved", true));
+    setResolved(
+      mapped.filter((m, i) => {
+        if (!m.isResolved) return false;
+        const resolvedAt = records[i].resolved_at;
+        if (!resolvedAt) return true;
+        
+        const rDate = new Date(resolvedAt);
+        const today = new Date();
+        return (
+          rDate.getDate() === today.getDate() &&
+          rDate.getMonth() === today.getMonth() &&
+          rDate.getFullYear() === today.getFullYear()
+        );
+      })
+    );
     setCritical(filterByProperty(mapped, "severity", "Critical"));
     setModerate(filterByProperty(mapped, "severity", "Moderate"));
     setLow(filterByProperty(mapped, "severity", "Low"));

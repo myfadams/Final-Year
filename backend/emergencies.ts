@@ -249,7 +249,6 @@ export async function fetchEmergencies(
         supabase
           .from("emergencies")
           .select("*")
-          .neq("creator_id", excludeUserId)
           .order("created_at", { ascending: false }),
       { retryId: `fetchEmergencies_${excludeUserId}` }
     );
@@ -263,10 +262,15 @@ export async function fetchEmergencies(
       return { data: [], error: null };
     }
 
-    // Filter out emergencies where user's response history status is 'done'
+    // Filter out active emergencies where user's response history status is 'done'
     if (excludeUserId) {
       const historyMap = await fetchUserEmergencyHistoryMap(excludeUserId);
       const filtered = (data as EmergencyRecord[]).filter((rec) => {
+        // Exclude the user's own active emergencies so they don't respond to themselves
+        if (!rec.is_resolved && rec.creator_id === excludeUserId) return false;
+
+        if (rec.is_resolved) return true; // always include resolved cases so they can appear in the UI
+
         const userStatus = historyMap[rec.id];
         return userStatus !== "done" && userStatus !== "done_helping";
       });
