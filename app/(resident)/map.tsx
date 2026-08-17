@@ -16,6 +16,11 @@ import {
   updateSosResponderStatus,
   withdrawSosResponse,
 } from "@/backend/sos";
+import {
+  clearActiveEmergencyCache,
+  loadActiveEmergencyCache,
+  saveActiveEmergencyCache,
+} from "@/backend/navigationCache";
 import { MapFloatingWindow } from "@/components/MapFloatingWindow";
 import MapViewComponent, {
   ActiveSosMonitoringPin,
@@ -107,6 +112,17 @@ export default function LocationScreen() {
     setRecenterNonce(Math.random().toString());
   };
 
+  // Mirror the active emergency to disk (throttled implicitly by only firing on identity
+  // change) so a full app restart while offline mid-response can resume from cache instead
+  // of starting from a blank map — see the useFocusEffect catch block below.
+  useEffect(() => {
+    if (activeEmergency) {
+      saveActiveEmergencyCache(activeEmergency.id, activeEmergency);
+    } else {
+      clearActiveEmergencyCache();
+    }
+  }, [activeEmergency]);
+
   // Sync active emergency, shared location pin, and handle incoming query parameters when focused
   useFocusEffect(
     React.useCallback(() => {
@@ -114,6 +130,7 @@ export default function LocationScreen() {
       let isAlive = true;
 
       (async () => {
+       try {
         const { user } = await getCurrentUser();
         const userId = user?.id || "";
         if (isAlive) setCurrentUserId(userId);
@@ -418,6 +435,23 @@ export default function LocationScreen() {
           }
           router.setParams({ personId: undefined, action: undefined });
         }
+       } catch (err) {
+         if (!isAlive) return;
+         // Fetch failed (most commonly: offline). Fall back to the last cached active-emergency
+         // snapshot so a responder mid-navigation doesn't land on a blank map just because the
+         // app restarted with no connectivity — instead of leaving activeEmergency untouched/null.
+         console.warn("Map focus-effect fetch failed, attempting cached fallback:", err);
+         if (globalState.activeEmergencyPerson) {
+           setActiveEmergency(globalState.activeEmergencyPerson);
+         } else {
+           const cached = await loadActiveEmergencyCache();
+           if (cached && isAlive) {
+             globalState.activeEmergencyId = cached.emergencyId;
+             globalState.activeEmergencyPerson = cached.person;
+             setActiveEmergency(cached.person);
+           }
+         }
+       }
       })();
 
       return () => {

@@ -2,11 +2,12 @@ import { SharedLocationPinMarker } from "@/components/SharedLocationPinMarker";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { SharedLocationPin } from "@/constants/globalState";
 import { Person } from "@/constants/interfaces";
+import { typography } from "@/constants/typograyph";
 import axios from "axios";
 import * as Location from "expo-location";
-import { BriefcaseMedical, Flame, Shield, ShieldAlert } from "lucide-react-native";
+import { AlertTriangle, BriefcaseMedical, Flame, LocateFixed, MapPinOff, Shield, ShieldAlert } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, AppState, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import MapView, { Polyline } from "react-native-maps";
 import { SafeMarker as Marker, isValidCoordinate } from "@/components/SafeMarker";
 
@@ -301,6 +302,12 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   const [distance, setDistance] = useState("");
   const [duration, setDuration] = useState("");
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null);
+  const [locationStatus, setLocationStatus] = useState<
+    "checking" | "granted" | "denied" | "servicesDisabled" | "error"
+  >("checking");
+  const [locationErrorMsg, setLocationErrorMsg] = useState<string | null>(null);
+  const [locationRetryNonce, setLocationRetryNonce] = useState(0);
+  const [isRouteEstimated, setIsRouteEstimated] = useState(false);
 
   const mapRef = useRef<any>(null);
   const watchRef = useRef<any>(null);
@@ -359,45 +366,87 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     return allEmergenciesList.map((p) => getAdjustedPerson(p) as Person);
   }, [allEmergenciesList, getAdjustedPerson]);
 
-  // Initialize and watch current GPS location of the user (every 5s or 10 meters)
+  // Initialize and watch current GPS location of the user (every 5s or 10 meters).
+  // Surfaces *why* location isn't available (permission denied, device location services
+  // off, or a transient GPS error) instead of just leaving the map silently stuck.
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") return;
-      const current = await Location.getCurrentPositionAsync({});
-      if (isValidCoordinate(current.coords.latitude, current.coords.longitude)) {
-        setLocation(current.coords);
-      }
+    let cancelled = false;
 
-      watchRef.current = await Location.watchPositionAsync(
-        {
-          accuracy: Location.Accuracy.High,
-          timeInterval: 5000, // Watch every 5 seconds (5-10s requirement)
-          distanceInterval: 10, // Minimum movement 10 meters
-        },
-        (loc) => {
-          // Reject GPS glitches / null-island fixes outright — never let a bad
-          // sample overwrite the last known-good location.
-          if (!isValidCoordinate(loc.coords.latitude, loc.coords.longitude)) return;
-          setLocation((prev: any) => {
-            if (prev) {
-              const d = getDistanceInMeters(
-                prev.latitude,
-                prev.longitude,
-                loc.coords.latitude,
-                loc.coords.longitude,
-              );
-              if (d < 3) return prev; // Filter small GPS jitter
-            }
-            return loc.coords;
-          });
-        },
-      );
+    (async () => {
+      setLocationStatus("checking");
+      setLocationErrorMsg(null);
+      try {
+        const servicesEnabled = await Location.hasServicesEnabledAsync();
+        if (!servicesEnabled) {
+          if (!cancelled) setLocationStatus("servicesDisabled");
+          return;
+        }
+
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== "granted") {
+          if (!cancelled) setLocationStatus("denied");
+          return;
+        }
+
+        const current = await Location.getCurrentPositionAsync({});
+        if (cancelled) return;
+        if (isValidCoordinate(current.coords.latitude, current.coords.longitude)) {
+          setLocation(current.coords);
+        }
+        setLocationStatus("granted");
+
+        watchRef.current = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000, // Watch every 5 seconds (5-10s requirement)
+            distanceInterval: 10, // Minimum movement 10 meters
+          },
+          (loc) => {
+            // Reject GPS glitches / null-island fixes outright — never let a bad
+            // sample overwrite the last known-good location.
+            if (!isValidCoordinate(loc.coords.latitude, loc.coords.longitude)) return;
+            setLocationStatus("granted");
+            setLocation((prev: any) => {
+              if (prev) {
+                const d = getDistanceInMeters(
+                  prev.latitude,
+                  prev.longitude,
+                  loc.coords.latitude,
+                  loc.coords.longitude,
+                );
+                if (d < 3) return prev; // Filter small GPS jitter
+              }
+              return loc.coords;
+            });
+          },
+        );
+      } catch (err: any) {
+        if (!cancelled) {
+          setLocationStatus("error");
+          setLocationErrorMsg(err?.message || "Unable to access your location right now.");
+        }
+      }
     })();
+
     return () => {
-      if (watchRef.current) watchRef.current.remove();
+      cancelled = true;
+      if (watchRef.current) {
+        watchRef.current.remove();
+        watchRef.current = null;
+      }
     };
-  }, []);
+  }, [locationRetryNonce]);
+
+  // Re-check permission/services whenever the app comes back to the foreground — covers the
+  // common case of the user leaving to enable location in Settings and returning to the app.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active" && locationStatus !== "granted") {
+        setLocationRetryNonce((n) => n + 1);
+      }
+    });
+    return () => sub.remove();
+  }, [locationStatus]);
 
   // Fetch Route from ORS API with AbortController cancellation & request lock
   const updateRoute = async (
@@ -463,6 +512,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
       const durationVal = `${Math.ceil((summary.duration * durationFactor) / 60)} min`;
 
+      setIsRouteEstimated(false);
       setDistance(distanceVal);
       setDuration(durationVal);
       onRouteCalculated?.(distanceVal, durationVal);
@@ -494,8 +544,11 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       else if (mode === "walking") speed = 1.4;
 
       const seconds = roadDistance / speed;
-      const durationVal = `${Math.max(1, Math.ceil(seconds / 60))} min`;
+      // Flag this as an estimate — it's a straight-line approximation, not a real routed
+      // path, most commonly because the device has no connectivity to reach ORS.
+      const durationVal = `${Math.max(1, Math.ceil(seconds / 60))} min (est.)`;
 
+      setIsRouteEstimated(true);
       setDistance(distanceVal);
       setDuration(durationVal);
       onRouteCalculated?.(distanceVal, durationVal);
@@ -550,6 +603,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         currentRouteCoordsRef.current = [];
         setDistance("");
         setDuration("");
+        setIsRouteEstimated(false);
         onRouteCalculated?.("--", "--");
         lastCalculatedLocationRef.current = null;
         lastTargetLocationRef.current = null;
@@ -960,7 +1014,32 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     );
   }, [deviceHeading, isNavigating, location]);
 
+  const locationBannerConfig =
+    locationStatus === "denied"
+      ? {
+          title: "Location access is off",
+          message: "ResQ needs your location to show your position and route you to emergencies.",
+          actionLabel: "Open Settings",
+          onAction: () => Linking.openSettings(),
+        }
+      : locationStatus === "servicesDisabled"
+        ? {
+            title: "Location Services are off",
+            message: "Turn on Location Services on your device to use the map.",
+            actionLabel: "Open Settings",
+            onAction: () => Linking.openSettings(),
+          }
+        : locationStatus === "error"
+          ? {
+              title: "Can't get your location",
+              message: locationErrorMsg || "Unable to access your location right now.",
+              actionLabel: "Retry",
+              onAction: () => setLocationRetryNonce((n) => n + 1),
+            }
+          : null;
+
   return (
+    <View style={{ flex: 1 }}>
     <MapView
       ref={mapRef}
       style={StyleSheet.absoluteFillObject}
@@ -1165,6 +1244,48 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           </>
         )}
     </MapView>
+
+      {/* Location permission / GPS availability feedback — tells the responder exactly why
+          the map can't show their position, instead of silently sitting blank. */}
+      {locationBannerConfig && (
+        <View style={mapStyles.statusBanner} pointerEvents="box-none">
+          <View style={mapStyles.statusBannerCard}>
+            <View style={mapStyles.statusBannerIconCircle}>
+              <MapPinOff size={18} color="#FFFFFF" strokeWidth={2.3} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={mapStyles.statusBannerTitle}>{locationBannerConfig.title}</Text>
+              <Text style={mapStyles.statusBannerMessage} numberOfLines={2}>
+                {locationBannerConfig.message}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={mapStyles.statusBannerAction}
+              onPress={locationBannerConfig.onAction}
+              activeOpacity={0.8}
+            >
+              {locationStatus === "error" ? (
+                <LocateFixed size={14} color="#991B1B" strokeWidth={2.5} />
+              ) : null}
+              <Text style={mapStyles.statusBannerActionText}>{locationBannerConfig.actionLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Estimated-route notice — surfaces when the real routing service couldn't be reached
+          (most commonly no connectivity) and the map fell back to a straight-line estimate. */}
+      {!locationBannerConfig && isRouteEstimated && isNavigating && (
+        <View style={mapStyles.statusBanner} pointerEvents="none">
+          <View style={mapStyles.estimatedRoutePill}>
+            <AlertTriangle size={14} color="#92400E" strokeWidth={2.4} />
+            <Text style={mapStyles.estimatedRouteText}>
+              Estimated route — routing service unreachable
+            </Text>
+          </View>
+        </View>
+      )}
+    </View>
   );
 };
 
@@ -1215,6 +1336,86 @@ const silverMapStyle = [
 ];
 
 const mapStyles = StyleSheet.create({
+  statusBanner: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 150 : 128,
+    left: 16,
+    right: 16,
+    zIndex: 6,
+  },
+  statusBannerCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1.5,
+    borderColor: "#FCA5A5",
+    borderRadius: 14,
+    padding: 12,
+    shadowColor: "#7F1D1D",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  statusBannerIconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: "#DC2626",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  statusBannerTitle: {
+    fontSize: 13.5,
+    fontFamily: typography.bold,
+    color: "#991B1B",
+    marginBottom: 2,
+  },
+  statusBannerMessage: {
+    fontSize: 11.5,
+    fontFamily: typography.regular,
+    color: "#7F1D1D",
+    lineHeight: 15,
+  },
+  statusBannerAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FFFFFF",
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#FCA5A5",
+  },
+  statusBannerActionText: {
+    fontSize: 11.5,
+    fontFamily: typography.bold,
+    color: "#991B1B",
+  },
+  estimatedRoutePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "center",
+    gap: 6,
+    backgroundColor: "#FFFBEB",
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    shadowColor: "#78350F",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  estimatedRouteText: {
+    fontSize: 11.5,
+    fontFamily: typography.semibold || typography.bold,
+    color: "#92400E",
+  },
   responderWrapper: {
     width: 50,
     height: 50,
