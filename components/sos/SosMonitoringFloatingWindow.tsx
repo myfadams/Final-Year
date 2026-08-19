@@ -17,6 +17,7 @@ import {
   Navigation,
   Radio,
   ShieldAlert,
+  ShieldOff,
   X,
 } from "lucide-react-native";
 import Colors, { DESIGN_COLORS, ResQColors } from "@/constants/Colors";
@@ -32,7 +33,27 @@ export interface SosMonitoringFloatingWindowProps {
   onConfirmArrival: () => void;
   onStopResponding: () => void;
   onClose?: () => void;
+  // Set once the sender cancels/resolves the SOS (or it expires) while this responder is
+  // actively monitoring it. When present and not "active", the window switches to a dismissed
+  // state — no more route/arrival/stop-responding controls, just an explanation and Done.
+  alertStatus?: "active" | "cancelled" | "resolved" | "expired";
+  onDone?: () => void;
 }
+
+const DISMISSED_COPY: Record<string, { title: string; message: string }> = {
+  cancelled: {
+    title: "SOS Dismissed",
+    message: "The sender has ended this SOS alert. They no longer need assistance.",
+  },
+  resolved: {
+    title: "SOS Resolved",
+    message: "This emergency has been marked as resolved.",
+  },
+  expired: {
+    title: "SOS Expired",
+    message: "This SOS alert has expired and is no longer active.",
+  },
+};
 
 export const SosMonitoringFloatingWindow: React.FC<
   SosMonitoringFloatingWindowProps
@@ -46,7 +67,11 @@ export const SosMonitoringFloatingWindow: React.FC<
   onConfirmArrival,
   onStopResponding,
   onClose,
+  alertStatus = "active",
+  onDone,
 }) => {
+  const isDismissed = alertStatus !== "active";
+  const dismissedCopy = DISMISSED_COPY[alertStatus] || DISMISSED_COPY.cancelled;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   // Live pulsing indicator effect
@@ -73,12 +98,18 @@ export const SosMonitoringFloatingWindow: React.FC<
     <View style={styles.container}>
       {/* Top Banner Row */}
       <View style={styles.headerRow}>
-        <View style={styles.beaconBadge}>
-          <ShieldAlert size={14} color="#FFFFFF" />
-          <Text style={styles.beaconBadgeText}>ACTIVE SOS</Text>
+        <View style={[styles.beaconBadge, isDismissed && styles.beaconBadgeDismissed]}>
+          {isDismissed ? (
+            <ShieldOff size={14} color="#FFFFFF" />
+          ) : (
+            <ShieldAlert size={14} color="#FFFFFF" />
+          )}
+          <Text style={styles.beaconBadgeText}>
+            {isDismissed ? dismissedCopy.title.toUpperCase() : "ACTIVE SOS"}
+          </Text>
         </View>
 
-        {onClose && (
+        {onClose && !isDismissed && (
           <TouchableOpacity
             style={styles.closeBtn}
             onPress={onClose}
@@ -104,82 +135,98 @@ export const SosMonitoringFloatingWindow: React.FC<
           <Text style={styles.senderTitle} numberOfLines={1}>
             {senderName}
           </Text>
-          <Text style={styles.senderSubtext}>Needs your urgent assistance</Text>
-        </View>
-      </View>
-
-      {/* Live Status Indicators (Distance & Realtime GPS) */}
-      <View style={styles.statusBox}>
-        <View style={styles.statusItem}>
-          <MapPin size={15} color={ResQColors.primaryRedText} />
-          <Text style={styles.statusLabel}>Distance:</Text>
-          <Text style={styles.statusValue}>{distance || "Calculating..."}</Text>
-        </View>
-
-        <View style={styles.statusDivider} />
-
-        <View style={styles.statusItem}>
-          <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
-          <Text style={styles.statusLabel}>Location:</Text>
-          <Text style={styles.liveUpdatingText}>Updating live</Text>
-        </View>
-      </View>
-
-      {/* Primary Action Buttons */}
-      <View style={styles.actionsContainer}>
-        {/* Toggle Route Navigation Button */}
-        <TouchableOpacity
-          style={[
-            styles.routeBtn,
-            isRoutingActive && styles.routeBtnActive,
-          ]}
-          onPress={onToggleRoute}
-          activeOpacity={0.85}
-          disabled={isLoadingRoute}
-        >
-          {isLoadingRoute ? (
-            <ActivityIndicator
-              size="small"
-              color={isRoutingActive ? "#B91C1C" : "#FFFFFF"}
-              style={{ marginRight: 8 }}
-            />
-          ) : (
-            <Compass
-              size={18}
-              color={isRoutingActive ? "#B91C1C" : "#FFFFFF"}
-              style={{ marginRight: 8 }}
-            />
-          )}
-          <Text
-            style={[
-              styles.routeBtnText,
-              isRoutingActive && styles.routeBtnTextActive,
-            ]}
-          >
-            {isRoutingActive ? "HIDE ROUTE" : "SHOW ROUTE"}
+          <Text style={styles.senderSubtext}>
+            {isDismissed ? dismissedCopy.message : "Needs your urgent assistance"}
           </Text>
-        </TouchableOpacity>
-
-        {/* Secondary Buttons Row: I've Arrived & Stop Responding */}
-        <View style={styles.secondaryButtonRow}>
-          <TouchableOpacity
-            style={styles.arrivedBtn}
-            onPress={onConfirmArrival}
-            activeOpacity={0.85}
-          >
-            <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
-            <Text style={styles.arrivedBtnText}>I'VE ARRIVED</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.stopBtn}
-            onPress={onStopResponding}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.stopBtnText}>STOP RESPONDING</Text>
-          </TouchableOpacity>
         </View>
       </View>
+
+      {isDismissed ? (
+        /* Dismissed State: no more route/arrival/stop controls — just acknowledge and close */
+        <TouchableOpacity
+          style={styles.doneBtn}
+          onPress={onDone}
+          activeOpacity={0.85}
+        >
+          <Check size={18} color="#FFFFFF" style={{ marginRight: 8 }} />
+          <Text style={styles.doneBtnText}>DONE</Text>
+        </TouchableOpacity>
+      ) : (
+        <>
+          {/* Live Status Indicators (Distance & Realtime GPS) */}
+          <View style={styles.statusBox}>
+            <View style={styles.statusItem}>
+              <MapPin size={15} color={ResQColors.primaryRedText} />
+              <Text style={styles.statusLabel}>Distance:</Text>
+              <Text style={styles.statusValue}>{distance || "Calculating..."}</Text>
+            </View>
+
+            <View style={styles.statusDivider} />
+
+            <View style={styles.statusItem}>
+              <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+              <Text style={styles.statusLabel}>Location:</Text>
+              <Text style={styles.liveUpdatingText}>Updating live</Text>
+            </View>
+          </View>
+
+          {/* Primary Action Buttons */}
+          <View style={styles.actionsContainer}>
+            {/* Toggle Route Navigation Button */}
+            <TouchableOpacity
+              style={[
+                styles.routeBtn,
+                isRoutingActive && styles.routeBtnActive,
+              ]}
+              onPress={onToggleRoute}
+              activeOpacity={0.85}
+              disabled={isLoadingRoute}
+            >
+              {isLoadingRoute ? (
+                <ActivityIndicator
+                  size="small"
+                  color={isRoutingActive ? "#B91C1C" : "#FFFFFF"}
+                  style={{ marginRight: 8 }}
+                />
+              ) : (
+                <Compass
+                  size={18}
+                  color={isRoutingActive ? "#B91C1C" : "#FFFFFF"}
+                  style={{ marginRight: 8 }}
+                />
+              )}
+              <Text
+                style={[
+                  styles.routeBtnText,
+                  isRoutingActive && styles.routeBtnTextActive,
+                ]}
+              >
+                {isRoutingActive ? "HIDE ROUTE" : "SHOW ROUTE"}
+              </Text>
+            </TouchableOpacity>
+
+            {/* Secondary Buttons Row: I've Arrived & Stop Responding */}
+            <View style={styles.secondaryButtonRow}>
+              <TouchableOpacity
+                style={styles.arrivedBtn}
+                onPress={onConfirmArrival}
+                activeOpacity={0.85}
+              >
+                <Check size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.arrivedBtnText}>I'VE ARRIVED</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.stopBtn}
+                onPress={onStopResponding}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.stopBtnText}>STOP RESPONDING</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </>
+      )}
     </View>
   );
 };
@@ -219,11 +266,28 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 12,
   },
+  beaconBadgeDismissed: {
+    backgroundColor: "#64748B",
+  },
   beaconBadgeText: {
     color: "#FFFFFF",
     fontSize: 11,
     fontFamily: typography.bold,
     letterSpacing: 0.6,
+  },
+  doneBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#334155",
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  doneBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontFamily: typography.bold,
+    letterSpacing: 0.4,
   },
   closeBtn: {
     padding: 4,

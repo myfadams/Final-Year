@@ -347,6 +347,10 @@ export interface ActiveSosMonitoringPin {
   longitude: number;
   isRoutingActive: boolean;
   cardDismissed?: boolean;
+  // Set once the sender cancels/resolves the SOS (or it expires) while a responder is actively
+  // monitoring it. "active" (or undefined) means the SOS is still genuinely live. The pin stays
+  // on the map — dimmed — until the responder explicitly acknowledges via the "Done" button.
+  alertStatus?: "active" | "cancelled" | "resolved" | "expired";
 }
 
 interface MapViewComponentProps {
@@ -1278,52 +1282,61 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       )}
 
       {/* Active SOS Monitoring Sender Marker */}
-      {activeSosMonitoring && (
-        <Marker
-          key={`active-sos-marker-${activeSosMonitoring.sosId}`}
-          coordinate={{
-            latitude: activeSosMonitoring.latitude,
-            longitude: activeSosMonitoring.longitude,
-          }}
-          anchor={{ x: 0.5, y: 0.5 }}
-          tracksViewChanges={sosMarkerTracksViewChanges}
-          cluster={false}
-          onPress={() => onSelectSosPin?.(activeSosMonitoring)}
-        >
-          <View style={mapStyles.victimWrapper}>
-            <PulseRing color={ResQColors.primaryRed} />
-            <View
-              style={[
-                mapStyles.customMarkerCircle,
-                {
-                  backgroundColor: ResQColors.primaryRed,
-                  transform: [{ scale: 1.25 }],
-                  borderColor: "#FFFFFF",
-                  borderWidth: 2.5,
-                },
-              ]}
-            >
-              <ShieldAlert size={18} color="#FFFFFF" />
-            </View>
-            <View
-              style={[
-                mapStyles.markerLabelContainer,
-                { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
-              ]}
-            >
-              <Text
+      {activeSosMonitoring && (() => {
+        const isDismissed =
+          !!activeSosMonitoring.alertStatus && activeSosMonitoring.alertStatus !== "active";
+        const markerColor = isDismissed ? "#94A3B8" : ResQColors.primaryRed;
+
+        return (
+          <Marker
+            key={`active-sos-marker-${activeSosMonitoring.sosId}`}
+            coordinate={{
+              latitude: activeSosMonitoring.latitude,
+              longitude: activeSosMonitoring.longitude,
+            }}
+            anchor={{ x: 0.5, y: 0.5 }}
+            tracksViewChanges={sosMarkerTracksViewChanges}
+            cluster={false}
+            onPress={() => onSelectSosPin?.(activeSosMonitoring)}
+          >
+            <View style={mapStyles.victimWrapper}>
+              {!isDismissed && <PulseRing color={ResQColors.primaryRed} />}
+              <View
                 style={[
-                  mapStyles.markerLabelText,
-                  { color: ResQColors.primaryRed, fontFamily: "Inter_700Bold" },
+                  mapStyles.customMarkerCircle,
+                  {
+                    backgroundColor: markerColor,
+                    transform: [{ scale: 1.25 }],
+                    borderColor: "#FFFFFF",
+                    borderWidth: 2.5,
+                  },
                 ]}
-                numberOfLines={1}
               >
-                🚨 SOS: {activeSosMonitoring.senderName || "In Distress"}
-              </Text>
+                <ShieldAlert size={18} color="#FFFFFF" />
+              </View>
+              <View
+                style={[
+                  mapStyles.markerLabelContainer,
+                  isDismissed
+                    ? { borderColor: "#CBD5E1", backgroundColor: "#F1F5F9" }
+                    : { borderColor: "#FCA5A5", backgroundColor: "#FEF2F2" },
+                ]}
+              >
+                <Text
+                  style={[
+                    mapStyles.markerLabelText,
+                    { color: markerColor, fontFamily: "Inter_700Bold" },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {isDismissed ? "SOS Ended: " : "🚨 SOS: "}
+                  {activeSosMonitoring.senderName || "In Distress"}
+                </Text>
+              </View>
             </View>
-          </View>
-        </Marker>
-      )}
+          </Marker>
+        );
+      })()}
 
       {/* Responder Location Marker */}
       {location && (

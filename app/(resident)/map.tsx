@@ -12,6 +12,7 @@ import {
   fetchLatestSosLocation,
   fetchSosAlertById,
   parseGeoPoint,
+  subscribeToSosAlertStatus,
   subscribeToSosLocationUpdates,
   updateSosResponderStatus,
   withdrawSosResponse,
@@ -286,6 +287,9 @@ export default function LocationScreen() {
                     ...prev,
                     senderName: freshName,
                     senderAvatar: freshAvatar,
+                    // Covers the edge case where the sender already dismissed/resolved the SOS
+                    // by the time this responder's screen finishes loading full alert details.
+                    ...(alertRes.data?.status ? { alertStatus: alertRes.data.status } : {}),
                     ...(freshCoords
                       ? {
                         latitude: freshCoords.latitude,
@@ -492,6 +496,31 @@ export default function LocationScreen() {
     };
   }, [activeSosMonitoring?.sosId]);
 
+  // Watches for the sender dismissing/resolving the SOS (or it expiring) while this responder
+  // is actively monitoring it. Previously nothing listened for this — a responder could keep
+  // routing to/watching a call that had already been called off, with no indication anything
+  // had changed. The pin and window stay up (so the responder isn't left confused by a marker
+  // vanishing mid-navigation) but switch into a dismissed state until they tap Done.
+  useEffect(() => {
+    const sosId = activeSosMonitoring?.sosId;
+    if (!sosId) return;
+
+    const unsubscribe = subscribeToSosAlertStatus(sosId, (status) => {
+      setActiveSosMonitoring((prev) =>
+        prev && prev.sosId === sosId
+          ? // Force the card back open even if the responder had previously closed it (X button)
+            // — they need to see the dismissal message and tap Done, not have it silently
+            // suppressed behind an unrelated earlier close.
+            { ...prev, alertStatus: status, cardDismissed: false }
+          : prev
+      );
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [activeSosMonitoring?.sosId]);
+
   // Walk Safe Real-time Subscriptions
   useEffect(() => {
     const activePin = activeSharedLocation;
@@ -642,6 +671,20 @@ export default function LocationScreen() {
         },
       ]
     );
+  };
+
+  // Acknowledges a dismissed/resolved/expired SOS (see the alertStatus-watching effect above) —
+  // clears the pin from the map and closes the floating window. Silently withdraws the response
+  // record for data hygiene; the alert is already over either way, so no confirmation is needed.
+  const handleSosDone = () => {
+    if (!activeSosMonitoring) return;
+    const sosId = activeSosMonitoring.sosId;
+
+    withdrawSosResponse(sosId).catch(() => {});
+
+    globalState.activeSosMonitoring = null;
+    setActiveSosMonitoring(null);
+    setIsSosRoutingActive(false);
   };
 
   const isNearLocation = React.useMemo(() => {
@@ -1053,6 +1096,8 @@ export default function LocationScreen() {
               prev ? { ...prev, cardDismissed: true } : null
             );
           }}
+          alertStatus={activeSosMonitoring.alertStatus}
+          onDone={handleSosDone}
         />
       )}
 

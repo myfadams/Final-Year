@@ -825,6 +825,40 @@ export async function updateSosResponderStatus(
 }
 
 /**
+ * Subscribes to real-time status changes for a single SOS alert. Used while a responder is
+ * actively en route/monitoring, so the moment the sender dismisses, resolves, or the alert
+ * expires, the responder is told immediately instead of continuing to route to a call that's
+ * already been called off.
+ */
+export function subscribeToSosAlertStatus(
+  sosId: string,
+  onStatusChange: (status: SosAlert["status"]) => void
+): () => void {
+  const channel = supabase
+    .channel(`sos_status_${sosId}_${Date.now()}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "sos_alerts",
+        filter: `id=eq.${sosId}`,
+      },
+      (payload) => {
+        const newStatus = (payload.new as any)?.status as SosAlert["status"] | undefined;
+        if (newStatus && newStatus !== "active") {
+          onStatusChange(newStatus);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}
+
+/**
  * Subscribes to real-time location stream for an SOS alert.
  * Listens to atomic UPDATE on sos_alerts and INSERT on sos_location_updates,
  * guarded by monotonic timestamp checking to prevent out-of-order jitter.
