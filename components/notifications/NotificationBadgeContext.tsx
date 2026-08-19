@@ -11,6 +11,8 @@ import { getCurrentUser } from "@/backend/auth";
 import { subscribeToEmergencies } from "@/backend/emergencies";
 import { subscribeToSosAlerts } from "@/backend/sos";
 import { supabase } from "@/backend/supabaseConfig";
+import { registerPushToken } from "@/backend/pushTokens";
+import { reportCurrentLocation } from "@/backend/userLocations";
 import {
   computeNotificationFeed,
   fireLocalNotificationsForNewItems,
@@ -18,7 +20,23 @@ import {
   markNotificationsAsSeen,
   NotificationFeedItem,
 } from "@/backend/notificationEngine";
-import { loadNotificationPreferences } from "@/backend/notificationPreferences";
+import {
+  loadNotificationPreferences,
+  NotificationCategoryKey,
+} from "@/backend/notificationPreferences";
+
+// Categories with a server-side push trigger (see supabase/migrations/20260819_push_triggers.sql
+// and 20260819_hotspot_push.sql) are excluded from local-notification firing here — otherwise a
+// user with the app foregrounded would get the same alert twice: once from this client-side
+// poll, once from the real push arriving. recentDigest/friendUpdates/dailyNews have no server
+// trigger (yet), so they still rely on this local firing.
+const SERVER_PUSH_CATEGORIES: NotificationCategoryKey[] = [
+  "nearbyEmergencies",
+  "hotspotAlerts",
+  "trustedNetworkSos",
+  "nearbySosAlerts",
+  "chatMessages",
+];
 
 interface NotificationBadgeContextType {
   unreadCount: number;
@@ -53,21 +71,46 @@ export const NotificationBadgeProvider: React.FC<{ children: React.ReactNode }> 
   const userIdRef = useRef<string | null>(null);
   const latestItemsRef = useRef<NotificationFeedItem[]>([]);
 
+  const refreshAndReportLocation = useCallback(async () => {
+    try {
+      const { status } = await Location.getForegroundPermissionsAsync();
+      if (status !== "granted") return;
+
+      const pos = await Location.getLastKnownPositionAsync();
+      if (pos) {
+        locationRef.current = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      }
+
+      if (locationRef.current && userIdRef.current) {
+        // Fire-and-forget — keeps user_locations.updated_at fresh so the server's 30-minute
+        // staleness cutoff (see get_user_ids_near_point) doesn't drop this user from matching.
+        reportCurrentLocation(userIdRef.current, locationRef.current.latitude, locationRef.current.longitude);
+      }
+    } catch (_) {
+      // Location unavailable — location-gated categories will just no-op until it is.
+    }
+  }, []);
+
   const runCheck = useCallback(async () => {
     if (!userIdRef.current) return;
     try {
+      await refreshAndReportLocation();
+
       const prefs = await loadNotificationPreferences();
       const items = await computeNotificationFeed(userIdRef.current, locationRef.current);
       latestItemsRef.current = items;
 
-      await fireLocalNotificationsForNewItems(items, prefs);
+      const localOnlyItems = items.filter(
+        (item) => !SERVER_PUSH_CATEGORIES.includes(item.category)
+      );
+      await fireLocalNotificationsForNewItems(localOnlyItems, prefs);
 
       const count = await getUnseenNotificationCount(items, prefs);
       setUnreadCount(count);
     } catch (err) {
       console.warn("NotificationBadgeProvider check warning:", err);
     }
-  }, []);
+  }, [refreshAndReportLocation]);
 
   const markCurrentFeedAsSeen = useCallback(async (items?: NotificationFeedItem[]) => {
     await markNotificationsAsSeen(items ?? latestItemsRef.current);
@@ -88,6 +131,11 @@ export const NotificationBadgeProvider: React.FC<{ children: React.ReactNode }> 
       const { user } = await getCurrentUser();
       if (cancelled || !user) return;
       userIdRef.current = user.id;
+
+      // Fire-and-forget — re-registers on every app start in case the token rotated. No-ops
+      // silently if permission isn't granted yet (it'll register once the user enables
+      // notifications from the Notification Preferences screen instead).
+      registerPushToken(user.id);
 
       try {
         const { status } = await Location.getForegroundPermissionsAsync();

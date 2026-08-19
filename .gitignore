@@ -42,3 +42,6 @@ yarn-error.*
 
 ./vscode
 ./temp
+
+# Supabase CLI local cache/session state
+supabase/.temp

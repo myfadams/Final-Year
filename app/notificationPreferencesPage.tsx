@@ -1,7 +1,9 @@
+import { getCurrentUser } from "@/backend/auth";
 import {
   ensureNotificationPermissions,
   getNotificationPermissionStatus,
 } from "@/backend/notificationEngine";
+import { registerPushToken } from "@/backend/pushTokens";
 import {
   loadNotificationPreferences,
   NOTIFICATION_CATEGORIES,
@@ -51,6 +53,11 @@ export default function NotificationPreferencesPage() {
   const handleEnableNotifications = async () => {
     const granted = await ensureNotificationPermissions();
     setPermissionStatus(granted ? "granted" : "denied");
+
+    if (granted) {
+      const { user } = await getCurrentUser();
+      if (user) registerPushToken(user.id);
+    }
   };
 
   const handleToggle = async (key: NotificationCategoryKey, value: boolean) => {
