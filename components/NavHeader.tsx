@@ -1,11 +1,14 @@
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
+import { useNotificationBadge } from "@/components/notifications/NotificationBadgeContext";
+import { NotificationCountBadge } from "@/components/notifications/NotificationCountBadge";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Bell } from "lucide-react-native";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const NavHeader = ({ title }: { title: string }) => {
   const router = useRouter();
+  const { unreadCount } = useNotificationBadge();
   return (
     <View style={styles.header}>
       <TouchableOpacity
@@ -22,6 +25,7 @@ const NavHeader = ({ title }: { title: string }) => {
         style={styles.headerIconButton}
       >
         <Bell size={24} color={Colors.light.accent} />
+        <NotificationCountBadge count={unreadCount} />
       </TouchableOpacity>}
     </View>
   );

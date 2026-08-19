@@ -59,6 +59,7 @@ export async function fetchKnustUpdates(): Promise<Article[]> {
         image: item.image_url || "https://images.unsplash.com/photo-1541888075782-b7e3e9d8995a", // fallback to generic if image_url is null
         content: item.description || item.content || "No description available.",
         isFeatured: false,
+        publishedAtIso: item.pubDate || undefined,
       };
     });
   } catch (err) {

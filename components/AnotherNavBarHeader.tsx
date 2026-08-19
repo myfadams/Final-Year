@@ -2,6 +2,8 @@ import { getCachedUserProfile, UserProfile } from "@/backend/auth";
 import { ResQColors } from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
+import { useNotificationBadge } from "@/components/notifications/NotificationBadgeContext";
+import { NotificationCountBadge } from "@/components/notifications/NotificationCountBadge";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Bell } from "lucide-react-native";
@@ -35,6 +37,7 @@ export const AnotherNavBarHeader: React.FC<AnotherNavBarHeaderProps> = ({
   userProfile,
 }) => {
   const router = useRouter();
+  const { unreadCount } = useNotificationBadge();
   const [profile, setProfile] = useState<UserProfile | null>(
     userProfile || globalState.userProfile
   );
@@ -128,6 +131,7 @@ export const AnotherNavBarHeader: React.FC<AnotherNavBarHeaderProps> = ({
         accessibilityLabel="Notifications"
       >
         <Bell size={22} color={ResQColors.primaryRed} strokeWidth={2.2} />
+        <NotificationCountBadge count={unreadCount} />
       </TouchableOpacity>
     </View>
   );

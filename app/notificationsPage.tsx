@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/backend/auth";
 import {
   computeNotificationFeed,
+  filterUnseenNotifications,
   fireLocalNotificationsForNewItems,
   getNotificationPermissionStatus,
   NotificationFeedItem,
@@ -11,6 +12,7 @@ import {
 } from "@/backend/notificationPreferences";
 import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
+import { useNotificationBadge } from "@/components/notifications/NotificationBadgeContext";
 import { CATEGORY_ICONS } from "@/components/notifications/notificationCategoryIcons";
 import { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
@@ -41,7 +43,28 @@ function timeAgo(ms: number): string {
   return `${Math.floor(diffSec / 86400)}d ago`;
 }
 
+// Groups notifications by "would opening this take me to the same place." Opening one item
+// clears every item in its group, not the whole list — e.g. opening one chat message clears
+// every notification for that same chat, since you've now seen all of it; opening a nearby
+// emergency only clears that emergency's own notifications, not unrelated ones.
+function getNotificationGroupKey(item: NotificationFeedItem): string {
+  if (item.navigateTo?.pathname === "/contactChat" && item.navigateTo.params?.chatId) {
+    return `chat:${item.navigateTo.params.chatId}`;
+  }
+  if (item.navigateTo) {
+    return `route:${item.navigateTo.pathname}`;
+  }
+  if (item.emergencyId) {
+    return `emergency:${item.emergencyId}`;
+  }
+  // SOS/hotspot items have no shared entity id to group by — fall back to the item's own id so
+  // each is its own group. Safer to under-clear than to accidentally clear an unrelated SOS
+  // alert's notification just because a different one was opened.
+  return item.id;
+}
+
 export default function NotificationsPage() {
+  const { markCurrentFeedAsSeen } = useNotificationBadge();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [feed, setFeed] = useState<NotificationFeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -80,7 +103,11 @@ export default function NotificationsPage() {
       }
 
       const items = await computeNotificationFeed(user.id, userLocation);
-      setFeed(items);
+
+      // Only show what's new since the last time this screen was viewed — once seen, an item
+      // clears from the list itself, not just the bell badge.
+      const unseenItems = await filterUnseenNotifications(items);
+      setFeed(unseenItems);
 
       if (permissionStatus === "granted") {
         await fireLocalNotificationsForNewItems(items, loadedPrefs);
@@ -150,9 +177,9 @@ export default function NotificationsPage() {
             <View style={styles.emptyIconWrapper}>
               <BellOff size={30} color={ResQColors.textSubtle} />
             </View>
-            <Text style={styles.stateTitle}>Nothing to show</Text>
+            <Text style={styles.stateTitle}>You're all caught up</Text>
             <Text style={styles.stateSubtitle}>
-              No nearby emergencies, hotspots, or trusted contact SOS alerts right now.
+              No new notifications right now — opening one clears it from this list.
             </Text>
           </View>
         )}
@@ -168,8 +195,22 @@ export default function NotificationsPage() {
                 style={[styles.feedCard, muted && styles.feedCardMuted]}
                 activeOpacity={0.8}
                 onPress={() => {
+                  // Opening this notification clears only its own group (see
+                  // getNotificationGroupKey) from the list and badge, not everything.
+                  const groupKey = getNotificationGroupKey(item);
+                  const related = feed.filter((f) => getNotificationGroupKey(f) === groupKey);
+                  setFeed((prev) => prev.filter((f) => getNotificationGroupKey(f) !== groupKey));
+                  markCurrentFeedAsSeen(related);
+
+                  if (item.navigateTo) {
+                    router.replace(item.navigateTo as any);
+                    if (item.navigateTo.pathname.toLowerCase().includes("/(resident)")) {
+                      router.dismissAll();
+                    }
+                    return;
+                  }
                   if (item.latitude == null || item.longitude == null) return;
-                  router.push({
+                  router.replace({
                     pathname: "/(resident)/map",
                     params: {
                       lat: item.latitude.toString(),
@@ -179,6 +220,7 @@ export default function NotificationsPage() {
                         : {}),
                     },
                   });
+                  router.dismissAll();
                 }}
               >
                 <View style={styles.feedIconCircle}>

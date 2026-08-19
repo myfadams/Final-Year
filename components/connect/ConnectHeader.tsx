@@ -1,5 +1,7 @@
 import { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
+import { useNotificationBadge } from "@/components/notifications/NotificationBadgeContext";
+import { NotificationCountBadge } from "@/components/notifications/NotificationCountBadge";
 import { ArrowLeft, Bell } from "lucide-react-native";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -13,6 +15,7 @@ export const ConnectHeader: React.FC<ConnectHeaderProps> = ({
   onBackPress,
   onNotificationPress,
 }) => {
+  const { unreadCount } = useNotificationBadge();
   return (
     <View style={styles.header}>
       <TouchableOpacity
@@ -34,7 +37,7 @@ export const ConnectHeader: React.FC<ConnectHeaderProps> = ({
       >
         <View style={styles.bellContainer}>
           <Bell size={20} color={ResQColors.primaryRed} strokeWidth={2.2} />
-          <View style={styles.badgeDot} />
+          <NotificationCountBadge count={unreadCount} />
         </View>
       </TouchableOpacity>
     </View>
@@ -77,15 +80,6 @@ const styles = StyleSheet.create({
   },
   bellContainer: {
     position: "relative",
-  },
-  badgeDot: {
-    position: "absolute",
-    top: -1,
-    right: -1,
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: ResQColors.primaryRed,
   },
 });
 

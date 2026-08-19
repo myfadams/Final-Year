@@ -1,5 +1,14 @@
 import { NotificationCategoryKey } from "@/backend/notificationPreferences";
-import { Clock, Flame, MapPin, ShieldAlert } from "lucide-react-native";
+import {
+  Clock,
+  Flame,
+  MapPin,
+  MessageCircle,
+  Newspaper,
+  ShieldAlert,
+  Siren,
+  UserPlus,
+} from "lucide-react-native";
 import React from "react";
 
 export const CATEGORY_ICONS: Record<
@@ -10,4 +19,8 @@ export const CATEGORY_ICONS: Record<
   recentDigest: Clock,
   hotspotAlerts: Flame,
   trustedNetworkSos: ShieldAlert,
+  nearbySosAlerts: Siren,
+  chatMessages: MessageCircle,
+  friendUpdates: UserPlus,
+  dailyNews: Newspaper,
 };

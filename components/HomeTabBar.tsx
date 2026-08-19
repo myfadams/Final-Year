@@ -2,6 +2,8 @@ import { getCachedUserProfile, UserProfile } from "@/backend/auth";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
+import { useNotificationBadge } from "@/components/notifications/NotificationBadgeContext";
+import { NotificationCountBadge } from "@/components/notifications/NotificationCountBadge";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Bell, HelpCircle } from "lucide-react-native";
@@ -45,6 +47,7 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
   userProfile,
 }) => {
   const router = useRouter();
+  const { unreadCount } = useNotificationBadge();
   const [profile, setProfile] = useState<UserProfile | null>(
     userProfile || globalState.userProfile
   );
@@ -124,7 +127,7 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
           activeOpacity={0.7}
         >
           <Bell size={20} color={Colors.light.text} strokeWidth={2} />
-          <View style={styles.badge} />
+          <NotificationCountBadge count={unreadCount} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -230,17 +233,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: typography.bold,
     letterSpacing: 0.5,
-  },
-  badge: {
-    position: "absolute",
-    top: 9,
-    right: 10,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#EF4444",
-    borderWidth: 1.5,
-    borderColor: "#FFFFFF",
   },
 });
 

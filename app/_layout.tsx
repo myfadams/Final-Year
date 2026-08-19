@@ -11,6 +11,7 @@ import { Stack } from "expo-router";
 import { useEffect } from "react";
 
 import { NetworkProvider } from "@/components/network";
+import { NotificationBadgeProvider } from "@/components/notifications/NotificationBadgeContext";
 import { PopupAlertProvider } from "@/components/popupAlert";
 import { SosAlertProvider } from "@/components/sos/SosAlertContext";
 import { SosAlertOverlay } from "@/components/sos/SosAlertOverlay";
@@ -44,23 +45,25 @@ export default function RootLayout() {
       <PopupAlertProvider>
         <WalkSafeProvider>
           <SosAlertProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(resident)" />
-              <Stack.Screen name="(admin)" />
-              <Stack.Screen name="settingsPage" />
-              <Stack.Screen name="notificationsPage" />
-              <Stack.Screen name="notificationPreferencesPage" />
-              <Stack.Screen name="profile" />
-              <Stack.Screen name="report" />
-              <Stack.Screen name="IncidentDetails" />
-              <Stack.Screen name="connect" />
-              <Stack.Screen name="contactChat" />
-              <Stack.Screen name="emergencyChat" />
-              <Stack.Screen name="yourEmergencies" />
-            </Stack>
-            <SosAlertOverlay />
+            <NotificationBadgeProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="index" />
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(resident)" />
+                <Stack.Screen name="(admin)" />
+                <Stack.Screen name="settingsPage" />
+                <Stack.Screen name="notificationsPage" />
+                <Stack.Screen name="notificationPreferencesPage" />
+                <Stack.Screen name="profile" />
+                <Stack.Screen name="report" />
+                <Stack.Screen name="IncidentDetails" />
+                <Stack.Screen name="connect" />
+                <Stack.Screen name="contactChat" />
+                <Stack.Screen name="emergencyChat" />
+                <Stack.Screen name="yourEmergencies" />
+              </Stack>
+              <SosAlertOverlay />
+            </NotificationBadgeProvider>
           </SosAlertProvider>
         </WalkSafeProvider>
       </PopupAlertProvider>

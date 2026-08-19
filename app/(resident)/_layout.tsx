@@ -1,10 +1,7 @@
 import CustomTabBar from "@/components/CustomTabBar";
-import { useEmergencyNotificationWatcher } from "@/components/notifications/useEmergencyNotificationWatcher";
 import { Tabs } from "expo-router";
 
 export default function ResidentLayout() {
-  useEmergencyNotificationWatcher();
-
   return (
     <Tabs
       tabBar={(props) => <CustomTabBar {...props} />}

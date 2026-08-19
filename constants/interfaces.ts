@@ -93,6 +93,9 @@ export interface Article {
   leftAccent?: string;
   isFeatured?: boolean;
   content: string;
+  // Raw ISO publish timestamp, distinct from `time` (a pre-formatted display string) — used
+  // wherever a real sortable/comparable date is needed, e.g. notification recency checks.
+  publishedAtIso?: string;
 }
 
 export interface ChatMessage {
