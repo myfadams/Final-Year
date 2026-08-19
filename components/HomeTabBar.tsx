@@ -118,7 +118,11 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
           <HelpCircle size={20} color={Colors.light.text} strokeWidth={2} />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.actionButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={() => router.push("/notificationsPage")}
+          style={styles.actionButton}
+          activeOpacity={0.7}
+        >
           <Bell size={20} color={Colors.light.text} strokeWidth={2} />
           <View style={styles.badge} />
         </TouchableOpacity>

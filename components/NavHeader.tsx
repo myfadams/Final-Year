@@ -2,7 +2,7 @@ import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import { ArrowLeft, Bell } from "lucide-react-native";
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 const NavHeader = ({ title }: { title: string }) => {
   const router = useRouter();
@@ -14,18 +14,15 @@ const NavHeader = ({ title }: { title: string }) => {
       >
         <ArrowLeft size={24} color={Colors.light.accent} />
       </TouchableOpacity>
-      <Text style={styles.headerTitle}>{title}</Text>
-      <TouchableOpacity
-        onPress={() =>
-          Alert.alert(
-            "Notifications",
-            "Options to mute updates or report false alarm.",
-          )
-        }
+      <View style={{ flex: 1, alignItems: "center" }}>
+        <Text style={styles.headerTitle}>{title}</Text>
+      </View>
+      {!title.toLowerCase().includes("notification") && <TouchableOpacity
+        onPress={() => router.push("/notificationsPage")}
         style={styles.headerIconButton}
       >
         <Bell size={24} color={Colors.light.accent} />
-      </TouchableOpacity>
+      </TouchableOpacity>}
     </View>
   );
 };

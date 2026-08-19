@@ -6,7 +6,7 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Bell } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
-import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 interface AnotherNavBarHeaderProps {
   onProfilePress?: () => void;
@@ -82,7 +82,7 @@ export const AnotherNavBarHeader: React.FC<AnotherNavBarHeaderProps> = ({
     if (onNotificationPress) {
       onNotificationPress();
     } else {
-      Alert.alert("Notifications", "No new notifications.");
+      router.push("/notificationsPage");
     }
   };
 

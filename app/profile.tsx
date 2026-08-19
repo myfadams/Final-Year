@@ -155,13 +155,7 @@ export default function ProfileScreen() {
   };
 
   const handleNotificationsPress = () => {
-    showPopupAlert(
-      "Notification Preferences",
-      "Notification settings successfully updated.",
-      undefined,
-      undefined,
-      "success"
-    );
+    router.push("/notificationPreferencesPage");
   };
 
   return (

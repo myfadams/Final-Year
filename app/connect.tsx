@@ -288,9 +288,7 @@ export default function ConnectScreen() {
       {/* Header */}
       <ConnectHeader
         onBackPress={() => router.back()}
-        onNotificationPress={() =>
-          showPopupAlert("Notifications", "You have no new notifications.", undefined, undefined, "info")
-        }
+        onNotificationPress={() => router.push("/notificationsPage")}
       />
 
       {/* Main Content */}
