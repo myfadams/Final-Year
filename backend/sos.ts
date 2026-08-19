@@ -48,9 +48,14 @@ export async function createSosAlert(
   radiusMeters = 1000
 ): Promise<{ data: SosAlert | null; error: string | null }> {
   try {
+    // getSession() reads the already-authenticated session locally instead of round-tripping
+    // to the Auth server like getUser() does — shaves a network hop off the critical path for
+    // an alert where every second counts. Safe here since a locally-tampered session would
+    // simply be rejected by the insert's RLS policy server-side anyway.
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user) return { data: null, error: "Not authenticated" };
 
     const pointWkt = `POINT(${lng} ${lat})`;

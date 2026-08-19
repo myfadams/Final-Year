@@ -426,30 +426,39 @@ const Home = () => {
         return;
       }
 
-      // 1. Race BestForNavigation against a 7-second timeout
+      // Kick off a high-accuracy fix in the background regardless of which path below wins —
+      // it's used either as the primary fix or as a follow-up upgrade once it resolves.
       const bestFixPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.BestForNavigation,
       });
-      const timeoutPromise = new Promise<null>((resolve) =>
-        setTimeout(() => resolve(null), 7000)
-      );
 
       let lat: number | null = null;
       let lng: number | null = null;
       let usedFallback = false;
 
-      const fix = await Promise.race([bestFixPromise, timeoutPromise]);
-      if (fix && fix.coords) {
-        lat = fix.coords.latitude;
-        lng = fix.coords.longitude;
-      } else {
+      // 1. Fast path: a recent cached fix is near-instant (no GPS wait at all) and gets the
+      // alert broadcasting immediately. A fresh BestForNavigation lock can take several
+      // seconds — worth skipping entirely when a good-enough fix already exists.
+      const lastKnown = await Location.getLastKnownPositionAsync({
+        maxAge: 2 * 60 * 1000,
+        requiredAccuracy: 200,
+      }).catch(() => null);
+
+      if (lastKnown && lastKnown.coords) {
+        lat = lastKnown.coords.latitude;
+        lng = lastKnown.coords.longitude;
         usedFallback = true;
-        // Fast fallback to last known or balanced
-        const lastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
-        if (lastKnown && lastKnown.coords) {
-          lat = lastKnown.coords.latitude;
-          lng = lastKnown.coords.longitude;
+      } else {
+        // 2. No usable cached fix — race a fresh lock against a 7-second timeout.
+        const timeoutPromise = new Promise<null>((resolve) =>
+          setTimeout(() => resolve(null), 7000)
+        );
+        const fix = await Promise.race([bestFixPromise, timeoutPromise]);
+        if (fix && fix.coords) {
+          lat = fix.coords.latitude;
+          lng = fix.coords.longitude;
         } else {
+          usedFallback = true;
           const quickFix = await Location.getCurrentPositionAsync({
             accuracy: Location.Accuracy.Balanced,
           }).catch(() => null);
