@@ -199,6 +199,24 @@ export async function fetchActiveSosForUser(): Promise<{
   }
 }
 
+// PostgREST rejects a JWT whose "iat" claim is ahead of its own clock with this code. Since
+// the token is minted server-side by Supabase Auth, this means transient clock skew between
+// Supabase's own services (or a stale cached session token) — not a bad request. Refreshing
+// the session mints a fresh token, which is virtually always valid by the time the retry lands.
+const JWT_CLOCK_SKEW_CODE = "PGRST303";
+
+async function callRpcWithClockSkewRetry<T>(
+  rpcName: string,
+  params?: Record<string, any>
+): Promise<{ data: T | null; error: any }> {
+  const first = await supabase.rpc(rpcName, params as any);
+  if (first.error?.code === JWT_CLOCK_SKEW_CODE) {
+    await supabase.auth.refreshSession();
+    return supabase.rpc(rpcName, params as any) as any;
+  }
+  return first as any;
+}
+
 /**
  * Calls both PostGIS proximity RPC and Trusted Network RPC,
  * merges eligible alerts, and populates sender profiles.
@@ -209,11 +227,11 @@ export async function fetchNearbyAndTrustedSos(
 ): Promise<{ data: SosAlert[]; error: string | null }> {
   try {
     const [nearbyRes, trustedRes] = await Promise.all([
-      supabase.rpc("get_nearby_active_sos", {
+      callRpcWithClockSkewRetry<any[]>("get_nearby_active_sos", {
         user_lat: userLat,
         user_lng: userLng,
       }),
-      supabase.rpc("get_trusted_network_sos_for_me"),
+      callRpcWithClockSkewRetry<any[]>("get_trusted_network_sos_for_me"),
     ]);
 
     if (nearbyRes.error) {
