@@ -40,6 +40,7 @@ import {
   Compass,
   Flame,
   Footprints,
+  Navigation2,
   Search,
   Shield,
   SlidersHorizontal,
@@ -107,10 +108,18 @@ export default function LocationScreen() {
     location?: string;
   }>();
 
-  // Recenter trigger
+  // Recenter trigger — also doubles as the Follow toggle while navigating (see
+  // MapViewComponent's onFollowStateChange).
   const handleRecenter = () => {
     setRecenterNonce(Math.random().toString());
   };
+
+  // Mirrors MapViewComponent's internal Follow state so the floating button can show
+  // "Follow" vs "Following" and only take on that behavior while actually navigating.
+  const [mapFollowState, setMapFollowState] = useState<{
+    isFollowing: boolean;
+    isNavigating: boolean;
+  }>({ isFollowing: false, isNavigating: false });
 
   // Mirror the active emergency to disk (throttled implicitly by only firing on identity
   // change) so a full app restart while offline mid-response can resume from cache instead
@@ -822,6 +831,7 @@ export default function LocationScreen() {
         activeSosMonitoring={activeSosMonitoring}
         realEmergencies={realEmergencies}
         recenterNonce={recenterNonce}
+        onFollowStateChange={setMapFollowState}
         categoryFilter={categoryFilter}
         searchQuery={searchQuery}
         travelMode={travelMode}
@@ -973,29 +983,58 @@ export default function LocationScreen() {
         })}
       </View>
 
-      <TouchableOpacity
-        style={[
-          styles.recenterFloatButton,
-          {
-            bottom:
-              activeSosMonitoring ||
-                selectedPerson ||
-                (activeSharedLocation &&
-                  !activeSharedLocation.cardDismissed &&
-                  !activeSharedLocation.dismissed)
-                ? Platform.OS === "ios"
-                  ? 305
-                  : 270
-                : Platform.OS === "ios"
-                  ? 120
-                  : 86,
-          },
-        ]}
-        onPress={handleRecenter}
-        activeOpacity={0.85}
-      >
-        <Compass size={22} color={Colors.light.accent} />
-      </TouchableOpacity>
+      {(() => {
+        const floatButtonBottom =
+          activeSosMonitoring ||
+            selectedPerson ||
+            (activeSharedLocation &&
+              !activeSharedLocation.cardDismissed &&
+              !activeSharedLocation.dismissed)
+            ? Platform.OS === "ios"
+              ? 305
+              : 270
+            : Platform.OS === "ios"
+              ? 120
+              : 86;
+
+        if (mapFollowState.isNavigating) {
+          return (
+            <TouchableOpacity
+              style={[
+                styles.followFloatButton,
+                mapFollowState.isFollowing && styles.followFloatButtonActive,
+                { bottom: floatButtonBottom },
+              ]}
+              onPress={handleRecenter}
+              activeOpacity={0.85}
+            >
+              <Navigation2
+                size={16}
+                color={mapFollowState.isFollowing ? "#FFFFFF" : Colors.light.accent}
+                fill={mapFollowState.isFollowing ? "#FFFFFF" : "none"}
+              />
+              <Text
+                style={[
+                  styles.followButtonText,
+                  mapFollowState.isFollowing && styles.followButtonTextActive,
+                ]}
+              >
+                {mapFollowState.isFollowing ? "Following" : "Follow"}
+              </Text>
+            </TouchableOpacity>
+          );
+        }
+
+        return (
+          <TouchableOpacity
+            style={[styles.recenterFloatButton, { bottom: floatButtonBottom }]}
+            onPress={handleRecenter}
+            activeOpacity={0.85}
+          >
+            <Compass size={22} color={Colors.light.accent} />
+          </TouchableOpacity>
+        );
+      })()}
 
       {/* DEDICATED FLOATING SOS MONITORING WINDOW */}
       {activeSosMonitoring && !activeSosMonitoring.cardDismissed && (
@@ -1228,5 +1267,37 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 3,
     zIndex: 4,
+  },
+  followFloatButton: {
+    position: "absolute",
+    right: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#FFFFFF",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+    shadowColor: "#0F172A",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    zIndex: 4,
+  },
+  followFloatButtonActive: {
+    backgroundColor: Colors.light.accent,
+    borderColor: Colors.light.accent,
+  },
+  followButtonText: {
+    fontSize: 13,
+    fontFamily: typography.bold,
+    color: Colors.light.accent,
+  },
+  followButtonTextActive: {
+    color: "#FFFFFF",
   },
 });

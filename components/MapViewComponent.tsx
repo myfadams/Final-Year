@@ -279,6 +279,7 @@ interface MapViewComponentProps {
   categoryFilter?: string; // category filter state passed from parent
   searchQuery?: string; // search query string passed from parent
   travelMode?: "driving" | "running" | "walking"; // travel mode passed from parent
+  onFollowStateChange?: (state: { isFollowing: boolean; isNavigating: boolean }) => void;
 }
 
 const MapViewComponent: React.FC<MapViewComponentProps> = ({
@@ -295,6 +296,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   categoryFilter,
   searchQuery,
   travelMode = "running",
+  onFollowStateChange,
 }) => {
   const [location, setLocation] = useState<any>(null);
   const [victimLocation, setVictimLocation] = useState<any>(null);
@@ -302,6 +304,10 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   const [distance, setDistance] = useState("");
   const [duration, setDuration] = useState("");
   const [deviceHeading, setDeviceHeading] = useState<number | null>(null);
+  // Follow mode: while navigating, the camera only auto-centers/rotates when this is true.
+  // Starts false every time navigation begins so the responder has full manual control by
+  // default — they opt into the automatic camera via the Follow button.
+  const [isFollowing, setIsFollowing] = useState(false);
   const [locationStatus, setLocationStatus] = useState<
     "checking" | "granted" | "denied" | "servicesDisabled" | "error"
   >("checking");
@@ -319,6 +325,16 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   const victimInterval = useRef<any>(null);
 
   const hasCentered = useRef(false);
+  // Set right before any programmatic camera move so onRegionChangeComplete can tell it apart
+  // from a real user gesture instead of mistaking our own animateCamera/animateToRegion calls
+  // for manual interaction and immediately disabling Follow.
+  const isProgrammaticMoveRef = useRef(false);
+  const markProgrammaticMove = (durationMs: number) => {
+    isProgrammaticMoveRef.current = true;
+    setTimeout(() => {
+      isProgrammaticMoveRef.current = false;
+    }, durationMs + 50);
+  };
 
   // Smart ORS routing tracking refs & concurrency lock
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -809,6 +825,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       // heading-follow effect so it isn't yanked back to a "fit both" framing every tick.
       const targetKey = `sos:${activeSosMonitoring.sosId}`;
       if (!activeSosMonitoring.isRoutingActive || navigationFitTargetRef.current !== targetKey) {
+        markProgrammaticMove(1000);
         mapRef.current.fitToCoordinates(
           [
             validLocation,
@@ -833,6 +850,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         const targetKey = `shared:${activeSharedLocation.id}`;
         if (navigationFitTargetRef.current !== targetKey) {
           // Fit responder and shared location in view when tracking route (once per session)
+          markProgrammaticMove(1000);
           mapRef.current.fitToCoordinates(
             [
               validLocation,
@@ -851,6 +869,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         hasCentered.current = false;
       } else if (!activeSharedLocation.isTrackingActive) {
         // Zoom directly to pinned shared location
+        markProgrammaticMove(1000);
         mapRef.current.animateToRegion(
           {
             latitude: activeSharedLocation.latitude - 0.0025,
@@ -870,6 +889,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       // then let the heading-follow effect own the camera as the responder moves.
       const targetKey = `emergency:${adjustedActiveEmergency.id}`;
       if (validLocation && navigationFitTargetRef.current !== targetKey) {
+        markProgrammaticMove(1000);
         mapRef.current.fitToCoordinates(
           [
             validLocation,
@@ -891,6 +911,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       isValidCoordinate(adjustedSelectedPerson.latitude, adjustedSelectedPerson.longitude)
     ) {
       // Selected emergency preview: zoom directly to focus on the selected victim marker
+      markProgrammaticMove(1000);
       mapRef.current.animateToRegion(
         {
           latitude: adjustedSelectedPerson.latitude - 0.0025,
@@ -901,8 +922,11 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         1000,
       );
       hasCentered.current = false;
-    } else if (validLocation) {
-      // Fallback: center on user's device location when no floating window is open
+    } else if (validLocation && !hasCentered.current) {
+      // Fallback: center on user's device location once when no floating window is open.
+      // Gated on hasCentered so this doesn't re-fire on every GPS tick (every 5-10s) and
+      // fight a responder who has manually zoomed out to look around.
+      markProgrammaticMove(1000);
       mapRef.current.animateToRegion(
         {
           latitude: validLocation.latitude,
@@ -924,11 +948,30 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     activeSosMonitoring,
   ]);
 
-  // Handle manual recenter / compass-tap trigger — always snaps the camera back to a
-  // true north-up, level orientation in addition to recentering, since animateToRegion
-  // alone doesn't reliably clear an existing rotation/tilt on every platform.
+  // Handle manual recenter / Follow-button tap. While navigating, this doubles as the Follow
+  // trigger: snap to the responder's position/heading and hand the camera to the continuous
+  // heading-follow effect below. Outside navigation it's a plain north-up recenter.
   useEffect(() => {
-    if (recenterNonce && mapRef.current && location && isValidCoordinate(location.latitude, location.longitude)) {
+    if (!recenterNonce || !mapRef.current || !location || !isValidCoordinate(location.latitude, location.longitude)) {
+      return;
+    }
+
+    markProgrammaticMove(600);
+
+    if (isNavigating) {
+      lastAppliedHeadingRef.current = deviceHeading ?? 0;
+      lastHeadingApplyTimeRef.current = Date.now();
+      mapRef.current.animateCamera(
+        {
+          center: { latitude: location.latitude, longitude: location.longitude },
+          heading: deviceHeading ?? 0,
+          pitch: 0,
+          zoom: 17,
+        },
+        { duration: 600 },
+      );
+      setIsFollowing(true);
+    } else {
       hasCentered.current = true;
       lastAppliedHeadingRef.current = 0;
       mapRef.current.animateCamera(
@@ -951,11 +994,14 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
         headingWatchRef.current.remove();
         headingWatchRef.current = null;
       }
-      // Navigation just ended — snap the map back to north-up and clear the fit-once guard
-      // so the next navigation session gets a fresh overview fit.
+      // Navigation just ended — snap the map back to north-up, clear the fit-once guard so
+      // the next navigation session gets a fresh overview fit, and turn Follow off so the
+      // next navigation session starts with full manual control again.
       navigationFitTargetRef.current = null;
+      setIsFollowing(false);
       if (wasNavigatingRef.current && mapRef.current) {
         lastAppliedHeadingRef.current = 0;
+        markProgrammaticMove(500);
         mapRef.current.animateCamera({ heading: 0, pitch: 0 }, { duration: 500 });
       }
       wasNavigatingRef.current = false;
@@ -990,10 +1036,11 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     };
   }, [isNavigating]);
 
-  // Apply the tracked heading to the map camera while navigating (throttled so we don't
-  // spam the native bridge on every 1-2 degree compass jitter).
+  // Apply the tracked heading to the map camera while navigating AND Follow is on (throttled
+  // so we don't spam the native bridge on every 1-2 degree compass jitter). With Follow off,
+  // the responder keeps full manual control of pan/zoom/rotate.
   useEffect(() => {
-    if (!isNavigating || deviceHeading === null || !mapRef.current) return;
+    if (!isNavigating || !isFollowing || deviceHeading === null || !mapRef.current) return;
     if (!location || !isValidCoordinate(location.latitude, location.longitude)) return;
 
     const prevHeading = lastAppliedHeadingRef.current;
@@ -1008,11 +1055,27 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     lastAppliedHeadingRef.current = deviceHeading;
     lastHeadingApplyTimeRef.current = now;
 
+    markProgrammaticMove(400);
     mapRef.current.animateCamera(
       { heading: deviceHeading, center: { latitude: location.latitude, longitude: location.longitude } },
       { duration: 400 },
     );
-  }, [deviceHeading, isNavigating, location]);
+  }, [deviceHeading, isNavigating, isFollowing, location]);
+
+  // Manual pan/pinch/rotate should disengage Follow immediately so the camera stops fighting
+  // the responder — they can re-engage with the Follow button whenever they want it back.
+  const handlePanDrag = () => {
+    if (isFollowing) setIsFollowing(false);
+  };
+  const handleRegionChangeComplete = () => {
+    if (isProgrammaticMoveRef.current) return;
+    if (isFollowing) setIsFollowing(false);
+  };
+
+  // Surface Follow/navigating state to the parent so it can render the Follow button.
+  useEffect(() => {
+    onFollowStateChange?.({ isFollowing, isNavigating });
+  }, [isFollowing, isNavigating]);
 
   const locationBannerConfig =
     locationStatus === "denied"
@@ -1053,6 +1116,8 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       }}
       customMapStyle={silverMapStyle}
       showsUserLocation={false}
+      onPanDrag={handlePanDrag}
+      onRegionChangeComplete={handleRegionChangeComplete}
     >
       {/* All Emergency Markers (Filtered to within 800m / near you) */}
       {adjustedPeople
