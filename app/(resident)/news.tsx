@@ -1,21 +1,20 @@
+import { showPopupAlert } from "@/components/popupAlert";
 import Colors from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
-  Search,
-  SlidersHorizontal,
   Newspaper,
-  SearchX
+  Search,
+  SearchX,
+  SlidersHorizontal
 } from "lucide-react-native";
-import { showPopupAlert } from "@/components/popupAlert";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-  ActivityIndicator
+  View
 } from "react-native";
 
 import {
@@ -23,13 +22,14 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 
+import { fetchKnustUpdates } from "@/backend/externalNews";
+import { fetchPublishedNews } from "@/backend/news";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import CustomInput from "@/components/CustomInput";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import NewsCard from "@/components/NewsCard";
 import NewsDetailModal from "@/components/NewsDetailModal";
 import { Article } from "@/constants/interfaces";
-import { fetchPublishedNews } from "@/backend/news";
-import { fetchKnustUpdates } from "@/backend/externalNews";
 
 const FILTERS = ["All", "Campus Safety Alert", "Security Notice", "Emergency Update", "General Safety News"];
 
@@ -39,7 +39,7 @@ export default function NewsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
-  
+
   const [newsList, setNewsList] = useState<Article[]>([]);
   const [knustUpdates, setKnustUpdates] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,12 +51,12 @@ export default function NewsScreen() {
           fetchPublishedNews(),
           fetchKnustUpdates()
         ]);
-        
+
         setKnustUpdates(externalData);
         const mapped: Article[] = data.map((item) => {
           let catColor = "#3B82F6"; // Default Blue
           let catBg = "#DBEAFE";
-          
+
           if (item.category === "Campus Safety Alert") {
             catColor = "#EF4444";
             catBg = "#FEE2E2";
@@ -172,7 +172,13 @@ export default function NewsScreen() {
       {/* News List */}
       {isLoading ? (
         <View style={styles.emptyContainer}>
-          <ActivityIndicator size="large" color={Colors.light.accent} />
+          {/* <ActivityIndicator size="large" color={Colors.light.accent} /> */}
+          <HeartBeatWave
+            width={220}
+            color={Colors.light.primary}
+            thickness={7}
+            style={{ marginBottom: 8 }}
+          />
           <Text style={[styles.emptyText, { marginTop: 16 }]}>Loading news...</Text>
         </View>
       ) : (
@@ -187,8 +193,8 @@ export default function NewsScreen() {
           {activeFilter === "All" && hotspots.length > 0 && (
             <View style={{ marginBottom: 24 }}>
               <Text style={styles.hotspotsTitle}>Hotspots</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingRight: 20 }}
               >
@@ -209,8 +215,8 @@ export default function NewsScreen() {
           {activeFilter === "All" && knustUpdates.length > 0 && (
             <View style={{ marginBottom: 24 }}>
               <Text style={styles.hotspotsTitle}>KNUST Updates</Text>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingRight: 20 }}
               >

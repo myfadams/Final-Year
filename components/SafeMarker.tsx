@@ -12,7 +12,10 @@ export function isValidCoordinate(lat?: number | null, lng?: number | null): boo
   return true;
 }
 
-export const SafeMarker: React.FC<MarkerProps> = (props) => {
+// `cluster` isn't part of react-native-maps' MarkerProps — it's read by react-native-map-clustering
+// (via child.props.cluster) to opt a marker out of clustering. Declared here so callers can pass
+// it through SafeMarker without a type error; SafeMarker forwards it untouched via {...rest}.
+export const SafeMarker: React.FC<MarkerProps & { cluster?: boolean }> = (props) => {
   const { coordinate, ...rest } = props;
   
   const [validCoord, setValidCoord] = useState<LatLng | null>(() => {

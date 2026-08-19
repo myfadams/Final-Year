@@ -2,9 +2,24 @@ import { SharedLocationPin } from "@/constants/globalState";
 import { typography } from "@/constants/typograyph";
 import { Image } from "expo-image";
 import { MapPin, Radio, User } from "lucide-react-native";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { SafeMarker as Marker } from "@/components/SafeMarker";
+
+// react-native-maps renders custom marker children as a static bitmap, re-snapshotting it
+// whenever tracksViewChanges is true. This marker used to hardcode tracksViewChanges={false}
+// to avoid markers flashing to (0,0) on Android, which also froze the pulse ring on its first
+// frame. Instead, re-track briefly whenever the pin's identity/position actually changes, then
+// freeze — matches the pattern used for markers in MapViewComponent.
+function useTracksViewChanges(dep: string, durationMs = 400): boolean {
+  const [tracks, setTracks] = useState(true);
+  useEffect(() => {
+    setTracks(true);
+    const timer = setTimeout(() => setTracks(false), durationMs);
+    return () => clearTimeout(timer);
+  }, [dep, durationMs]);
+  return tracks;
+}
 
 interface SharedLocationPinMarkerProps {
   pin: SharedLocationPin;
@@ -74,6 +89,10 @@ export const SharedLocationPinMarker: React.FC<
       ? pin.senderName.substring(0, 15) + "..."
       : pin.senderName;
 
+  const tracksViewChanges = useTracksViewChanges(
+    `${isSelected}-${pin.latitude}-${pin.longitude}`,
+  );
+
   return (
     <Marker
       coordinate={{
@@ -82,7 +101,7 @@ export const SharedLocationPinMarker: React.FC<
       }}
       anchor={{ x: 0.5, y: 1.0 }} // Anchor pin bottom tail at precise map coordinate
       onPress={onPress}
-      tracksViewChanges={false}
+      tracksViewChanges={tracksViewChanges}
     >
       <View style={styles.container}>
         {/* Pulsating Ring Animation for Live Walk Safe */}

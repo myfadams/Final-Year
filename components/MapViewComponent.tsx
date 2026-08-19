@@ -8,7 +8,8 @@ import * as Location from "expo-location";
 import { AlertTriangle, BriefcaseMedical, Flame, LocateFixed, MapPinOff, Shield, ShieldAlert } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import MapView, { Polyline } from "react-native-maps";
+import { Polyline } from "react-native-maps";
+import ClusteredMapView from "react-native-map-clustering";
 import { SafeMarker as Marker, isValidCoordinate } from "@/components/SafeMarker";
 
 // Helper to resolve incident category type
@@ -57,9 +58,7 @@ const getIncidentIconInfo = (person: Person) => {
 // =====================================================
 // CONFIG
 // =====================================================
-const ORS_API_KEY =
-  process.env.EXPO_PUBLIC_ORS_API_KEY ||
-  "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6ImEzNjgzMDczYTY0YzRhZmQ5OTU2ZmRhMWVmNjI5NjRiIiwiaCI6Im11cm11cjY0In0=";
+const ORS_API_KEY = process.env.EXPO_PUBLIC_ORS_API_KEY;
 
 const getDistanceInMeters = (
   lat1: number,
@@ -200,6 +199,25 @@ const generateSimulatedRoute = (
 };
 
 // =====================================================
+// MARKER SNAPSHOT TRACKING
+// =====================================================
+// react-native-maps renders custom marker children as a static bitmap, re-snapshotting it
+// whenever tracksViewChanges is true. Leaving that permanently true on a marker with a
+// continuously-looping animation (like PulseRing) forces constant re-rasterization, which is
+// what causes markers to intermittently flash to (0,0) — the map's top-left corner — on
+// Android. Instead, re-track only briefly whenever the marker's own identity (position/state)
+// actually changes, then freeze it.
+function useTracksViewChanges(dep: string, durationMs = 400): boolean {
+  const [tracks, setTracks] = useState(true);
+  useEffect(() => {
+    setTracks(true);
+    const timer = setTimeout(() => setTracks(false), durationMs);
+    return () => clearTimeout(timer);
+  }, [dep, durationMs]);
+  return tracks;
+}
+
+// =====================================================
 // PULSE RING ANIMATION
 // =====================================================
 const PulseRing: React.FC<{ color: string }> = ({ color }) => {
@@ -249,6 +267,72 @@ const PulseRing: React.FC<{ color: string }> = ({ color }) => {
         transform: [{ scale }],
       }}
     />
+  );
+};
+
+// =====================================================
+// EMERGENCY PERSON MARKER
+// =====================================================
+// Extracted into its own component (rather than inlined in a .map()) so it can call the
+// useTracksViewChanges hook per-marker, as required by the Rules of Hooks.
+const EmergencyPersonMarker: React.FC<{
+  person: Person;
+  isActive: boolean;
+  isSelected: boolean;
+  // Named "coordinate" (not e.g. currentLoc) so react-native-map-clustering's isMarker() check
+  // — which looks for a truthy child.props.coordinate on the JSX element itself — recognizes
+  // this element as cluster-eligible.
+  coordinate: { latitude: number; longitude: number };
+  onPress: () => void;
+}> = ({ person, isActive, isSelected, coordinate, onPress }) => {
+  const iconInfo = getIncidentIconInfo(person);
+  const ActiveIcon = iconInfo.Icon;
+
+  const labelText = person.address || person.name;
+  const shortLabel =
+    labelText.length > 22 ? labelText.substring(0, 19) + "..." : labelText;
+
+  const tracksViewChanges = useTracksViewChanges(
+    `${isActive}-${isSelected}-${coordinate.latitude}-${coordinate.longitude}`,
+  );
+
+  return (
+    <Marker
+      coordinate={coordinate}
+      anchor={{ x: 0.5, y: 0.5 }}
+      onPress={onPress}
+      tracksViewChanges={tracksViewChanges}
+    >
+      <View style={mapStyles.victimWrapper}>
+        {/* Custom Pulse Ring for active response alerts */}
+        {isActive && <PulseRing color={iconInfo.color} />}
+
+        {/* Circular Badge Marker matching high-fidelity mockup */}
+        <View
+          style={[
+            mapStyles.customMarkerCircle,
+            {
+              backgroundColor: iconInfo.color,
+              transform: [{ scale: isActive || isSelected ? 1.15 : 0.95 }],
+              borderColor:
+                isActive || isSelected
+                  ? "#FFFFFF"
+                  : "rgba(255, 255, 255, 0.8)",
+              borderWidth: isActive || isSelected ? 2.5 : 1.5,
+            },
+          ]}
+        >
+          <ActiveIcon size={isActive || isSelected ? 16 : 13} color="#FFFFFF" />
+        </View>
+
+        {/* Text Label below Marker matching mockup */}
+        <View style={mapStyles.markerLabelContainer}>
+          <Text style={mapStyles.markerLabelText} numberOfLines={1}>
+            {shortLabel}
+          </Text>
+        </View>
+      </View>
+    </Marker>
   );
 };
 
@@ -335,6 +419,17 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       isProgrammaticMoveRef.current = false;
     }, durationMs + 50);
   };
+
+  // See useTracksViewChanges above — these two markers have a permanently-mounted PulseRing,
+  // so without this they'd re-snapshot on every animation frame and risk flashing to (0,0).
+  const sosMarkerTracksViewChanges = useTracksViewChanges(
+    activeSosMonitoring
+      ? `${activeSosMonitoring.sosId}-${activeSosMonitoring.latitude}-${activeSosMonitoring.longitude}`
+      : "none",
+  );
+  const responderMarkerTracksViewChanges = useTracksViewChanges(
+    location ? `${location.latitude}-${location.longitude}` : "none",
+  );
 
   // Smart ORS routing tracking refs & concurrency lock
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -1103,7 +1198,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
 
   return (
     <View style={{ flex: 1 }}>
-    <MapView
+    <ClusteredMapView
       ref={mapRef}
       style={StyleSheet.absoluteFillObject}
       initialRegion={{
@@ -1118,6 +1213,10 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
       showsUserLocation={false}
       onPanDrag={handlePanDrag}
       onRegionChangeComplete={handleRegionChangeComplete}
+      clusterColor={ResQColors.primaryRed}
+      clusterTextColor="#FFFFFF"
+      clusterFontFamily="Inter_700Bold"
+      radius={60}
     >
       {/* All Emergency Markers (Filtered to within 800m / near you) */}
       {adjustedPeople
@@ -1155,60 +1254,18 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           const isSelected = adjustedSelectedPerson?.id === p.id;
           const currentLoc = isActive && victimLocation ? victimLocation : p;
 
-          const iconInfo = getIncidentIconInfo(p);
-          const ActiveIcon = iconInfo.Icon;
-
-          // Format label text using nearest landmark / address
-          const labelText = p.address || p.name;
-          const shortLabel =
-            labelText.length > 22 ? labelText.substring(0, 19) + "..." : labelText;
-
           return (
-            <Marker
+            <EmergencyPersonMarker
               key={p.id}
+              person={p}
+              isActive={isActive}
+              isSelected={isSelected}
               coordinate={{
                 latitude: currentLoc.latitude,
                 longitude: currentLoc.longitude,
               }}
-              anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => onSelectPerson(p)}
-              tracksViewChanges={isActive || isSelected}
-            >
-              <View style={mapStyles.victimWrapper}>
-                {/* Custom Pulse Ring for active response alerts */}
-                {isActive && <PulseRing color={iconInfo.color} />}
-
-                {/* Circular Badge Marker matching high-fidelity mockup */}
-                <View
-                  style={[
-                    mapStyles.customMarkerCircle,
-                    {
-                      backgroundColor: iconInfo.color,
-                      transform: [
-                        { scale: isActive || isSelected ? 1.15 : 0.95 },
-                      ],
-                      borderColor:
-                        isActive || isSelected
-                          ? "#FFFFFF"
-                          : "rgba(255, 255, 255, 0.8)",
-                      borderWidth: isActive || isSelected ? 2.5 : 1.5,
-                    },
-                  ]}
-                >
-                  <ActiveIcon
-                    size={isActive || isSelected ? 16 : 13}
-                    color="#FFFFFF"
-                  />
-                </View>
-
-                {/* Text Label below Marker matching mockup */}
-                <View style={mapStyles.markerLabelContainer}>
-                  <Text style={mapStyles.markerLabelText} numberOfLines={1}>
-                    {shortLabel}
-                  </Text>
-                </View>
-              </View>
-            </Marker>
+            />
           );
         })}
 
@@ -1229,7 +1286,8 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
             longitude: activeSosMonitoring.longitude,
           }}
           anchor={{ x: 0.5, y: 0.5 }}
-          tracksViewChanges={true}
+          tracksViewChanges={sosMarkerTracksViewChanges}
+          cluster={false}
           onPress={() => onSelectSosPin?.(activeSosMonitoring)}
         >
           <View style={mapStyles.victimWrapper}>
@@ -1273,7 +1331,8 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
           key="current-user-responder-location-marker"
           coordinate={location}
           anchor={{ x: 0.5, y: 0.5 }}
-          tracksViewChanges={true}
+          tracksViewChanges={responderMarkerTracksViewChanges}
+          cluster={false}
         >
           <View style={mapStyles.responderWrapper}>
             <PulseRing color="#4ECDC4" />
@@ -1308,7 +1367,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
             />
           </>
         )}
-    </MapView>
+    </ClusteredMapView>
 
       {/* Location permission / GPS availability feedback — tells the responder exactly why
           the map can't show their position, instead of silently sitting blank. */}
