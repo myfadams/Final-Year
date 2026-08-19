@@ -1,0 +1,266 @@
+RESQ — SOS FEATURE: DETAILED TECHNICAL WALKTHROUGH
+====================================================
+Last reviewed against the codebase on: current session (SDK 54 / Expo Router app)
+
+This document explains, end to end, how the "hold SOS" emergency broadcast feature works —
+from the moment a user presses the button on the Home screen, through database writes,
+realtime fan-out to nearby/trusted responders, live location streaming, and cancellation/
+resolution/expiry. File paths and function names are called out so this doubles as a map of
+the relevant code.
+
+
+1. WHAT SOS IS (AS DISTINCT FROM "EMERGENCIES")
+------------------------------------------------
+This app has two related-but-separate alerting systems:
+
+  - "Emergencies" (backend/emergencies.ts, sos_alerts's sibling table `emergencies`) — a
+    manually filled-out incident report (title, description, severity, photos, etc.), created
+    via the Report flow (app/report.tsx).
+
+  - "SOS" (backend/sos.ts, table `sos_alerts`) — a single-tap-and-hold panic broadcast with no
+    form to fill out. It captures only a GPS location and a radius, and exists purely to get a
+    responder to the sender's location as fast as possible. This document is about SOS only.
+
+
+2. DATA MODEL (supabase/migrations/20260814_sos_alerts.sql)
+-------------------------------------------------------------
+sos_alerts
+  id, user_id (sender), status ('active' | 'cancelled' | 'resolved' | 'expired'),
+  location (PostGIS geography Point, EPSG:4326), radius_meters (default 1000),
+  created_at, expires_at (default created_at + 2 hours),
+  cancelled_at / cancelled_by / cancellation_reason,
+  resolved_at / resolved_by
+  -> GiST index on location (for ST_DWithin proximity queries), plus an index on status.
+
+sos_location_updates
+  id, sos_id (FK, cascade delete), location (Point), recorded_at
+  -> a breadcrumb trail recorded while the sender's SOS is active, so responders can see the
+     sender moving in real time (e.g. being carried, fleeing, wandering while injured, etc).
+
+sos_response_history
+  id, sos_id (FK, cascade delete), responder_id, status ('committed' | 'withdrawn' | 'arrived'),
+  responder_source ('proximity' | 'trusted_contact'), created_at, updated_at,
+  unique (sos_id, responder_id)
+  -> one row per responder per SOS; tracks who has committed to help, who backed out, and who
+     has physically arrived.
+
+Row Level Security is defined separately in
+supabase/migrations/20260814_sos_rls_policies.sql (not reproduced here) — it constrains who can
+read/write which rows; the RPCs below are `security definer` specifically so they can bypass the
+sender-only RLS restriction and expose the *subset* of other people's active SOS alerts a given
+caller is allowed to see (proximity or trusted-network membership), without opening the whole
+table.
+
+
+3. TRIGGERING AN SOS (CLIENT SIDE)
+------------------------------------
+File: app/(resident)/home.tsx
+
+Step 1 — Hold-to-confirm (deliberate anti-false-alarm gate)
+  handleSOSPressIn() (~line 507) starts a 2-second countdown the instant the user presses down
+  on the SOS button (a <PulsatingButton>, app/(resident)/home.tsx ~line 709). A modal overlay
+  ("HOLDING SOS... BROADCAST ACTIVE IN 2/1... Release button to cancel") is shown during this
+  window. Lifting the finger early (handleSOSPressOut, ~line 536) cancels the countdown with no
+  side effects at all — nothing is written anywhere until the countdown reaches zero. This is
+  intentionally the only deliberate latency in the whole pipeline; it exists to stop a pocket
+  press or a bump from firing a real emergency broadcast.
+
+Step 2 — Instant UI feedback, then background work
+  The moment the countdown hits 0, the "SOS BROADCASTING ACTIVE" full-screen overlay
+  (setAlertActive(true), ~line 524) is shown synchronously — before any network or GPS call
+  starts — so the user gets immediate confirmation that their hold registered. The actual
+  location fetch + database write (triggerSosAlertCreation()) then runs behind that overlay.
+
+Step 3 — Acquiring a GPS fix (triggerSosAlertCreation(), ~line 417)
+  Location acquisition is a two-tier strategy, tuned for speed:
+    a) Fast path: Location.getLastKnownPositionAsync({ maxAge: 2min, requiredAccuracy: 200m }).
+       This reads a cached fix already sitting on the device — typically near-instant, no GPS
+       wait at all. If it's fresh enough and accurate enough, it's used immediately.
+    b) Slow path (only if there's no usable cached fix): a fresh
+       Location.Accuracy.BestForNavigation fix is raced against a 7-second timeout. If neither
+       resolves a proper GPS lock, it falls back to a quick Location.Accuracy.Balanced fix.
+  In both cases, a BestForNavigation fix is also kicked off in the background regardless of
+  which path is used. If the alert had to go out on a fast/approximate fix, that background fix
+  is used to silently upgrade the sender's recorded location a moment later via
+  updateSosLocation() (backend/sos.ts) — the alert is never blocked waiting for the *most*
+  accurate possible fix, only *a* usable one.
+  If no location can be acquired at all (permission denied, GPS off, etc.), the overlay switches
+  to a "failed" state with an explanatory message instead of silently hanging.
+
+Step 4 — Writing the alert (createSosAlert(), backend/sos.ts ~line 45)
+  A single INSERT into sos_alerts: { user_id, status: 'active', location: 'POINT(lng lat)',
+  radius_meters }. Notes on this call specifically:
+    - It reads the caller's identity via supabase.auth.getSession() (local, no network call)
+      rather than supabase.auth.getUser() (which round-trips to the Auth server to revalidate
+      the session). This was changed specifically to shave a network hop off the critical SOS
+      path — every request matters when the sender may be on a poor connection. It's safe
+      because a tampered/forged local session would simply be rejected server-side by RLS on
+      the insert anyway.
+    - It goes through safeSupabaseRequest() (backend/safeRequest.ts) with autoRetry
+      deliberately OFF — unlike most other writes in the app, a background auto-retry on an
+      SOS insert risks silently creating a *second* active SOS if the user also manually
+      retries after seeing a transient "offline" error.
+  On success, the returned row becomes the client's `activeSos` state, and the overlay flips
+  from "locating"/"uploading" to "broadcasting".
+
+Step 5 — Existing-SOS recovery
+  On mount, home.tsx also calls fetchActiveSosForUser() (~line 308) to check whether the user
+  already has an unexpired active SOS (e.g. they force-closed the app mid-broadcast) and
+  restores the broadcasting overlay/state if so, rather than letting them silently lose track of
+  a live alert.
+
+
+4. LIVE LOCATION STREAMING WHILE AN SOS IS ACTIVE
+-----------------------------------------------------
+File: app/(resident)/home.tsx, ~lines 271-414
+
+While `alertActive` is true, a single foreground location watcher is started:
+  Location.watchPositionAsync({ accuracy: BestForNavigation, distanceInterval: 12m,
+  timeInterval: 5000ms })
+Every fix is throttled through maybeSendUpdate() (~line 288), which:
+  - Immediately updates local UI state (so the sender's own screen always shows their latest
+    coordinates), regardless of throttling.
+  - Only actually writes to the database at most once every 5 seconds (MIN_WRITE_INTERVAL_MS),
+    to avoid flooding sos_location_updates / sos_alerts with near-duplicate rows.
+A parallel 25-second heartbeat timer (HEARTBEAT_MS) independently re-sends the last known fix
+even if the sender hasn't moved — this guarantees responders see the SOS as "still live" via a
+recent timestamp even during a stationary emergency, without double-writing thanks to the same
+5-second floor in maybeSendUpdate().
+
+This watcher is explicitly foreground-only: an AppState listener (~line 395) tears the watcher
+and heartbeat down the moment the app is backgrounded (setIsLocationPaused(true)) and restarts
+them when it returns to foreground. The UI surfaces this as a "location paused" state so the
+sender isn't misled into thinking they're still being tracked while the app is backgrounded.
+
+updateSosLocation() (backend/sos.ts ~line 408) writes through a single atomic Postgres RPC,
+update_sos_location, that updates sos_alerts.location AND inserts a sos_location_updates
+breadcrumb row in one transaction. If that RPC isn't present in a given Supabase environment
+(e.g. an older schema without the migration applied — detected via error codes/messages like
+PGRST202 or "schema cache"), it gracefully falls back to two separate writes via
+Promise.allSettled instead of hard-failing.
+
+
+5. HOW RESPONDERS FIND OUT (REALTIME FAN-OUT)
+-------------------------------------------------
+File: components/sos/SosAlertContext.tsx (SosAlertProvider, mounted app-wide in app/_layout.tsx)
+
+Every signed-in user runs a SosAlertProvider in the background the whole time they use the app.
+It does three things in parallel:
+
+  a) Watches its own device location (Balanced accuracy, re-checks every 15m moved or 15s,
+     whichever first) so it always knows "where am I right now" for proximity matching.
+
+  b) Whenever that location changes (or on a realtime trigger — see below), it calls
+     fetchNearbyAndTrustedSos(lat, lng) (backend/sos.ts ~line 229), which runs two Postgres
+     RPCs in parallel:
+       - get_nearby_active_sos(lat, lng) — PostGIS ST_DWithin proximity match: any *other*
+         user's active, unexpired SOS whose radius_meters circle contains the caller's current
+         location. (supabase/migrations/20260814_get_nearby_active_sos.sql)
+       - get_trusted_network_sos_for_me() — identity-based, distance-agnostic: any active,
+         unexpired SOS from someone in the caller's trusted network (an accepted `friends` row
+         with is_in_trusted_network = true, checked in either direction). A trusted contact's
+         SOS reaches you even if you're nowhere near them.
+     Both RPCs are wrapped in callRpcWithClockSkewRetry() — if PostgREST rejects the request
+     with PGRST303 ("JWT issued in the future", a transient clock-skew error between Supabase's
+     own services), the client refreshes its session and retries once automatically rather than
+     silently dropping the alert.
+     Results from both RPCs are merged by SOS id (trusted_contact takes priority over proximity
+     if an alert qualifies both ways), then enriched with each sender's profile (name, avatar,
+     phone, role) and a computed distance in meters.
+
+  c) Subscribes to Supabase Realtime postgres_changes on sos_alerts (INSERT/UPDATE/DELETE) via
+     subscribeToSosAlerts() (backend/sos.ts ~line 533), so a brand-new SOS or a status change
+     (e.g. sender cancelled/resolved it) is pushed to every connected client over the existing
+     websocket — no polling needed for the common case. Location-only UPDATE ticks are
+     explicitly ignored by this channel so responders' overlays don't re-render on every GPS
+     breadcrumb; only lifecycle changes flow through it.
+     As a safety net in case Realtime is ever unavailable/misconfigured, a plain 10-second
+     setInterval fallback also re-runs fetchAlerts() unconditionally, so alerts still arrive
+     (just up to ~10s slower) even without a working realtime connection.
+
+The provider exposes `activeIncomingAlerts` (all currently-eligible alerts not locally
+dismissed) and `currentAlert` (the first one) via React context; components/sos/
+SosAlertOverlay.tsx renders `currentAlert` as a full-screen incoming-SOS card app-wide,
+regardless of which screen the responder happens to be on.
+
+
+6. RESPONDING TO AN SOS
+---------------------------
+respondToSos(sosId, source) (backend/sos.ts ~line 328) upserts a `committed` row into
+sos_response_history (unique on sos_id+responder_id, so re-responding is idempotent). Calling
+respondToCurrentAlert() from SosAlertContext both commits the response and locally dismisses
+the overlay for that alert. withdrawSosResponse() and updateSosResponderStatus() (e.g. flipping
+to 'arrived' on physical arrival) update that same row.
+
+On the sender's side, subscribeToSosResponders(sosId, ...) (backend/sos.ts ~line 588) — used
+from home.tsx while `alertActive` — keeps a live list of everyone who has committed/arrived,
+via a dedicated realtime channel filtered to that one sos_id, so the sender can see help is
+coming without refreshing anything.
+
+A responder actively routing to a live SOS also gets the sender's live position via
+subscribeToSosLocationUpdates() (backend/sos.ts ~line 832), which listens to both the
+sos_alerts UPDATE stream and new sos_location_updates INSERTs, and guards against out-of-order
+delivery with a monotonic timestamp check (a stale/delayed packet arriving after a newer one is
+silently dropped rather than snapping the map backwards). This is the same feed consumed by the
+map screen's routing/navigation camera (components/MapViewComponent.tsx).
+
+
+7. CANCELLING, RESOLVING, EXPIRING
+--------------------------------------
+Cancel (sender-initiated, home.tsx stopSOSBroadcast(), ~line 546): gated behind device
+biometric/passcode authentication (expo-local-authentication) before cancelSosAlert() runs —
+deliberately harder to cancel than to start, so a struggle for the phone (attacker taking the
+device from the victim) can't silently kill a real alert. Devices without biometric hardware
+enrolled skip straight through (can't require what the device doesn't support).
+
+Resolve (resolveSosAlert(), backend/sos.ts ~line 137): marks status = 'resolved' — used once
+the situation is confirmed handled.
+
+Expire: every sos_alerts row is created with expires_at = now() + 2 hours by default (schema
+default, supabase/migrations/20260814_sos_alerts.sql). Both proximity and trusted-network RPCs
+filter on expires_at > now(), so a forgotten/never-explicitly-closed SOS simply stops being
+surfaced to responders after 2 hours without needing an explicit background job to flip its
+status.
+
+
+8. COORDINATE PARSING (parseGeoPoint, backend/sos.ts ~line 623)
+--------------------------------------------------------------------
+PostGIS can hand back a location value in several different shapes depending on the query path
+(plain WKT string "POINT(lng lat)", raw EWKB hex, or GeoJSON), and this one helper normalizes
+all of them into a plain { latitude, longitude } object used everywhere else in the SOS code.
+It also rejects (0,0) "Null Island" and out-of-range values as invalid, the same convention used
+by isValidCoordinate() on the map screen (components/SafeMarker.tsx) — a bad/placeholder
+coordinate is never allowed to silently reach a map camera or distance calculation.
+
+
+9. RESILIENCE / EDGE CASES ALREADY HANDLED
+-----------------------------------------------
+  - Offline sender: safeSupabaseRequest() (backend/safeRequest.ts) detects network errors,
+    surfaces a global offline banner, and (for most calls, though NOT createSosAlert — see
+    step 4 above) queues an auto-retry for when connectivity returns.
+  - Clock-skew JWT rejections (PGRST303) on the SOS-discovery RPCs auto-refresh the session and
+    retry once transparently (see section 5).
+  - Backgrounded sender: location streaming pauses cleanly rather than silently failing or
+    draining battery in the background without the user's knowledge.
+  - Out-of-order location packets on the responder's live-tracking feed are dropped via a
+    monotonic timestamp guard.
+  - Missing update_sos_location RPC (older schema) falls back to two-step writes instead of
+    hard failing.
+  - Existing active SOS on app relaunch is detected and the UI state is restored instead of the
+    user losing track of a live broadcast.
+
+
+10. KNOWN LIMITATIONS / NATURAL NEXT STEPS
+-----------------------------------------------
+  - Delivery to responders currently relies on the app being open (realtime) or, for
+    nearby-emergency/hotspot/trusted-SOS categories, the local-notification watcher covered in
+    the separate Notifications feature (backend/notificationEngine.ts,
+    components/notifications/useEmergencyNotificationWatcher.ts) firing while the app is
+    installed and has run recently. None of this reaches a responder whose app is fully killed
+    — that requires registering device push tokens and sending via a server-side push service
+    (e.g. Expo's push API) triggered by a database hook, which does not exist yet.
+  - The 2-second hold-to-confirm is a fixed, non-configurable delay. It's a deliberate
+    false-alarm guard, not an oversight, but if it ever needs tuning it lives entirely in
+    handleSOSPressIn() (app/(resident)/home.tsx ~line 507).
+  - radius_meters defaults to 1000m for every SOS (createSosAlert's default parameter) — it is
+    not currently adjustable per-alert from the UI.
