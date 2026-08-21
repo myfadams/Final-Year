@@ -1,12 +1,13 @@
 import { showPopupAlert } from "@/components/popupAlert";
-import Colors from "@/constants/Colors";
+import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
   Newspaper,
   Search,
   SearchX,
-  SlidersHorizontal
+  SlidersHorizontal,
+  TriangleAlert
 } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -23,10 +24,12 @@ import {
 } from "react-native-safe-area-context";
 
 import { fetchKnustUpdates } from "@/backend/externalNews";
+import { fetchHotspots, HotspotRecord } from "@/backend/hotspots";
 import { fetchPublishedNews } from "@/backend/news";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import CustomInput from "@/components/CustomInput";
 import HeartBeatWave from "@/components/HeartBeatWave";
+import HotspotZoneCard from "@/components/HotspotZoneCard";
 import NewsCard from "@/components/NewsCard";
 import NewsDetailModal from "@/components/NewsDetailModal";
 import { Article } from "@/constants/interfaces";
@@ -42,17 +45,20 @@ export default function NewsScreen() {
 
   const [newsList, setNewsList] = useState<Article[]>([]);
   const [knustUpdates, setKnustUpdates] = useState<Article[]>([]);
+  const [hotspotZones, setHotspotZones] = useState<HotspotRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     async function loadNews() {
       try {
-        const [data, externalData] = await Promise.all([
+        const [data, externalData, { data: hotspotData }] = await Promise.all([
           fetchPublishedNews(),
-          fetchKnustUpdates()
+          fetchKnustUpdates(),
+          fetchHotspots(),
         ]);
 
         setKnustUpdates(externalData);
+        setHotspotZones(hotspotData);
         const mapped: Article[] = data.map((item) => {
           let catColor = "#3B82F6"; // Default Blue
           let catBg = "#DBEAFE";
@@ -104,10 +110,28 @@ export default function NewsScreen() {
     return matchesSearch && matchesFilter;
   });
 
-  const hotspots = newsList.filter((a) => a.isFeatured).slice(0, 5); // top 5 hotspots
+  const featuredArticles = newsList.filter((a) => a.isFeatured).slice(0, 5); // top 5 featured stories
   const regularArticles = filteredArticles.filter(
     (a) => !a.isFeatured || activeFilter !== "All",
   );
+
+  // Danger-zone hotspots are a resident-tab destination on the map (not a drill-down detail
+  // screen), so this resets the stack instead of pushing — same convention used everywhere
+  // else a card jumps into a resident tab (see notificationsPage.tsx, contactChat.tsx). Without
+  // it, repeatedly bouncing between News and the map would pile up duplicate stack entries.
+  const handleHotspotPress = (hotspot: HotspotRecord) => {
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+    router.replace({
+      pathname: "/(resident)/map",
+      params: {
+        lat: hotspot.latitude.toString(),
+        lng: hotspot.longitude.toString(),
+        hotspotId: hotspot.id,
+      },
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -189,16 +213,43 @@ export default function NewsScreen() {
             { paddingBottom: 100 + insets.bottom },
           ]}
         >
-          {/* Hotspots Section */}
-          {activeFilter === "All" && hotspots.length > 0 && (
+          {/* Hotspots Section — real danger zones from the `hotspots` table, not news */}
+          {activeFilter === "All" && hotspotZones.length > 0 && (
             <View style={{ marginBottom: 24 }}>
-              <Text style={styles.hotspotsTitle}>Hotspots</Text>
+              <View style={styles.hotspotsHeaderRow}>
+                <TriangleAlert size={16} color={ResQColors.primaryRedText} strokeWidth={2.4} />
+                <View>
+                  <Text style={styles.hotspotsTitle}>Hotspots</Text>
+                  <Text style={styles.hotspotsSubtitle}>Areas reported as unsafe — avoid or take extra care</Text>
+                </View>
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingRight: 20 }}
               >
-                {hotspots.map((article) => (
+                {hotspotZones.map((hotspot) => (
+                  <View key={hotspot.id} style={{ marginRight: 12 }}>
+                    <HotspotZoneCard
+                      hotspot={hotspot}
+                      onPress={() => handleHotspotPress(hotspot)}
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Featured Stories Section */}
+          {activeFilter === "All" && featuredArticles.length > 0 && (
+            <View style={{ marginBottom: 24 }}>
+              <Text style={styles.hotspotsTitle}>Featured Stories</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingRight: 20 }}
+              >
+                {featuredArticles.map((article) => (
                   <View key={article.id} style={{ width: 300, marginRight: 16 }}>
                     <NewsCard
                       article={article}
@@ -400,10 +451,21 @@ const styles = StyleSheet.create({
     fontFamily: typography.medium,
     fontSize: 14,
   },
+  hotspotsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
   hotspotsTitle: {
     fontSize: 18,
     fontFamily: typography.bold,
     color: Colors.light.text,
-    marginBottom: 12,
+  },
+  hotspotsSubtitle: {
+    fontSize: 12,
+    fontFamily: typography.regular,
+    color: Colors.light.textMuted,
+    marginTop: 1,
   },
 });
