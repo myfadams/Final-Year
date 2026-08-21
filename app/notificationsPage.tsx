@@ -1,30 +1,19 @@
-import { getCurrentUser } from "@/backend/auth";
 import {
-  computeNotificationFeed,
   filterUnseenNotifications,
-  fireLocalNotificationsForNewItems,
-  getNotificationPermissionStatus,
   NotificationFeedItem,
 } from "@/backend/notificationEngine";
 import {
   loadNotificationPreferences,
   NotificationPreferences,
 } from "@/backend/notificationPreferences";
-import HeartBeatWave from "@/components/HeartBeatWave";
 import NavHeader from "@/components/NavHeader";
 import { useNotificationBadge } from "@/components/notifications/NotificationBadgeContext";
 import { CATEGORY_ICONS } from "@/components/notifications/notificationCategoryIcons";
 import { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
-import * as Location from "expo-location";
 import { router } from "expo-router";
-import {
-  AlertTriangle,
-  BellOff,
-  RefreshCw,
-  Settings,
-} from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import { BellOff, RefreshCw, Settings } from "lucide-react-native";
+import React, { useEffect, useState } from "react";
 import {
   RefreshControl,
   ScrollView,
@@ -64,65 +53,28 @@ function getNotificationGroupKey(item: NotificationFeedItem): string {
 }
 
 export default function NotificationsPage() {
-  const { markCurrentFeedAsSeen } = useNotificationBadge();
+  // The provider recomputes this live off realtime events (new emergency/SOS/chat message/
+  // friend activity) and a 5-minute fallback interval — this screen just renders it, so it
+  // updates in real time while open instead of needing a manual reload.
+  const { feed: rawFeed, isRefreshing, refreshNow, markCurrentFeedAsSeen } = useNotificationBadge();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [feed, setFeed] = useState<NotificationFeedItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setErrorMsg(null);
-
-    try {
-      const [permissionStatus, loadedPrefs, { user }] = await Promise.all([
-        getNotificationPermissionStatus(),
-        loadNotificationPreferences(),
-        getCurrentUser(),
-      ]);
-      setPrefs(loadedPrefs);
-
-      if (!user) {
-        setFeed([]);
-        return;
-      }
-
-      let userLocation: { latitude: number; longitude: number } | null = null;
-      try {
-        const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
-        if (locStatus === "granted") {
-          const pos = await Location.getCurrentPositionAsync({
-            accuracy: Location.Accuracy.Balanced,
-          });
-          userLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-        }
-      } catch (_) {
-        // Feed will just come back empty without location.
-      }
-
-      const items = await computeNotificationFeed(user.id, userLocation);
-
-      // Only show what's new since the last time this screen was viewed — once seen, an item
-      // clears from the list itself, not just the bell badge.
-      const unseenItems = await filterUnseenNotifications(items);
-      setFeed(unseenItems);
-
-      if (permissionStatus === "granted") {
-        await fireLocalNotificationsForNewItems(items, loadedPrefs);
-      }
-    } catch (err: any) {
-      setErrorMsg(err?.message || "Couldn't load notifications.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, []);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadNotificationPreferences().then(setPrefs);
+  }, []);
+
+  // Re-derive "what's still unseen" every time the underlying feed changes, so the list stays
+  // in sync with the live data without needing its own fetch.
+  useEffect(() => {
+    let cancelled = false;
+    filterUnseenNotifications(rawFeed).then((unseen) => {
+      if (!cancelled) setFeed(unseen);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [rawFeed]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -130,7 +82,7 @@ export default function NotificationsPage() {
       <View style={styles.toolbar}>
         <TouchableOpacity
           style={styles.refreshIconBtn}
-          onPress={() => load(true)}
+          onPress={() => refreshNow()}
           activeOpacity={0.7}
         >
           <RefreshCw size={13} color="#64748B" />
@@ -148,45 +100,22 @@ export default function NotificationsPage() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={() => refreshNow()} />
         }
       >
-        {loading && (
-          <View style={styles.centeredState}>
-            {/* <ActivityIndicator color={ResQColors.primaryRed} /> */}
-            <HeartBeatWave
-              width={220}
-              color={ResQColors.primaryRed}
-              thickness={7}
-              style={{ marginBottom: 8 }}
-            />
-            <Text style={styles.stateSubtitle}>Checking for updates near you…</Text>
-          </View>
-        )}
-
-        {!loading && errorMsg && (
-          <View style={styles.centeredState}>
-            <AlertTriangle size={28} color="#FF6B6B" />
-            <Text style={styles.stateTitle}>Couldn't load notifications</Text>
-            <Text style={styles.stateSubtitle}>{errorMsg}</Text>
-          </View>
-        )}
-
-        {!loading && !errorMsg && feed.length === 0 && (
+        {feed.length === 0 && (
           <View style={styles.centeredState}>
             <View style={styles.emptyIconWrapper}>
               <BellOff size={30} color={ResQColors.textSubtle} />
             </View>
             <Text style={styles.stateTitle}>You're all caught up</Text>
             <Text style={styles.stateSubtitle}>
-              No new notifications right now — opening one clears it from this list.
+              No new notifications right now — this list updates live as new ones come in.
             </Text>
           </View>
         )}
 
-        {!loading &&
-          !errorMsg &&
-          feed.map((item) => {
+        {feed.map((item) => {
             const Icon = CATEGORY_ICONS[item.category];
             const muted = prefs ? !prefs[item.category] : false;
             return (
@@ -202,25 +131,33 @@ export default function NotificationsPage() {
                   setFeed((prev) => prev.filter((f) => getNotificationGroupKey(f) !== groupKey));
                   markCurrentFeedAsSeen(related);
 
-                  if (item.navigateTo) {
-                    router.replace(item.navigateTo as any);
-                    if (item.navigateTo.pathname.toLowerCase().includes("/(resident)")) {
-                      router.dismissAll();
-                    }
-                    return;
+                  const destination = item.navigateTo
+                    ? (item.navigateTo as any)
+                    : item.latitude != null && item.longitude != null
+                      ? {
+                          pathname: "/(resident)/map",
+                          params: {
+                            lat: item.latitude.toString(),
+                            lng: item.longitude.toString(),
+                            ...(item.emergencyId
+                              ? { personId: item.emergencyId, action: "preview" }
+                              : {}),
+                          },
+                        }
+                      : null;
+                  if (!destination) return;
+
+                  // Every screen's bell icon reaches this page via router.push (see NavHeader,
+                  // AnotherNavBarHeader, HomeTabBar), so without a reset, bouncing between it and
+                  // a destination (e.g. news -> notifications -> news -> notifications) would
+                  // keep piling duplicate entries onto the stack. Dismissing back to the root
+                  // first, then replacing it, keeps the stack at a single entry no matter how many
+                  // times that round trip happens — and must happen in this order: dismissAll()
+                  // after replace() would unwind past the replaced screen and undo the navigation.
+                  if (router.canDismiss()) {
+                    router.dismissAll();
                   }
-                  if (item.latitude == null || item.longitude == null) return;
-                  router.replace({
-                    pathname: "/(resident)/map",
-                    params: {
-                      lat: item.latitude.toString(),
-                      lng: item.longitude.toString(),
-                      ...(item.emergencyId
-                        ? { personId: item.emergencyId, action: "preview" }
-                        : {}),
-                    },
-                  });
-                  router.dismissAll();
+                  router.replace(destination);
                 }}
               >
                 <View style={styles.feedIconCircle}>
