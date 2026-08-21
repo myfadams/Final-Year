@@ -1,13 +1,15 @@
+import { subscribeToCurrentRespondingEmergency } from "@/backend/emergencies";
+import { ResQColors } from "@/constants/Colors";
+import { globalState } from "@/constants/globalState";
 import {
   Inter_400Regular,
   Inter_500Medium,
   Inter_600SemiBold,
   Inter_700Bold,
 } from "@expo-google-fonts/inter";
-import { subscribeToCurrentRespondingEmergency } from "@/backend/emergencies";
-import { globalState } from "@/constants/globalState";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 
 import { NetworkProvider } from "@/components/network";
@@ -27,10 +29,12 @@ export default function RootLayout() {
 
   useEffect(() => {
     // Start active responding emergency realtime listener to update globalState
-    const unsubscribeResponding = subscribeToCurrentRespondingEmergency((data) => {
-      globalState.activeEmergencyId = data?.emergency?.id || null;
-      globalState.activeEmergencyPerson = data?.person || null;
-    });
+    const unsubscribeResponding = subscribeToCurrentRespondingEmergency(
+      (data) => {
+        globalState.activeEmergencyId = data?.emergency?.id || null;
+        globalState.activeEmergencyPerson = data?.person || null;
+      },
+    );
 
     return () => {
       unsubscribeResponding();
@@ -42,6 +46,12 @@ export default function RootLayout() {
   }
   return (
     <NetworkProvider>
+      {/* App-wide default: primary-color status bar with white content. The entire (auth) group
+          (login, register, verify, waitingVerify, forgot/reset-password) and the map screen
+          manage their own StatusBar and are left with their existing look — expo-status-bar
+          merges multiple mounted instances, with the most specific/recently-updated one
+          winning, so those screens' own overrides take priority over this default. */}
+      <StatusBar style="dark" backgroundColor={ResQColors.primaryRed} />
       <PopupAlertProvider>
         <WalkSafeProvider>
           <SosAlertProvider>
@@ -70,5 +80,3 @@ export default function RootLayout() {
     </NetworkProvider>
   );
 }
-
-

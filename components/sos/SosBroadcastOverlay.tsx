@@ -2,10 +2,12 @@ import { UserProfile } from "@/backend/auth";
 import { SosResponder } from "@/backend/sos";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
+import { StatusBar } from "expo-status-bar";
 import {
   AlertTriangle,
   CheckCircle2,
   MapPin,
+  MessageSquareText,
   Radio,
   RefreshCw,
   ShieldAlert,
@@ -43,6 +45,7 @@ interface SosBroadcastOverlayProps {
   sosResponders: SosResponder[];
   onRetry: () => void;
   onStopBroadcast: () => void;
+  onSendSms: () => void;
 }
 
 /**
@@ -63,9 +66,19 @@ export default function SosBroadcastOverlay({
   sosResponders,
   onRetry,
   onStopBroadcast,
+  onSendSms,
 }: SosBroadcastOverlayProps) {
   return (
     <>
+      {/* While the broadcast overlay is showing, its background is solid primary red full-bleed
+          (see senderOverlayBg) — switch the status bar to light/white content so it reads
+          against that background instead of the default dark style. expo-status-bar merges
+          this with whatever other StatusBar is mounted elsewhere, reverting automatically once
+          this unmounts. */}
+      {alertActive && (
+        <StatusBar style="light" backgroundColor={ResQColors.primaryRed} />
+      )}
+
       {/* SOS COUNTDOWN OVERLAY */}
       <Modal visible={isCountingDown} transparent={true} animationType="fade">
         <View style={styles.overlayBg}>
@@ -211,6 +224,16 @@ export default function SosBroadcastOverlay({
                   </View>
                 </View>
               </View>
+
+              {/* Send SOS via SMS — reaches trusted contacts and Campus Security who aren't on
+                  ResQ, via the phone's own native SMS composer */}
+              <TouchableOpacity
+                style={styles.smsButton}
+                onPress={onSendSms}
+              >
+                <MessageSquareText size={18} color="#FFFFFF" />
+                <Text style={styles.smsButtonText}>SEND SOS VIA SMS</Text>
+              </TouchableOpacity>
 
               {/* Retry Button if broadcast failed */}
               {sosBroadcastState === "failed" && (
@@ -543,6 +566,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: typography.semibold,
     color: "#FFFFFF",
+  },
+  smsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    width: "100%",
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    paddingVertical: 13,
+    borderRadius: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  smsButtonText: {
+    fontSize: 13,
+    fontFamily: typography.bold,
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
   },
   retryButton: {
     flexDirection: "row",

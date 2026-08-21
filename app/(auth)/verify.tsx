@@ -18,6 +18,7 @@ import { KNUST_PROGRAMMES, LOCATION_OPTIONS } from "@/constants/tempData";
 import { typography } from "@/constants/typograyph";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { IdCard, LocateFixed, MapPin, Phone } from "lucide-react-native";
 import React, { useEffect, useState } from "react";
 import {
@@ -372,7 +373,9 @@ const Verify = () => {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <>
+      <StatusBar style="dark" />
+      <SafeAreaView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
@@ -535,7 +538,8 @@ const Verify = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 };
 

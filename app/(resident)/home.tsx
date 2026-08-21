@@ -15,6 +15,7 @@ import {
   subscribeToSosResponders,
   updateSosLocation
 } from "@/backend/sos";
+import { buildSosSmsMessage } from "@/backend/sosSms";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import EmergencyActionCard from "@/components/EmergecnyActionCard";
 import HeartBeatWave from "@/components/HeartBeatWave";
@@ -32,6 +33,7 @@ import { typography } from "@/constants/typograyph";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as Location from "expo-location";
 import { useFocusEffect, useRouter } from "expo-router";
+import * as SMS from "expo-sms";
 import {
   AlertTriangle,
   ArrowRight,
@@ -67,6 +69,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
+// KNUST Campus Security — both lines get the SOS SMS. Converted to international format
+// (+233, no leading 0) since expo-sms needs that to reliably reach a Ghana number regardless of
+// the sending device's own region.
+const CAMPUS_SECURITY_SMS_NUMBERS = ["+233501347350", "+233501347352"];
 
 const AVATAR_COLORS = [
   "#FEE2E2",
@@ -586,6 +593,41 @@ const Home = () => {
     }
   };
 
+  // Opens the phone's native SMS composer, prefilled with trusted contacts + Campus Security
+  // and a crafted message with a Google Maps link to the live coordinates. Uses Alert.alert
+  // (a real native dialog) rather than the app's custom popup-alert system for feedback here —
+  // that system is its own RN Modal, and a second Modal opened while the SOS broadcast overlay
+  // is already showing renders in a separate, invisible OS surface behind it.
+  const handleSendSosSms = async () => {
+    if (!currentCoords) {
+      Alert.alert("Location Unavailable", "Still acquiring your GPS location — try again in a moment.");
+      return;
+    }
+    try {
+      const isAvailable = await SMS.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert("SMS Unavailable", "This device can't send SMS messages.");
+        return;
+      }
+
+      const trustedNumbers = trustedFriends
+        .map((f) => f.phone)
+        .filter((p): p is string => !!p);
+      const numbers = [...trustedNumbers, ...CAMPUS_SECURITY_SMS_NUMBERS];
+
+      const message = buildSosSmsMessage({
+        senderName: userProfile?.name || "A ResQ user",
+        latitude: currentCoords.lat,
+        longitude: currentCoords.lng,
+      });
+
+      await SMS.sendSMSAsync(numbers, message);
+    } catch (err) {
+      console.warn("handleSendSosSms error:", err);
+      Alert.alert("Couldn't Open Messages", "Something went wrong opening the SMS composer.");
+    }
+  };
+
   // Derived Trusted Network contacts
   const trustedNetworkContacts = appContacts.filter((c) => c.isTrustedNetwork);
 
@@ -803,6 +845,7 @@ const Home = () => {
         sosResponders={sosResponders}
         onRetry={triggerSosAlertCreation}
         onStopBroadcast={stopSOSBroadcast}
+        onSendSms={handleSendSosSms}
       />
 
       {/* MEDICAL ID MODAL COMPONENT */}
