@@ -28,11 +28,18 @@ export interface ContactsProp {
   category?: string;
   verified?: boolean;
   hasLeftAccent?: boolean;
-  hasMessage?: boolean;
   phone?: string;
   avatarUrl?: string;
   badgeType?: string;
   isTrustedNetwork?: boolean;
+  /** Preview text of the most recent message in this contact's chat, if any. */
+  lastMessagePreview?: string | null;
+  /** ISO timestamp of the most recent message, used to render a relative time next to the preview. */
+  lastMessageAt?: string | null;
+  /** When the last message is one of the safety-feature types, renders a special bubble instead of plain preview text. */
+  lastMessageKind?: "text" | "audio" | "media" | "location_share" | "walk_safe" | "im_okay" | null;
+  /** Count of messages from this contact received since the chat was last opened on this device. */
+  unreadCount?: number;
 }
 export interface HomeButton {
   Icon: React.ReactNode;

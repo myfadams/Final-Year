@@ -15,6 +15,30 @@ const NetworkContext = createContext<NetworkContextType | undefined>(undefined);
 
 let globalHandleNetworkError: ((error: any) => boolean) | null = null;
 
+const RECOVERY_POLL_INTERVAL_MS = 3000;
+const RECOVERY_PROBE_TIMEOUT_MS = 5000;
+
+// A tiny, cheap-to-answer endpoint — we only care whether the request reaches the server at
+// all (any response, even a non-2xx one, proves the connection is back), not whether it
+// succeeds. Only a thrown/aborted fetch means we're still offline.
+async function probeConnectivity(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RECOVERY_PROBE_TIMEOUT_MS);
+    try {
+      await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/auth/v1/health`, {
+        method: "GET",
+        signal: controller.signal,
+      });
+      return true;
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Utility function callable from anywhere (even outside React hooks) to inspect
  * an error and automatically trigger network offline handling if it's a network error.
@@ -98,6 +122,30 @@ export const NetworkProvider: React.FC<{ children: ReactNode }> = ({
     clearNetworkError();
     flushAutoRetryQueue();
   }, [clearNetworkError]);
+
+  // While the banner is showing, keep probing in the background so it can dismiss itself the
+  // moment the connection actually comes back — the user shouldn't have to tap Retry just to
+  // notice they're back online.
+  useEffect(() => {
+    if (!isOffline) return;
+
+    let cancelled = false;
+    const attemptRecovery = async () => {
+      const reachable = await probeConnectivity();
+      if (!cancelled && reachable) {
+        console.log("⚡ Network Context: connection restored, auto-clearing offline banner");
+        retryConnection();
+      }
+    };
+
+    attemptRecovery();
+    const interval = setInterval(attemptRecovery, RECOVERY_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isOffline, retryConnection]);
 
   // Hook into global ErrorUtils & unhandled promise rejections in React Native to suppress redbox popups for network failures
   useEffect(() => {

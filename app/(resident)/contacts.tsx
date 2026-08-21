@@ -1,3 +1,4 @@
+import { ChatPreviewInfo, getChatPreviewsForContacts } from "@/backend/chat";
 import {
   FriendContact,
   getFriends,
@@ -100,6 +101,9 @@ export default function ContactsScreen() {
   const [friends, setFriends] = useState<FriendContact[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Last message + unread count per contact's chat, keyed by the contact's userId
+  const [chatPreviews, setChatPreviews] = useState<Record<string, ChatPreviewInfo>>({});
+
   // Contact-action modal
   const [modalContact, setModalContact] = useState<FriendContact | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -150,6 +154,47 @@ export default function ContactsScreen() {
       }
     };
   }, [loadFriends]);
+
+  // ── Load chat previews (last message + unread count) ───────────────────────
+  const loadChatPreviews = useCallback(async (friendList: FriendContact[]) => {
+    const otherIds = friendList.map((f) => f.userId);
+    if (otherIds.length === 0) {
+      setChatPreviews({});
+      return;
+    }
+    const previews = await getChatPreviewsForContacts(otherIds);
+    setChatPreviews(previews);
+  }, []);
+
+  useEffect(() => {
+    loadChatPreviews(friends);
+  }, [friends, loadChatPreviews]);
+
+  // Refresh previews live as new messages come in — no per-user filter is possible
+  // server-side here, so this listens table-wide and re-derives client-side (same pattern
+  // used by NotificationBadgeContext's chat watcher).
+  useEffect(() => {
+    let channel: any = null;
+    try {
+      channel = createSafeRealtimeChannel("contacts-chat-preview-watch", (ch) =>
+        ch.on(
+          "postgres_changes",
+          { event: "INSERT", schema: "public", table: "private_chat_messages" },
+          () => loadChatPreviews(friends)
+        )
+      );
+    } catch (err) {
+      console.warn("Realtime chat preview setup warning:", err);
+    }
+
+    return () => {
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) { }
+      }
+    };
+  }, [friends, loadChatPreviews]);
 
 
   // ── Action handlers ─────────────────────────────────────────────────────────
@@ -255,7 +300,16 @@ export default function ContactsScreen() {
     ),
   );
 
-  const mapped = friends.map(toContactsProp);
+  const mapped = friends.map(toContactsProp).map((c) => {
+    const preview = chatPreviews[c.userId];
+    return {
+      ...c,
+      lastMessagePreview: preview?.lastMessagePreview ?? null,
+      lastMessageAt: preview?.lastMessageAt ?? null,
+      lastMessageKind: preview?.lastMessageKind ?? null,
+      unreadCount: preview?.unreadCount ?? 0,
+    };
+  });
 
   const filteredContacts = mapped.filter((c) => {
     const q = searchQuery.toLowerCase();
@@ -492,6 +546,10 @@ export default function ContactsScreen() {
                 avatarColor={contact.avatarColor}
                 avatarTextColor={contact.avatarTextColor}
                 verified={contact.verified}
+                lastMessagePreview={contact.lastMessagePreview}
+                lastMessageAt={contact.lastMessageAt}
+                lastMessageKind={contact.lastMessageKind}
+                unreadCount={contact.unreadCount}
                 // handleCallPress={handleCallPress}
                 handleCallPress={() => (handleCall(contact.name, contact.phone))}
                 handleChatPress={(name, obj) =>

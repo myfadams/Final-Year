@@ -633,6 +633,147 @@ export function generateUUID(): string {
 }
 
 // ============================================================================
+// CONTACTS LIST PREVIEWS & LOCAL READ TRACKING
+// ============================================================================
+// There's no server-side read-receipt column on private_chat, so "unread" is tracked
+// entirely on-device: the last time each chat was opened is stored locally, and the unread
+// count is just "messages from the other person newer than that."
+
+const CHAT_LAST_READ_KEY = "@resq_chat_last_read";
+// Caps how far back an unread count can reach for a chat that's never been opened on this
+// device (e.g. a fresh install) — without this, an old, long-running conversation could
+// surface a misleadingly large "unread" number the first time this feature runs.
+const UNREAD_LOOKBACK_MS = 30 * 24 * 60 * 60 * 1000;
+
+async function getLastReadMap(): Promise<Record<string, string>> {
+  try {
+    const raw = await AsyncStorage.getItem(CHAT_LAST_READ_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+async function saveLastReadMap(map: Record<string, string>): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CHAT_LAST_READ_KEY, JSON.stringify(map));
+  } catch {
+    // Non-fatal — unread counts just won't clear until the next successful write.
+  }
+}
+
+/** Call when the user opens a chat — clears its unread count going forward. */
+export async function markChatAsRead(chatId: string | null | undefined): Promise<void> {
+  if (!chatId) return;
+  const map = await getLastReadMap();
+  map[chatId] = new Date().toISOString();
+  await saveLastReadMap(map);
+}
+
+export type ChatPreviewKind =
+  | "text"
+  | "audio"
+  | "media"
+  | "location_share"
+  | "walk_safe"
+  | "im_okay";
+
+export interface ChatPreviewInfo {
+  chatId: string;
+  lastMessagePreview: string | null;
+  lastMessageAt: string | null;
+  lastMessageKind: ChatPreviewKind | null;
+  unreadCount: number;
+}
+
+// sendChatMessage always writes one of these emoji-prefixed strings as the preview, so the
+// message type can be read back off it without a second query for the raw message row.
+function detectPreviewKind(preview: string | null): ChatPreviewKind | null {
+  if (!preview) return null;
+  if (preview.startsWith("📍")) return "location_share";
+  if (preview.startsWith("🚶")) return "walk_safe";
+  if (preview.startsWith("✅")) return "im_okay";
+  if (preview.startsWith("🎤")) return "audio";
+  if (preview.startsWith("📷") || preview.startsWith("🎥")) return "media";
+  return "text";
+}
+
+/**
+ * Batch-fetches, for each of the given contact user IDs, their private chat's last message
+ * preview plus an on-device unread count. Contacts with no chat row yet (never messaged) are
+ * simply absent from the result.
+ */
+export async function getChatPreviewsForContacts(
+  otherUserIds: string[]
+): Promise<Record<string, ChatPreviewInfo>> {
+  const result: Record<string, ChatPreviewInfo> = {};
+  if (otherUserIds.length === 0) return result;
+
+  try {
+    const { user } = await getCurrentUser();
+    if (!user) return result;
+
+    const [{ data: chatsAsUser1 }, { data: chatsAsUser2 }] = await Promise.all([
+      supabase
+        .from("private_chat")
+        .select("id, user_id_1, user_id_2, last_message_at, last_message_preview")
+        .eq("user_id_1", user.id)
+        .in("user_id_2", otherUserIds),
+      supabase
+        .from("private_chat")
+        .select("id, user_id_1, user_id_2, last_message_at, last_message_preview")
+        .eq("user_id_2", user.id)
+        .in("user_id_1", otherUserIds),
+    ]);
+
+    const chatRows = [...(chatsAsUser1 || []), ...(chatsAsUser2 || [])];
+    if (chatRows.length === 0) return result;
+
+    const chatIdToOtherUser = new Map<string, string>();
+    for (const row of chatRows) {
+      const otherId = row.user_id_1 === user.id ? row.user_id_2 : row.user_id_1;
+      chatIdToOtherUser.set(row.id, otherId);
+      result[otherId] = {
+        chatId: row.id,
+        lastMessagePreview: row.last_message_preview,
+        lastMessageAt: row.last_message_at,
+        lastMessageKind: detectPreviewKind(row.last_message_preview),
+        unreadCount: 0,
+      };
+    }
+
+    const chatIds = chatRows.map((r) => r.id);
+    const lastReadMap = await getLastReadMap();
+    const fallbackCutoffIso = new Date(Date.now() - UNREAD_LOOKBACK_MS).toISOString();
+    const earliestCutoff = chatIds
+      .map((id) => lastReadMap[id] || fallbackCutoffIso)
+      .sort()[0];
+
+    const { data: recentMessages } = await supabase
+      .from("private_chat_messages")
+      .select("chat_id, created_at")
+      .in("chat_id", chatIds)
+      .neq("sender_id", user.id)
+      .gt("created_at", earliestCutoff)
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    for (const m of recentMessages || []) {
+      const otherId = chatIdToOtherUser.get(m.chat_id);
+      if (!otherId || !result[otherId]) continue;
+      const readAt = lastReadMap[m.chat_id];
+      if (readAt && m.created_at <= readAt) continue;
+      result[otherId].unreadCount += 1;
+    }
+
+    return result;
+  } catch (err) {
+    console.warn("getChatPreviewsForContacts exception:", err);
+    return result;
+  }
+}
+
+// ============================================================================
 // EMERGENCY CHAT & MESSAGES FUNCTIONS
 // ============================================================================
 

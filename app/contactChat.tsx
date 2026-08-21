@@ -4,6 +4,7 @@ import {
   getCachedChatMessages,
   getOrCreatePrivateChat,
   mapDbMessageToChatMessage,
+  markChatAsRead,
   sendChatMessage,
   setCachedChatMessages,
   subscribeToChatMessages,
@@ -195,6 +196,10 @@ export default function ContactChatScreen() {
           setActiveChatId(resolvedChatId);
         }
 
+        // Opening the chat means the user has now seen everything in it up to this point —
+        // clears the unread bubble on the Contacts screen going forward.
+        markChatAsRead(resolvedChatId);
+
         // If not loaded yet, fetch cached messages for resolvedChatId
         const cached = await getCachedChatMessages(resolvedChatId);
         if (cached.length > 0 && isSubscribed) {
@@ -226,6 +231,11 @@ export default function ContactChatScreen() {
             resolvedChatId,
             (rawMsg) => {
               const newMsg = mapDbMessageToChatMessage(rawMsg, currentUser.id);
+              // Screen is open and visibly receiving this message live — keep it marked read
+              // rather than letting it count toward the Contacts screen's unread bubble.
+              if (newMsg.sender !== "me") {
+                markChatAsRead(resolvedChatId);
+              }
 
               setMessages((prev) => {
                 if (prev.some((m) => m.id === newMsg.id)) {
@@ -990,7 +1000,17 @@ export default function ContactChatScreen() {
     const senderName = msg.senderName || headerName;
     const senderAvatar = msg.senderAvatar || headerAvatar;
 
-    router.push({
+    // /(resident)/map is a bottom-tab screen, not a drill-down detail view — pushing onto the
+    // stack here (and then again on every subsequent tap of a location/walk-safe card) piles
+    // up duplicate entries the user has to back through one at a time. Dismissing back to the
+    // root first, then replacing it, keeps the stack at a single entry no matter how many times
+    // this is tapped — same convention as the resident-tab jumps in notificationsPage.tsx and
+    // yourEmergencies.tsx. Must dismiss before replace: doing it after would unwind past the
+    // screen just navigated to.
+    if (router.canDismiss()) {
+      router.dismissAll();
+    }
+    router.replace({
       pathname: "/(resident)/map",
       params: {
         sharedLocationId: `loc_${msg.id}`,
