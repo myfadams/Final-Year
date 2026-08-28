@@ -3,9 +3,8 @@ import { Person } from "@/constants/interfaces";
 import { decode } from "base64-arraybuffer";
 import * as FileSystem from "expo-file-system/legacy";
 import { fetchUserProfileById, getCurrentUser, UserProfile } from "./auth";
+import { safeLogError, safeSupabaseRequest } from "./safeRequest";
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
-import { safeSupabaseRequest, safeLogError } from "./safeRequest";
-
 
 export interface EmergencyRecord {
   id: string;
@@ -65,8 +64,13 @@ export async function uploadEmergencyAudio(fileUri: string): Promise<string> {
     });
 
   // Fallback to 'images' bucket if 'emergencies' bucket does not exist
-  if (uploadError && uploadError.message?.toLowerCase().includes("bucket not found")) {
-    console.warn(`Bucket '${bucketName}' not found, falling back to 'images'...`);
+  if (
+    uploadError &&
+    uploadError.message?.toLowerCase().includes("bucket not found")
+  ) {
+    console.warn(
+      `Bucket '${bucketName}' not found, falling back to 'images'...`,
+    );
     bucketName = "images";
     const fallbackRes = await supabase.storage
       .from(bucketName)
@@ -92,7 +96,7 @@ export async function uploadEmergencyAudio(fileUri: string): Promise<string> {
  */
 export async function uploadEmergencyMedia(
   fileUri: string,
-  mediaType: "image" | "video"
+  mediaType: "image" | "video",
 ): Promise<string> {
   const base64 = await FileSystem.readAsStringAsync(fileUri, {
     encoding: FileSystem.EncodingType.Base64,
@@ -119,8 +123,13 @@ export async function uploadEmergencyMedia(
     });
 
   // Fallback to 'images' bucket if 'emergencies' bucket does not exist
-  if (uploadError && uploadError.message?.toLowerCase().includes("bucket not found")) {
-    console.warn(`Bucket '${bucketName}' not found, falling back to 'images'...`);
+  if (
+    uploadError &&
+    uploadError.message?.toLowerCase().includes("bucket not found")
+  ) {
+    console.warn(
+      `Bucket '${bucketName}' not found, falling back to 'images'...`,
+    );
     bucketName = "images";
     const fallbackRes = await supabase.storage
       .from(bucketName)
@@ -143,7 +152,7 @@ export async function uploadEmergencyMedia(
  * Validates, uploads media assets, and inserts a new emergency record into Supabase `public.emergencies`.
  */
 export async function createEmergencyReport(
-  params: CreateEmergencyParams
+  params: CreateEmergencyParams,
 ): Promise<{ data: EmergencyRecord | null; error: Error | null }> {
   try {
     // 1. Validation
@@ -151,7 +160,10 @@ export async function createEmergencyReport(
       return { data: null, error: new Error("Incident title is required.") };
     }
     if (!params.description || !params.description.trim()) {
-      return { data: null, error: new Error("Incident description is required.") };
+      return {
+        data: null,
+        error: new Error("Incident description is required."),
+      };
     }
     if (!params.location_text || !params.location_text.trim()) {
       return { data: null, error: new Error("Location details are required.") };
@@ -162,7 +174,12 @@ export async function createEmergencyReport(
       typeof params.longitude !== "number" ||
       isNaN(params.longitude)
     ) {
-      return { data: null, error: new Error("Valid GPS coordinates (latitude and longitude) are required.") };
+      return {
+        data: null,
+        error: new Error(
+          "Valid GPS coordinates (latitude and longitude) are required.",
+        ),
+      };
     }
     if (!params.severity) {
       return { data: null, error: new Error("Severity level is required.") };
@@ -171,7 +188,10 @@ export async function createEmergencyReport(
     // 2. Authentication check
     const { user } = await getCurrentUser();
     if (!user) {
-      return { data: null, error: new Error("You must be logged in to report an emergency.") };
+      return {
+        data: null,
+        error: new Error("You must be logged in to report an emergency."),
+      };
     }
 
     // 3. Upload Voice Notes first
@@ -226,13 +246,19 @@ export async function createEmergencyReport(
 
     if (error) {
       safeLogError("Supabase insert emergency error:", error);
-      return { data: null, error: new Error(error.message || "Failed to create emergency record.") };
+      return {
+        data: null,
+        error: new Error(error.message || "Failed to create emergency record."),
+      };
     }
 
     return { data: data as EmergencyRecord, error: null };
   } catch (err: any) {
     safeLogError("Error creating emergency report:", err);
-    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -241,7 +267,7 @@ export async function createEmergencyReport(
  * Returns records ordered by created_at descending (newest first).
  */
 export async function fetchEmergencies(
-  excludeUserId: string
+  excludeUserId: string,
 ): Promise<{ data: EmergencyRecord[]; error: Error | null }> {
   try {
     const { data, error } = await safeSupabaseRequest<EmergencyRecord[]>(
@@ -250,7 +276,7 @@ export async function fetchEmergencies(
           .from("emergencies")
           .select("*")
           .order("created_at", { ascending: false }),
-      { retryId: `fetchEmergencies_${excludeUserId}` }
+      { retryId: `fetchEmergencies_${excludeUserId}` },
     );
 
     if (error) {
@@ -280,7 +306,45 @@ export async function fetchEmergencies(
     return { data: (data as EmergencyRecord[]) || [], error: null };
   } catch (err: any) {
     safeLogError("fetchEmergencies exception:", err);
-    return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      data: [],
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
+  }
+}
+
+export async function fetchResolvedEmergencies(
+  excludeUserId: string,
+): Promise<{ data: EmergencyRecord[]; error: Error | null }> {
+  try {
+    const { data, error } = await safeSupabaseRequest<EmergencyRecord[]>(
+      () =>
+        supabase
+          .from("emergencies")
+          .select("*")
+
+          .order("created_at", { ascending: false }),
+      // { retryId: `fetchEmergencies_${excludeUserId}` },
+    );
+    // supabase.from("emergencies").select("*").order("created_at", { ascending: false });
+    // console.log("fetchResolvedEmergencies data:", data);
+
+    if (error) {
+      safeLogError("fetchResolvedEmergencies error:", error);
+      return { data: [], error: new Error(error.message || String(error)) };
+    }
+
+    if (!data || data.length === 0) {
+      return { data: [], error: null };
+    }
+
+    return { data: (data as EmergencyRecord[]) || [], error: null };
+  } catch (err: any) {
+    safeLogError("fetchEmergencies exception:", err);
+    return {
+      data: [],
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -292,7 +356,7 @@ export async function fetchEmergencies(
 export function subscribeToEmergencies(
   excludeUserId: string,
   onUpdate: () => void,
-  onStatusChange?: (status: string) => void
+  onStatusChange?: (status: string) => void,
 ) {
   try {
     const channel = createSafeRealtimeChannel(
@@ -303,12 +367,13 @@ export function subscribeToEmergencies(
           { event: "*", schema: "public", table: "emergencies" },
           (payload) => {
             // Ignore changes caused by the current user
-            const record = (payload.new || payload.old) as EmergencyRecord | null;
+            const record = (payload.new ||
+              payload.old) as EmergencyRecord | null;
             if (record && record.creator_id === excludeUserId) return;
             onUpdate();
-          }
+          },
         ),
-      onStatusChange
+      onStatusChange,
     );
 
     return channel;
@@ -322,17 +387,12 @@ export function subscribeToEmergencies(
  * Fetches a single emergency record by ID from Supabase.
  */
 export async function fetchEmergencyById(
-  id: string
+  id: string,
 ): Promise<{ data: EmergencyRecord | null; error: Error | null }> {
   try {
     const { data, error } = await safeSupabaseRequest<EmergencyRecord>(
-      () =>
-        supabase
-          .from("emergencies")
-          .select("*")
-          .eq("id", id)
-          .maybeSingle(),
-      { retryId: `fetchEmergencyById_${id}` }
+      () => supabase.from("emergencies").select("*").eq("id", id).maybeSingle(),
+      { retryId: `fetchEmergencyById_${id}` },
     );
 
     if (error) {
@@ -340,7 +400,10 @@ export async function fetchEmergencyById(
     }
     return { data: (data as EmergencyRecord) || null, error: null };
   } catch (err: any) {
-    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -349,7 +412,7 @@ export async function fetchEmergencyById(
  */
 export function mapEmergencyRecordToPerson(
   r: EmergencyRecord,
-  creatorProfile?: UserProfile | null
+  creatorProfile?: UserProfile | null,
 ): Person {
   const creatorName = creatorProfile?.name || "Resident in Distress";
   const urgency: Person["urgency"] =
@@ -364,14 +427,17 @@ export function mapEmergencyRecordToPerson(
     name: creatorName,
     title: r.title,
     creatorId: r.creator_id ?? undefined,
-    address: r.nearest_landmark || r.location_text || "Location details unavailable",
+    address:
+      r.nearest_landmark || r.location_text || "Location details unavailable",
     avatarColor: "#AF101A",
     markerColor: "#AF101A",
     latitude: r.latitude,
     longitude: r.longitude,
     urgency,
     description: r.description || r.title || "",
-    requesterDesc: r.description || `${r.title} near ${r.nearest_landmark || r.location_text}`,
+    requesterDesc:
+      r.description ||
+      `${r.title} near ${r.nearest_landmark || r.location_text}`,
     images: r.visual_media || [],
     knownHealthProblems: creatorProfile?.known_health_problems || ["None"],
     falseAlarm: r.false_alarm ?? false,
@@ -420,7 +486,7 @@ export async function recordEmergencyResponse(params: {
     const userId = user.id;
     const nowIso = new Date().toISOString();
     const estimatedArrivalAt = new Date(
-      Date.now() + params.estimatedArrivalSeconds * 1000
+      Date.now() + params.estimatedArrivalSeconds * 1000,
     ).toISOString();
 
     // 1. Upsert current relationship in emergency_responders table
@@ -434,11 +500,14 @@ export async function recordEmergencyResponse(params: {
           responded_at: nowIso,
           arrived_at: null,
         },
-        { onConflict: "emergency_id,responder_id" }
+        { onConflict: "emergency_id,responder_id" },
       );
 
     if (responderErr) {
-      console.warn("emergency_responders upsert warning:", responderErr.message);
+      console.warn(
+        "emergency_responders upsert warning:",
+        responderErr.message,
+      );
     }
 
     // 2. Insert new attempt record into emergency_response_history table
@@ -458,13 +527,19 @@ export async function recordEmergencyResponse(params: {
       ]);
 
     if (historyErr) {
-      console.warn("emergency_response_history insert warning:", historyErr.message);
+      console.warn(
+        "emergency_response_history insert warning:",
+        historyErr.message,
+      );
     }
 
     return { success: true, error: null };
   } catch (err: any) {
     safeLogError("recordEmergencyResponse error:", err);
-    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      success: false,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -501,7 +576,10 @@ export async function confirmEmergencyArrival(params: {
         .eq("id", existing.id);
 
       if (historyErr) {
-        console.warn("confirmEmergencyArrival emergency_response_history warning:", historyErr.message);
+        console.warn(
+          "confirmEmergencyArrival emergency_response_history warning:",
+          historyErr.message,
+        );
       }
     } else {
       const { error: insertErr } = await supabase
@@ -514,7 +592,10 @@ export async function confirmEmergencyArrival(params: {
         });
 
       if (insertErr) {
-        console.warn("confirmEmergencyArrival emergency_response_history insert warning:", insertErr.message);
+        console.warn(
+          "confirmEmergencyArrival emergency_response_history insert warning:",
+          insertErr.message,
+        );
       }
     }
 
@@ -528,7 +609,10 @@ export async function confirmEmergencyArrival(params: {
     return { success: true, error: null };
   } catch (err: any) {
     safeLogError("confirmEmergencyArrival error:", err);
-    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      success: false,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -557,7 +641,10 @@ export async function markEmergencyResponseDone(params: {
       .eq("responder_id", userId);
 
     if (historyErr) {
-      console.warn("markEmergencyResponseDone emergency_response_history warning:", historyErr.message);
+      console.warn(
+        "markEmergencyResponseDone emergency_response_history warning:",
+        historyErr.message,
+      );
     }
 
     // 2. Remove user from emergency_responders table if still present
@@ -576,7 +663,10 @@ export async function markEmergencyResponseDone(params: {
     return { success: true, error: null };
   } catch (err: any) {
     safeLogError("markEmergencyResponseDone error:", err);
-    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      success: false,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -584,8 +674,13 @@ export async function markEmergencyResponseDone(params: {
  * Fetches user's emergency_response_history records and maps emergency_id to latest status ('responding', 'arrived', 'done', 'cancelled').
  */
 export async function fetchUserEmergencyHistoryMap(
-  userId: string
-): Promise<Record<string, "responding" | "arrived" | "done" | "done_helping" | "cancelled">> {
+  userId: string,
+): Promise<
+  Record<
+    string,
+    "responding" | "arrived" | "done" | "done_helping" | "cancelled"
+  >
+> {
   try {
     if (!userId) return {};
     const { data, error } = await supabase
@@ -596,7 +691,10 @@ export async function fetchUserEmergencyHistoryMap(
 
     if (error || !data) return {};
 
-    const historyMap: Record<string, "responding" | "arrived" | "done" | "done_helping" | "cancelled"> = {};
+    const historyMap: Record<
+      string,
+      "responding" | "arrived" | "done" | "done_helping" | "cancelled"
+    > = {};
     data.forEach((r: any) => {
       if (r.emergency_id && !historyMap[r.emergency_id]) {
         historyMap[r.emergency_id] = r.status;
@@ -613,8 +711,10 @@ export async function fetchUserEmergencyHistoryMap(
  * Fetches current user's response status for a specific emergency from emergency_response_history table.
  */
 export async function fetchUserEmergencyStatus(
-  emergencyId: string
-): Promise<"responding" | "arrived" | "done" | "done_helping" | "cancelled" | null> {
+  emergencyId: string,
+): Promise<
+  "responding" | "arrived" | "done" | "done_helping" | "cancelled" | null
+> {
   try {
     const { user } = await getCurrentUser();
     if (!user) return null;
@@ -659,7 +759,10 @@ export async function cancelEmergencyResponse(params: {
       .eq("responder_id", userId);
 
     if (responderErr) {
-      console.warn("cancelEmergencyResponse emergency_responders delete warning:", responderErr.message);
+      console.warn(
+        "cancelEmergencyResponse emergency_responders delete warning:",
+        responderErr.message,
+      );
     }
 
     // 2. Update active history record in emergency_response_history table (Archive / Audit trail only)
@@ -674,13 +777,19 @@ export async function cancelEmergencyResponse(params: {
       .eq("status", "responding");
 
     if (historyErr) {
-      console.warn("cancelEmergencyResponse emergency_response_history warning:", historyErr.message);
+      console.warn(
+        "cancelEmergencyResponse emergency_response_history warning:",
+        historyErr.message,
+      );
     }
 
     return { success: true, error: null };
   } catch (err: any) {
     safeLogError("cancelEmergencyResponse error:", err);
-    return { success: false, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      success: false,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -688,7 +797,7 @@ export async function cancelEmergencyResponse(params: {
  * Fetches total count of current active responders directly from emergency_responders table.
  */
 export async function fetchActiveRespondersCount(
-  emergencyId: string
+  emergencyId: string,
 ): Promise<number> {
   try {
     const { count, error } = await supabase
@@ -708,7 +817,7 @@ export async function fetchActiveRespondersCount(
  * joined with user profile details from users table.
  */
 export async function fetchEmergencyResponders(
-  emergencyId: string
+  emergencyId: string,
 ): Promise<{ data: any[]; error: Error | null }> {
   try {
     const { data: responders, error } = await supabase
@@ -755,7 +864,10 @@ export async function fetchEmergencyResponders(
     return { data: result, error: null };
   } catch (err: any) {
     safeLogError("fetchEmergencyResponders exception:", err);
-    return { data: [], error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      data: [],
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -787,7 +899,10 @@ export async function getCurrentRespondingEmergency(): Promise<{
       .maybeSingle();
 
     if (responderErr) {
-      console.warn("getCurrentRespondingEmergency responder fetch warning:", responderErr.message);
+      console.warn(
+        "getCurrentRespondingEmergency responder fetch warning:",
+        responderErr.message,
+      );
       return { data: null, error: new Error(responderErr.message) };
     }
 
@@ -799,7 +914,7 @@ export async function getCurrentRespondingEmergency(): Promise<{
 
     // 2. Fetch emergency details from emergencies table
     const { data: emergencyRecord, error: empErr } = await fetchEmergencyById(
-      responderRecord.emergency_id
+      responderRecord.emergency_id,
     );
 
     if (empErr || !emergencyRecord || emergencyRecord.is_resolved) {
@@ -830,7 +945,10 @@ export async function getCurrentRespondingEmergency(): Promise<{
     };
   } catch (err: any) {
     safeLogError("getCurrentRespondingEmergency error:", err);
-    return { data: null, error: err instanceof Error ? err : new Error(String(err)) };
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
   }
 }
 
@@ -840,11 +958,13 @@ export async function getCurrentRespondingEmergency(): Promise<{
  * Returns an unsubscribe cleanup function.
  */
 export function subscribeToCurrentRespondingEmergency(
-  onUpdate?: (data: {
-    responderRecord: EmergencyResponderRecord;
-    emergency: EmergencyRecord;
-    person: Person;
-  } | null) => void
+  onUpdate?: (
+    data: {
+      responderRecord: EmergencyResponderRecord;
+      emergency: EmergencyRecord;
+      person: Person;
+    } | null,
+  ) => void,
 ): () => void {
   let responderChannel: any = null;
   let emergencyChannel: any = null;
@@ -887,8 +1007,8 @@ export function subscribeToCurrentRespondingEmergency(
           },
           () => {
             refreshState();
-          }
-        )
+          },
+        ),
       );
 
       // 2. Channel for emergency record updates (e.g. resolution)
@@ -908,8 +1028,8 @@ export function subscribeToCurrentRespondingEmergency(
             ) {
               refreshState();
             }
-          }
-        )
+          },
+        ),
       );
     } catch (err) {
       console.warn("subscribeToCurrentRespondingEmergency setup error:", err);
@@ -921,12 +1041,12 @@ export function subscribeToCurrentRespondingEmergency(
     if (responderChannel) {
       try {
         supabase.removeChannel(responderChannel);
-      } catch (_) { }
+      } catch (_) {}
     }
     if (emergencyChannel) {
       try {
         supabase.removeChannel(emergencyChannel);
-      } catch (_) { }
+      } catch (_) {}
     }
   };
 }
@@ -941,9 +1061,15 @@ export async function fetchEmergencyDetails(emergencyId: string): Promise<{
   error: Error | null;
 }> {
   try {
-    const { data: emergency, error: empError } = await fetchEmergencyById(emergencyId);
+    const { data: emergency, error: empError } =
+      await fetchEmergencyById(emergencyId);
     if (empError) {
-      return { emergency: null, creator: null, responders: [], error: empError };
+      return {
+        emergency: null,
+        creator: null,
+        responders: [],
+        error: empError,
+      };
     }
     if (!emergency) {
       return { emergency: null, creator: null, responders: [], error: null };
@@ -977,24 +1103,26 @@ export async function fetchEmergencyDetails(emergencyId: string): Promise<{
  */
 export function subscribeToEmergencyById(
   emergencyId: string,
-  onUpdate: (updatedRecord: Partial<EmergencyRecord>) => void
+  onUpdate: (updatedRecord: Partial<EmergencyRecord>) => void,
 ) {
   try {
-    const channel = createSafeRealtimeChannel(`incident-detail-${emergencyId}`, (ch) =>
-      ch.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "emergencies",
-          filter: `id=eq.${emergencyId}`,
-        },
-        (payload) => {
-          if (payload.new) {
-            onUpdate(payload.new as Partial<EmergencyRecord>);
-          }
-        }
-      )
+    const channel = createSafeRealtimeChannel(
+      `incident-detail-${emergencyId}`,
+      (ch) =>
+        ch.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "emergencies",
+            filter: `id=eq.${emergencyId}`,
+          },
+          (payload) => {
+            if (payload.new) {
+              onUpdate(payload.new as Partial<EmergencyRecord>);
+            }
+          },
+        ),
     );
 
     return channel;
@@ -1006,22 +1134,24 @@ export function subscribeToEmergencyById(
 
 export function subscribeToEmergencyResponders(
   emergencyId: string,
-  onUpdate: () => void
+  onUpdate: () => void,
 ) {
   try {
-    const channel = createSafeRealtimeChannel(`incident-responders-${emergencyId}`, (ch) =>
-      ch.on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "emergency_responders",
-          filter: `emergency_id=eq.${emergencyId}`,
-        },
-        () => {
-          onUpdate();
-        }
-      )
+    const channel = createSafeRealtimeChannel(
+      `incident-responders-${emergencyId}`,
+      (ch) =>
+        ch.on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "emergency_responders",
+            filter: `emergency_id=eq.${emergencyId}`,
+          },
+          () => {
+            onUpdate();
+          },
+        ),
     );
 
     return channel;
@@ -1038,7 +1168,6 @@ export function unsubscribeChannel(channel: any) {
   if (channel) {
     try {
       supabase.removeChannel(channel);
-    } catch (_) { }
+    } catch (_) {}
   }
 }
-

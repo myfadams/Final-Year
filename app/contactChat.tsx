@@ -11,13 +11,14 @@ import {
   uploadChatAudio,
   uploadChatMedia,
 } from "@/backend/chat";
-import HeartBeatWave from "@/components/HeartBeatWave";
+import { supabase } from "@/backend/supabaseConfig";
 import ChatHeader from "@/components/chat/ChatHeader";
 import ChatInputBar from "@/components/chat/ChatInputBar";
 import ChatMessageItem from "@/components/chat/ChatMessageItem";
 import ChatPillsRow, { PillItem } from "@/components/chat/ChatPillsRow";
 import ContactDetailsModal from "@/components/chat/ContactDetailsModal";
 import MediaViewerModal from "@/components/chat/MediaViewerModal";
+import HeartBeatWave from "@/components/HeartBeatWave";
 import { showPopupAlert } from "@/components/popupAlert";
 import { useWalkSafe } from "@/components/WalkSafeContext";
 import { ResQColors } from "@/constants/Colors";
@@ -27,8 +28,7 @@ import { Audio } from "expo-av";
 import * as ImagePicker from "expo-image-picker";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { MapPin, ShieldAlert, CheckCircle } from "lucide-react-native";
-import { supabase } from "@/backend/supabaseConfig";
+import { CheckCircle, MapPin, ShieldAlert } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -40,7 +40,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from "react-native";
 
 export default function ContactChatScreen() {
@@ -63,14 +63,19 @@ export default function ContactChatScreen() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserName, setCurrentUserName] = useState<string>("Me");
   const [currentUserRole, setCurrentUserRole] = useState<string>("Resident");
-  const [currentUserAvatar, setCurrentUserAvatar] = useState<string | undefined>(undefined);
-  const [activeChatId, setActiveChatId] = useState<string | null>(params.chatId || null);
+  const [currentUserAvatar, setCurrentUserAvatar] = useState<
+    string | undefined
+  >(undefined);
+  const [activeChatId, setActiveChatId] = useState<string | null>(
+    params.chatId || null,
+  );
 
   // State Management
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState("");
-  
-  const { activeSessionMessageId, startWalkSafeTracking, stopWalkSafeTracking } = useWalkSafe();
+
+  // activeSessionMessageId,
+  const { startWalkSafeTracking, stopWalkSafeTracking } = useWalkSafe();
   const [contactModalVisible, setContactModalVisible] = useState(false);
 
   // Loading & Pagination State
@@ -82,7 +87,9 @@ export default function ContactChatScreen() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordDuration, setRecordDuration] = useState(0);
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
   const recordingStartTimeRef = useRef<number | null>(null);
   const micPressActiveRef = useRef(false);
   const voiceScale = useRef(new Animated.Value(1)).current;
@@ -91,7 +98,9 @@ export default function ContactChatScreen() {
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
   const [pausedMessageId, setPausedMessageId] = useState<string | null>(null);
   const [loadingMessageId, setLoadingMessageId] = useState<string | null>(null);
-  const [playbackRemainingSeconds, setPlaybackRemainingSeconds] = useState<number | null>(null);
+  const [playbackRemainingSeconds, setPlaybackRemainingSeconds] = useState<
+    number | null
+  >(null);
   const [playbackProgress, setPlaybackProgress] = useState<number>(0);
   const soundRef = useRef<Audio.Sound | null>(null);
   const audioTokenRef = useRef<number>(0);
@@ -102,7 +111,10 @@ export default function ContactChatScreen() {
 
   // Lightbox Media Preview Modal
   const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
-  const [activeMedia, setActiveMedia] = useState<{ uri: string; type: "image" | "video" } | null>(null);
+  const [activeMedia, setActiveMedia] = useState<{
+    uri: string;
+    type: "image" | "video";
+  } | null>(null);
 
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -114,7 +126,7 @@ export default function ContactChatScreen() {
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
-      }
+      },
     );
     return () => {
       showSubscription.remove();
@@ -171,11 +183,14 @@ export default function ContactChatScreen() {
         let resolvedChatId = initialChatId;
 
         if (!resolvedChatId && targetContactId) {
-          const { chat, error: chatErr } = await getOrCreatePrivateChat(targetContactId, {
-            name: headerName,
-            relationship: headerSubtitle,
-            avatarUrl: headerAvatar,
-          });
+          const { chat, error: chatErr } = await getOrCreatePrivateChat(
+            targetContactId,
+            {
+              name: headerName,
+              relationship: headerSubtitle,
+              avatarUrl: headerAvatar,
+            },
+          );
 
           if (chat) {
             resolvedChatId = chat.id;
@@ -208,14 +223,17 @@ export default function ContactChatScreen() {
         }
 
         // Fetch initial messages from network
-        const { messages: fetchedMsgs, hasMore, error: fetchErr } = await fetchChatMessages(
-          resolvedChatId,
-          currentUser.id,
-          35
-        );
+        const {
+          messages: fetchedMsgs,
+          hasMore,
+          error: fetchErr,
+        } = await fetchChatMessages(resolvedChatId, currentUser.id, 35);
 
         if (fetchErr) {
-          console.warn("Fetch initial messages notice (offline mode):", fetchErr);
+          console.warn(
+            "Fetch initial messages notice (offline mode):",
+            fetchErr,
+          );
         }
 
         if (isSubscribed) {
@@ -245,7 +263,8 @@ export default function ContactChatScreen() {
                   (m) =>
                     m.isUploading &&
                     m.type === newMsg.type &&
-                    (m.text === newMsg.text || m.audioDuration === newMsg.audioDuration)
+                    (m.text === newMsg.text ||
+                      m.audioDuration === newMsg.audioDuration),
                 );
                 let updated: ChatMessage[];
                 if (tempIndex !== -1) {
@@ -258,15 +277,21 @@ export default function ContactChatScreen() {
                 return updated;
               });
 
-              setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+              setTimeout(
+                () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+                100,
+              );
             },
             (updatedChat) => {
               setIsWalkSafeActive(updatedChat.safewalk_active || false);
-            }
+            },
           );
         }
       } catch (err: any) {
-        console.warn("initChat exception (offline mode active):", err?.message || err);
+        console.warn(
+          "initChat exception (offline mode active):",
+          err?.message || err,
+        );
         if (isSubscribed) {
           setIsLoadingMessages(false);
         }
@@ -322,13 +347,13 @@ export default function ContactChatScreen() {
       }
 
       if (recordingRef.current) {
-        recordingRef.current.stopAndUnloadAsync().catch(() => { });
+        recordingRef.current.stopAndUnloadAsync().catch(() => {});
         recordingRef.current = null;
       }
 
       if (soundRef.current) {
-        soundRef.current.stopAsync().catch(() => { });
-        soundRef.current.unloadAsync().catch(() => { });
+        soundRef.current.stopAsync().catch(() => {});
+        soundRef.current.unloadAsync().catch(() => {});
         soundRef.current = null;
       }
     };
@@ -338,7 +363,13 @@ export default function ContactChatScreen() {
   // Pagination / Load Older Messages
   // ---------------------------------------------------------------------------
   const handleLoadOlderMessages = async () => {
-    if (isLoadingOlder || !hasMoreMessages || !activeChatId || !currentUserId || messages.length === 0) {
+    if (
+      isLoadingOlder ||
+      !hasMoreMessages ||
+      !activeChatId ||
+      !currentUserId ||
+      messages.length === 0
+    ) {
       return;
     }
 
@@ -347,11 +378,15 @@ export default function ContactChatScreen() {
 
     setIsLoadingOlder(true);
     try {
-      const { messages: olderMsgs, hasMore, error: fetchErr } = await fetchChatMessages(
+      const {
+        messages: olderMsgs,
+        hasMore,
+        error: fetchErr,
+      } = await fetchChatMessages(
         activeChatId,
         currentUserId,
         30,
-        oldestMsg.createdAtIso
+        oldestMsg.createdAtIso,
       );
 
       if (fetchErr) {
@@ -398,12 +433,18 @@ export default function ContactChatScreen() {
       const newMsg: ChatMessage = {
         id: Date.now().toString(),
         sender: "me",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         type: "text",
         text: textToSend,
       };
       setMessages((prev) => [...prev, newMsg]);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
       return;
     }
 
@@ -417,14 +458,20 @@ export default function ContactChatScreen() {
       senderName: currentUserName,
       senderRole: currentUserRole,
       senderAvatar: currentUserAvatar,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       type: "text",
       text: textToSend,
       createdTimestamp: Date.now(),
     };
 
     setMessages((prev) => [...prev, tempMsg]);
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+    setTimeout(
+      () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+      80,
+    );
 
     const { message, error } = await sendChatMessage({
       chatId: activeChatId,
@@ -437,13 +484,16 @@ export default function ContactChatScreen() {
     });
 
     if (error) {
-      const isNetworkErr = error?.includes("Network request failed") || error?.includes("fetch");
+      const isNetworkErr =
+        error?.includes("Network request failed") || error?.includes("fetch");
       showPopupAlert(
         isNetworkErr ? "Connection Error" : "Sending Failed",
-        isNetworkErr ? "No internet connection. Please check your network and try again." : error,
+        isNetworkErr
+          ? "No internet connection. Please check your network and try again."
+          : error,
         undefined,
         undefined,
-        "error"
+        "error",
       );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInputText(textToSend);
@@ -479,11 +529,11 @@ export default function ContactChatScreen() {
 
     try {
       await sound.stopAsync();
-    } catch { }
+    } catch {}
 
     try {
       await sound.unloadAsync();
-    } catch { }
+    } catch {}
   };
 
   // ---------------------------------------------------------------------------
@@ -519,7 +569,7 @@ export default function ContactChatScreen() {
             "Microphone access is required to record voice notes.",
             undefined,
             undefined,
-            "warning"
+            "warning",
           );
           return;
         }
@@ -533,11 +583,11 @@ export default function ContactChatScreen() {
         });
 
         const { recording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
+          Audio.RecordingOptionsPresets.HIGH_QUALITY,
         );
 
         if (!micPressActiveRef.current) {
-          await recording.stopAndUnloadAsync().catch(() => { });
+          await recording.stopAndUnloadAsync().catch(() => {});
           return;
         }
 
@@ -550,7 +600,7 @@ export default function ContactChatScreen() {
         recordingIntervalRef.current = setInterval(() => {
           if (recordingStartTimeRef.current) {
             const elapsed = Math.floor(
-              (Date.now() - recordingStartTimeRef.current) / 1000
+              (Date.now() - recordingStartTimeRef.current) / 1000,
             );
             setRecordDuration(elapsed);
           }
@@ -568,7 +618,7 @@ export default function ContactChatScreen() {
           "Could not start audio recording. Please try again.",
           undefined,
           undefined,
-          "error"
+          "error",
         );
       }
     };
@@ -604,7 +654,9 @@ export default function ContactChatScreen() {
         : recordDuration;
 
       const recStatus = await recording.getStatusAsync().catch(() => null);
-      const statusDurationSec = recStatus?.durationMillis ? Math.round(recStatus.durationMillis / 1000) : 0;
+      const statusDurationSec = recStatus?.durationMillis
+        ? Math.round(recStatus.durationMillis / 1000)
+        : 0;
       const finalDurationSec = Math.max(1, statusDurationSec || durationSec);
 
       await recording.stopAndUnloadAsync();
@@ -612,7 +664,13 @@ export default function ContactChatScreen() {
       const uri = recording.getURI();
 
       if (!uri) {
-        showPopupAlert("Recording Error", "The recording file could not be created.", undefined, undefined, "error");
+        showPopupAlert(
+          "Recording Error",
+          "The recording file could not be created.",
+          undefined,
+          undefined,
+          "error",
+        );
         setRecordDuration(0);
         return;
       }
@@ -623,7 +681,7 @@ export default function ContactChatScreen() {
           "Hold the mic button for at least one second to record a voice note.",
           undefined,
           undefined,
-          "warning"
+          "warning",
         );
         setRecordDuration(0);
         return;
@@ -650,13 +708,18 @@ export default function ContactChatScreen() {
 
       setMessages((prev) => [...prev, voiceMsg]);
       setRecordDuration(0);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
 
       if (!activeChatId || !currentUserId) {
         // Fallback local mode
         setTimeout(() => {
           setMessages((prev) =>
-            prev.map((m) => (m.id === tempId ? { ...m, isUploading: false } : m))
+            prev.map((m) =>
+              m.id === tempId ? { ...m, isUploading: false } : m,
+            ),
           );
         }, 1000);
         return;
@@ -678,19 +741,30 @@ export default function ContactChatScreen() {
         });
 
         if (error) {
-          showPopupAlert("Audio Upload Error", error, undefined, undefined, "error");
+          showPopupAlert(
+            "Audio Upload Error",
+            error,
+            undefined,
+            undefined,
+            "error",
+          );
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
         } else if (message) {
           const realMsg = mapDbMessageToChatMessage(message, currentUserId);
           setMessages((prev) =>
             prev.some((m) => m.id === realMsg.id)
               ? prev.filter((m) => m.id !== tempId)
-              : prev.map((m) => (m.id === tempId ? realMsg : m))
+              : prev.map((m) => (m.id === tempId ? realMsg : m)),
           );
         }
       } catch (uploadError: any) {
-        const isNetworkErr = String(uploadError?.message || uploadError).includes("Network request failed");
-        console.warn("Audio note upload notice:", uploadError?.message || uploadError);
+        const isNetworkErr = String(
+          uploadError?.message || uploadError,
+        ).includes("Network request failed");
+        console.warn(
+          "Audio note upload notice:",
+          uploadError?.message || uploadError,
+        );
         showPopupAlert(
           isNetworkErr ? "Connection Error" : "Upload Failed",
           isNetworkErr
@@ -698,7 +772,7 @@ export default function ContactChatScreen() {
             : "Could not upload voice note. Please try again.",
           undefined,
           undefined,
-          "error"
+          "error",
         );
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
@@ -762,32 +836,29 @@ export default function ContactChatScreen() {
 
       const uriToPlay =
         msg.audioUri.startsWith("http://") ||
-          msg.audioUri.startsWith("https://") ||
-          msg.audioUri.startsWith("file://") ||
-          msg.audioUri.startsWith("content://") ||
-          msg.audioUri.startsWith("data:")
+        msg.audioUri.startsWith("https://") ||
+        msg.audioUri.startsWith("file://") ||
+        msg.audioUri.startsWith("content://") ||
+        msg.audioUri.startsWith("data:")
           ? msg.audioUri
           : "https://commondatastorage.googleapis.com/codeskulptor-assets/sounddogs/thrust.mp3";
 
       const audioSource = { uri: uriToPlay };
 
-      const { sound, status } = await Audio.Sound.createAsync(
-        audioSource,
-        {
-          shouldPlay: false,
-          volume: 1.0,
-          isMuted: false,
-          progressUpdateIntervalMillis: 150,
-        }
-      );
+      const { sound, status } = await Audio.Sound.createAsync(audioSource, {
+        shouldPlay: false,
+        volume: 1.0,
+        isMuted: false,
+        progressUpdateIntervalMillis: 150,
+      });
 
       if (currentToken !== audioTokenRef.current) {
-        await sound.unloadAsync().catch(() => { });
+        await sound.unloadAsync().catch(() => {});
         return;
       }
 
       if (!status.isLoaded) {
-        await sound.unloadAsync().catch(() => { });
+        await sound.unloadAsync().catch(() => {});
         setLoadingMessageId(null);
         throw new Error("Audio failed to load");
       }
@@ -801,7 +872,9 @@ export default function ContactChatScreen() {
 
       if (!msg.audioDuration) {
         setMessages((prev) =>
-          prev.map((m) => (m.id === msg.id ? { ...m, audioDuration: durationSec } : m))
+          prev.map((m) =>
+            m.id === msg.id ? { ...m, audioDuration: durationSec } : m,
+          ),
         );
       }
 
@@ -817,7 +890,10 @@ export default function ContactChatScreen() {
 
         if (duration > 0) {
           setPlaybackProgress(Math.min(1, position / duration));
-          const remainingSec = Math.max(0, Math.ceil((duration - position) / 1000));
+          const remainingSec = Math.max(
+            0,
+            Math.ceil((duration - position) / 1000),
+          );
 
           if (lastRemainingSecRef.current !== remainingSec) {
             lastRemainingSecRef.current = remainingSec;
@@ -837,7 +913,7 @@ export default function ContactChatScreen() {
             soundRef.current = null;
           }
 
-          sound.unloadAsync().catch(() => { });
+          sound.unloadAsync().catch(() => {});
         }
       });
 
@@ -853,7 +929,7 @@ export default function ContactChatScreen() {
 
       if (currentToken === audioTokenRef.current) {
         if (soundRef.current) {
-          await soundRef.current.unloadAsync().catch(() => { });
+          await soundRef.current.unloadAsync().catch(() => {});
           soundRef.current = null;
         }
 
@@ -863,7 +939,13 @@ export default function ContactChatScreen() {
         setPlaybackRemainingSeconds(null);
         setPlaybackProgress(0);
         lastRemainingSecRef.current = null;
-        showPopupAlert("Playback Error", "This voice note could not be played.", undefined, undefined, "error");
+        showPopupAlert(
+          "Playback Error",
+          "This voice note could not be played.",
+          undefined,
+          undefined,
+          "error",
+        );
       }
     }
   };
@@ -873,9 +955,16 @@ export default function ContactChatScreen() {
   // ---------------------------------------------------------------------------
   const handlePickAttachment = async () => {
     try {
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (permission.status !== "granted") {
-        showPopupAlert("Permission Denied", "Gallery access is required to share photos or videos.", undefined, undefined, "warning");
+        showPopupAlert(
+          "Permission Denied",
+          "Gallery access is required to share photos or videos.",
+          undefined,
+          undefined,
+          "warning",
+        );
         return;
       }
 
@@ -887,7 +976,11 @@ export default function ContactChatScreen() {
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const asset = result.assets[0];
         const isVid = asset.type === "video";
-        await uploadAndSendMedia(asset.uri, isVid ? "video" : "image", isVid ? "Video Attachment" : "Photo Attachment");
+        await uploadAndSendMedia(
+          asset.uri,
+          isVid ? "video" : "image",
+          isVid ? "Video Attachment" : "Photo Attachment",
+        );
       }
     } catch (err) {
       console.error("Media library error:", err);
@@ -901,7 +994,13 @@ export default function ContactChatScreen() {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
       if (permission.status !== "granted") {
-        showPopupAlert("Permission Denied", "Camera access is required to take photos.", undefined, undefined, "warning");
+        showPopupAlert(
+          "Permission Denied",
+          "Camera access is required to take photos.",
+          undefined,
+          undefined,
+          "warning",
+        );
         return;
       }
 
@@ -919,7 +1018,11 @@ export default function ContactChatScreen() {
     }
   };
 
-  const uploadAndSendMedia = async (fileUri: string, mediaType: "image" | "video", caption?: string) => {
+  const uploadAndSendMedia = async (
+    fileUri: string,
+    mediaType: "image" | "video",
+    caption?: string,
+  ) => {
     const tempId = `temp_media_${Date.now()}`;
     const mediaMsg: ChatMessage = {
       id: tempId,
@@ -929,7 +1032,10 @@ export default function ContactChatScreen() {
       senderName: currentUserName,
       senderRole: currentUserRole,
       senderAvatar: currentUserAvatar,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       type: "media",
       mediaUri: fileUri,
       mediaType,
@@ -938,13 +1044,16 @@ export default function ContactChatScreen() {
     };
 
     setMessages((prev) => [...prev, mediaMsg]);
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+    setTimeout(
+      () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+      100,
+    );
 
     if (!activeChatId || !currentUserId) {
       // Local fallback mode
       setTimeout(() => {
         setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...m, isUploading: false } : m))
+          prev.map((m) => (m.id === tempId ? { ...m, isUploading: false } : m)),
         );
       }, 1000);
       return;
@@ -966,18 +1075,26 @@ export default function ContactChatScreen() {
       });
 
       if (error) {
-        showPopupAlert("Media Upload Error", error, undefined, undefined, "error");
+        showPopupAlert(
+          "Media Upload Error",
+          error,
+          undefined,
+          undefined,
+          "error",
+        );
         setMessages((prev) => prev.filter((m) => m.id !== tempId));
       } else if (message) {
         const realMsg = mapDbMessageToChatMessage(message, currentUserId);
         setMessages((prev) =>
           prev.some((m) => m.id === realMsg.id)
             ? prev.filter((m) => m.id !== tempId)
-            : prev.map((m) => (m.id === tempId ? realMsg : m))
+            : prev.map((m) => (m.id === tempId ? realMsg : m)),
         );
       }
     } catch (uploadError: any) {
-      const isNetworkErr = String(uploadError?.message || uploadError).includes("Network request failed");
+      const isNetworkErr = String(uploadError?.message || uploadError).includes(
+        "Network request failed",
+      );
       console.warn("Media upload notice:", uploadError?.message || uploadError);
       showPopupAlert(
         isNetworkErr ? "Connection Error" : "Upload Failed",
@@ -986,7 +1103,7 @@ export default function ContactChatScreen() {
           : "Could not upload media attachment.",
         undefined,
         undefined,
-        "error"
+        "error",
       );
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
     }
@@ -996,7 +1113,10 @@ export default function ContactChatScreen() {
   // Location Sharing & Quick Action Pills
   // ---------------------------------------------------------------------------
   const handleNavigateToMap = (msg: ChatMessage) => {
-    const coords = msg.locationCoords || { latitude: 6.6751, longitude: -1.5715 };
+    const coords = msg.locationCoords || {
+      latitude: 6.6751,
+      longitude: -1.5715,
+    };
     const senderName = msg.senderName || headerName;
     const senderAvatar = msg.senderAvatar || headerAvatar;
 
@@ -1029,7 +1149,9 @@ export default function ContactChatScreen() {
     });
   };
 
-  const latestWalkSafeMsg = [...messages].reverse().find(m => m.type === "walk_safe");
+  const latestWalkSafeMsg = [...messages]
+    .reverse()
+    .find((m) => m.type === "walk_safe");
   const amISendingWalkSafe = latestWalkSafeMsg?.sender === "me";
 
   const handleShareLocation = async () => {
@@ -1054,7 +1176,10 @@ export default function ContactChatScreen() {
       const locMsg: ChatMessage = {
         id: Date.now().toString(),
         sender: "me",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         type: "location_share",
         text: "You shared current location snapshot",
         locationTimestampText: "Captured just now • Live GPS",
@@ -1062,7 +1187,10 @@ export default function ContactChatScreen() {
         createdTimestamp: Date.now(),
       };
       setMessages((prev) => [...prev, locMsg]);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
       return;
     }
 
@@ -1081,11 +1209,22 @@ export default function ContactChatScreen() {
     });
 
     if (error) {
-      showPopupAlert("Location Share Error", error, undefined, undefined, "error");
+      showPopupAlert(
+        "Location Share Error",
+        error,
+        undefined,
+        undefined,
+        "error",
+      );
     } else if (message) {
       const realMsg = mapDbMessageToChatMessage(message, currentUserId);
-      setMessages((prev) => (prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg]));
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setMessages((prev) =>
+        prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg],
+      );
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
     }
   };
 
@@ -1094,9 +1233,15 @@ export default function ContactChatScreen() {
       // Stop Walk Safe
       setIsWalkSafeActive(false);
       stopWalkSafeTracking();
-      
+
       if (!activeChatId || !currentUserId) return;
-      await supabase.from("private_chat").update({ safewalk_active: false, safewalk_ended_at: new Date().toISOString() }).eq("id", activeChatId);
+      await supabase
+        .from("private_chat")
+        .update({
+          safewalk_active: false,
+          safewalk_ended_at: new Date().toISOString(),
+        })
+        .eq("id", activeChatId);
 
       await sendChatMessage({
         chatId: activeChatId,
@@ -1117,8 +1262,13 @@ export default function ContactChatScreen() {
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status === "granted") {
-        const currentLoc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-        coords = { latitude: currentLoc.coords.latitude, longitude: currentLoc.coords.longitude };
+        const currentLoc = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        coords = {
+          latitude: currentLoc.coords.latitude,
+          longitude: currentLoc.coords.longitude,
+        };
       }
     } catch (err) {
       console.warn("GPS fallback:", err);
@@ -1128,7 +1278,10 @@ export default function ContactChatScreen() {
       const walkMsg: ChatMessage = {
         id: Date.now().toString(),
         sender: "me",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         type: "walk_safe",
         text: `${currentUserName} requested a Walk Safe session • Track live movement on map`,
         locationTimestampText: "Live GPS • Tracking Started",
@@ -1136,11 +1289,20 @@ export default function ContactChatScreen() {
         createdTimestamp: Date.now(),
       };
       setMessages((prev) => [...prev, walkMsg]);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
       return;
     }
 
-    await supabase.from("private_chat").update({ safewalk_active: true, safewalk_started_at: new Date().toISOString() }).eq("id", activeChatId);
+    await supabase
+      .from("private_chat")
+      .update({
+        safewalk_active: true,
+        safewalk_started_at: new Date().toISOString(),
+      })
+      .eq("id", activeChatId);
 
     const { message, error } = await sendChatMessage({
       chatId: activeChatId,
@@ -1160,18 +1322,32 @@ export default function ContactChatScreen() {
       showPopupAlert("Walk Safe Error", error, undefined, undefined, "error");
       setIsWalkSafeActive(false);
       stopWalkSafeTracking();
-      await supabase.from("private_chat").update({ safewalk_active: false }).eq("id", activeChatId);
+      await supabase
+        .from("private_chat")
+        .update({ safewalk_active: false })
+        .eq("id", activeChatId);
     } else if (message) {
       const realMsg = mapDbMessageToChatMessage(message, currentUserId);
       startWalkSafeTracking([realMsg.id], "private_chat_messages");
-      setMessages((prev) => (prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg]));
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setMessages((prev) =>
+        prev.some((m) => m.id === realMsg.id) ? prev : [...prev, realMsg],
+      );
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
     }
   };
 
   const handleImOkay = async () => {
     if (!amISendingWalkSafe) {
-      showPopupAlert("Permission Denied", "Only the person who started this Walk Safe session can mark it as okay.", undefined, undefined, "warning");
+      showPopupAlert(
+        "Permission Denied",
+        "Only the person who started this Walk Safe session can mark it as okay.",
+        undefined,
+        undefined,
+        "warning",
+      );
       return;
     }
 
@@ -1179,12 +1355,18 @@ export default function ContactChatScreen() {
       const msg: ChatMessage = {
         id: Date.now().toString(),
         sender: "me",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        timestamp: new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         type: "im_okay",
         text: "I am okay.",
       };
       setMessages((prev) => [...prev, msg]);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100,
+      );
       return;
     }
 
@@ -1197,22 +1379,31 @@ export default function ContactChatScreen() {
       senderName: currentUserName,
       senderRole: currentUserRole,
       senderAvatar: currentUserAvatar,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      timestamp: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       type: "im_okay",
       text: "I am okay. Feeling safe now.",
       createdTimestamp: Date.now(),
     };
 
     setMessages((prev) => [...prev, tempMsg]);
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+    setTimeout(
+      () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+      80,
+    );
 
     const nowIso = new Date().toISOString();
-    await supabase.from("private_chat").update({ 
-      im_okay_last_sent_by: currentUserId, 
-      im_okay_sent_at: nowIso,
-      safewalk_active: false,
-      safewalk_ended_at: nowIso
-    }).eq("id", activeChatId);
+    await supabase
+      .from("private_chat")
+      .update({
+        im_okay_last_sent_by: currentUserId,
+        im_okay_sent_at: nowIso,
+        safewalk_active: false,
+        safewalk_ended_at: nowIso,
+      })
+      .eq("id", activeChatId);
 
     setIsWalkSafeActive(false);
     stopWalkSafeTracking();
@@ -1243,8 +1434,24 @@ export default function ContactChatScreen() {
   };
 
   const contactPills: PillItem[] = [
-    ...(isWalkSafeActive ? [] : [{ label: "Walk Safe", action: "walk_safe", icon: ShieldAlert } as PillItem]),
-    ...(isWalkSafeActive && amISendingWalkSafe ? [{ label: "I'm Okay", action: "im_okay", icon: CheckCircle } as PillItem] : []),
+    ...(isWalkSafeActive
+      ? []
+      : [
+          {
+            label: "Walk Safe",
+            action: "walk_safe",
+            icon: ShieldAlert,
+          } as PillItem,
+        ]),
+    ...(isWalkSafeActive && amISendingWalkSafe
+      ? [
+          {
+            label: "I'm Okay",
+            action: "im_okay",
+            icon: CheckCircle,
+          } as PillItem,
+        ]
+      : []),
     { label: "Share Location", action: "location", icon: MapPin },
     { label: "On my way", action: "text" },
     { label: "Are you safe?", action: "text" },
@@ -1272,7 +1479,15 @@ export default function ContactChatScreen() {
         headerSubtitle={headerSubtitle}
         headerAvatar={headerAvatar}
         onBackPress={() => router.back()}
-        onCallPress={() => showPopupAlert("Calling", `Initiating direct call to ${headerName}...`, undefined, undefined, "info")}
+        onCallPress={() =>
+          showPopupAlert(
+            "Calling",
+            `Initiating direct call to ${headerName}...`,
+            undefined,
+            undefined,
+            "info",
+          )
+        }
         onOptionsPress={() => setContactModalVisible(true)}
         isWalkSafeActive={isWalkSafeActive}
       />
@@ -1307,15 +1522,23 @@ export default function ContactChatScreen() {
           >
             {isLoadingOlder && (
               <View style={styles.loadingOlderContainer}>
-                <HeartBeatWave width={140} color={ResQColors.primaryRed} thickness={4} />
-                <Text style={styles.loadingOlderText}>Loading older messages...</Text>
+                <HeartBeatWave
+                  width={140}
+                  color={ResQColors.primaryRed}
+                  thickness={4}
+                />
+                <Text style={styles.loadingOlderText}>
+                  Loading older messages...
+                </Text>
               </View>
             )}
 
             {messages.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyTitle}>No messages yet</Text>
-                <Text style={styles.emptySub}>Start the conversation with {headerName}</Text>
+                <Text style={styles.emptySub}>
+                  Start the conversation with {headerName}
+                </Text>
               </View>
             ) : (
               messages.map((msg) => (
@@ -1359,7 +1582,10 @@ export default function ContactChatScreen() {
           onOpenCamera={handleOpenCamera}
           onPickAttachment={handlePickAttachment}
           onFocusInput={() => {
-            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
+            setTimeout(
+              () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+              100,
+            );
           }}
         />
       </KeyboardAvoidingView>
@@ -1373,7 +1599,15 @@ export default function ContactChatScreen() {
         relationship={headerSubtitle}
         avatarUrl={headerAvatar}
         phone={params.phone}
-        onCallPress={() => showPopupAlert("Calling", `Initiating direct call to ${headerName}...`, undefined, undefined, "info")}
+        onCallPress={() =>
+          showPopupAlert(
+            "Calling",
+            `Initiating direct call to ${headerName}...`,
+            undefined,
+            undefined,
+            "info",
+          )
+        }
       />
 
       {/* Lightbox Media Viewer Modal */}
@@ -1440,6 +1674,6 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontFamily: typography.regular,
     color: ResQColors.textMuted,
-    textAlign: "center"
+    textAlign: "center",
   },
 });
