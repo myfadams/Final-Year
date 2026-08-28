@@ -10,8 +10,10 @@ import {
   SlidersHorizontal,
   TriangleAlert,
 } from "lucide-react-native";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  Animated,
+  Easing,
   Modal,
   ScrollView,
   StyleSheet,
@@ -59,6 +61,7 @@ export default function NewsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const spinAnim = useRef(new Animated.Value(0)).current;
 
   const loadNews = useCallback(async (silent = false) => {
     if (silent) setIsRefreshing(true);
@@ -122,6 +125,29 @@ export default function NewsScreen() {
   useEffect(() => {
     loadNews();
   }, [loadNews]);
+
+  // Spin the refresh icon while a reload is in flight, for the whole-screen refresh button.
+  useEffect(() => {
+    if (isRefreshing) {
+      spinAnim.setValue(0);
+      const loop = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+      );
+      loop.start();
+      return () => loop.stop();
+    }
+    spinAnim.setValue(0);
+  }, [isRefreshing, spinAnim]);
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
 
   // Filtering logic
   const filteredArticles = newsList.filter((article) => {
@@ -193,6 +219,34 @@ export default function NewsScreen() {
               activeFilter !== "All" ? Colors.light.primary : Colors.light.text
             }
           />
+        </TouchableOpacity>
+      </View>
+
+      {/* Whole-screen refresh — reloads news, KNUST updates, and hotspots together */}
+      <View style={styles.refreshRow}>
+        <Text style={styles.refreshRowText} numberOfLines={1}>
+          {isRefreshing ? "Refreshing…" : "Showing the latest safety updates"}
+        </Text>
+        <TouchableOpacity
+          onPress={() => loadNews(true)}
+          style={styles.refreshPill}
+          activeOpacity={0.8}
+          disabled={isRefreshing}
+        >
+          <Animated.View style={{ transform: [{ rotate: spin }] }}>
+            <RefreshCw
+              size={13}
+              color={isRefreshing ? Colors.light.textMuted : Colors.light.primary}
+            />
+          </Animated.View>
+          <Text
+            style={[
+              styles.refreshPillText,
+              isRefreshing && { color: Colors.light.textMuted },
+            ]}
+          >
+            {isRefreshing ? "Refreshing" : "Refresh"}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -314,29 +368,7 @@ export default function NewsScreen() {
           {/* KNUST Updates Section */}
           {activeFilter === "All" && knustUpdates.length > 0 && (
             <View style={{ marginBottom: 24 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 12,
-                }}
-              >
-                <Text style={styles.hotspotsTitle}>KNUST Updates</Text>
-                <TouchableOpacity
-                  onPress={() => loadNews(true)}
-                  style={styles.refreshIconBtn}
-                  activeOpacity={0.8}
-                  disabled={isRefreshing}
-                >
-                  <RefreshCw
-                    size={15}
-                    color={
-                      isRefreshing ? Colors.light.textMuted : Colors.light.text
-                    }
-                  />
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.hotspotsTitle}>KNUST Updates</Text>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -568,6 +600,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#EEF2FF",
     borderColor: Colors.light.primary,
   },
+  refreshRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    gap: 12,
+  },
+  refreshRowText: {
+    flex: 1,
+    fontSize: 12.5,
+    fontFamily: typography.medium,
+    color: Colors.light.textMuted,
+  },
+  refreshPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: "#EEF2FF",
+    borderWidth: 1,
+    borderColor: "#E0E7FF",
+  },
+  refreshPillText: {
+    fontSize: 12.5,
+    fontFamily: typography.semibold,
+    color: Colors.light.primary,
+  },
   filterModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.45)",
@@ -665,16 +727,6 @@ const styles = StyleSheet.create({
     color: Colors.light.text,
     // marginVertical: 4,
     marginBottom: 10,
-  },
-  refreshIconBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    alignItems: "center",
-    justifyContent: "center",
   },
   hotspotsSubtitle: {
     fontSize: 12,
