@@ -25,6 +25,7 @@ import {
 import { MapFloatingWindow } from "@/components/MapFloatingWindow";
 import MapViewComponent, {
   ActiveSosMonitoringPin,
+  FocusedHotspotPin,
 } from "@/components/MapViewComponent";
 import { showPopupAlert } from "@/components/popupAlert";
 import { SharedLocationFloatingWindow } from "@/components/SharedLocationFloatingWindow";
@@ -73,6 +74,8 @@ export default function LocationScreen() {
     useState<SharedLocationPin | null>(null);
   const [activeSosMonitoring, setActiveSosMonitoring] =
     useState<ActiveSosMonitoringPin | null>(null);
+  const [focusedHotspot, setFocusedHotspot] =
+    useState<FocusedHotspotPin | null>(null);
   const [isSosRoutingActive, setIsSosRoutingActive] = useState<boolean>(false);
   const [isLoadingSosRoute, setIsLoadingSosRoute] = useState<boolean>(false);
   const [realEmergencies, setRealEmergencies] = useState<Person[]>([]);
@@ -107,6 +110,10 @@ export default function LocationScreen() {
     creatorID?: string;
     falseAlarm?: string;
     location?: string;
+    hotspotId?: string;
+    hotspotName?: string;
+    hotspotRiskLevel?: string;
+    hotspotRadiusMeters?: string;
   }>();
 
   // Recenter trigger — also doubles as the Follow toggle while navigating (see
@@ -235,6 +242,10 @@ export default function LocationScreen() {
           creatorID,
           falseAlarm: falseAlarmParam,
           location: locationParam,
+          hotspotId,
+          hotspotName,
+          hotspotRiskLevel,
+          hotspotRadiusMeters,
         } = params;
 
         if (sosAlertId) {
@@ -363,6 +374,35 @@ export default function LocationScreen() {
             createdAt: undefined,
             hasImOkay: undefined,
             messageText: undefined,
+          });
+        } else if (hotspotId && lat && lng) {
+          setSelectedPerson(null);
+          globalState.activeEmergencyId = null;
+          globalState.activeEmergencyPerson = null;
+          setActiveEmergency(null);
+
+          const hotspotLat = parseFloat(lat);
+          const hotspotLng = parseFloat(lng);
+          const radiusMeters = hotspotRadiusMeters
+            ? parseFloat(hotspotRadiusMeters)
+            : null;
+
+          setFocusedHotspot({
+            id: hotspotId,
+            latitude: hotspotLat,
+            longitude: hotspotLng,
+            name: hotspotName,
+            riskLevel: hotspotRiskLevel || null,
+            radiusMeters: radiusMeters !== null && !isNaN(radiusMeters) ? radiusMeters : null,
+          });
+
+          router.setParams({
+            hotspotId: undefined,
+            hotspotName: undefined,
+            hotspotRiskLevel: undefined,
+            hotspotRadiusMeters: undefined,
+            lat: undefined,
+            lng: undefined,
           });
         } else if (personId) {
           const targetStatus = historyMap[personId];
@@ -872,6 +912,7 @@ export default function LocationScreen() {
         activeEmergency={activeEmergency}
         activeSharedLocation={activeSharedLocation}
         activeSosMonitoring={activeSosMonitoring}
+        focusedHotspot={focusedHotspot}
         realEmergencies={realEmergencies}
         recenterNonce={recenterNonce}
         onFollowStateChange={setMapFollowState}

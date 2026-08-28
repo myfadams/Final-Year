@@ -31,6 +31,7 @@ import { fetchPublishedNews } from "@/backend/news";
 import AnotherNavBarHeader from "@/components/AnotherNavBarHeader";
 import CustomInput from "@/components/CustomInput";
 import HeartBeatWave from "@/components/HeartBeatWave";
+import HotspotDetailModal from "@/components/HotspotDetailModal";
 import HotspotZoneCard from "@/components/HotspotZoneCard";
 import NewsCard from "@/components/NewsCard";
 import NewsDetailModal from "@/components/NewsDetailModal";
@@ -50,6 +51,7 @@ export default function NewsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("All");
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedHotspot, setSelectedHotspot] = useState<HotspotRecord | null>(null);
 
   const [newsList, setNewsList] = useState<Article[]>([]);
   const [knustUpdates, setKnustUpdates] = useState<Article[]>([]);
@@ -136,11 +138,16 @@ export default function NewsScreen() {
     (a) => !a.isFeatured || activeFilter !== "All",
   );
 
-  // Danger-zone hotspots are a resident-tab destination on the map (not a drill-down detail
-  // screen), so this resets the stack instead of pushing — same convention used everywhere
-  // else a card jumps into a resident tab (see notificationsPage.tsx, contactChat.tsx). Without
-  // it, repeatedly bouncing between News and the map would pile up duplicate stack entries.
-  const handleHotspotPress = (hotspot: HotspotRecord) => {
+  // Tapping a hotspot card opens its details first — jumping straight to the map hid useful
+  // context (description, incident count) behind a screen change the resident didn't ask for.
+  // "View on Map" inside that modal is what actually navigates.
+  const handleHotspotNavigate = (hotspot: HotspotRecord) => {
+    setSelectedHotspot(null);
+
+    // Danger-zone hotspots are a resident-tab destination on the map (not a drill-down detail
+    // screen), so this resets the stack instead of pushing — same convention used everywhere
+    // else a card jumps into a resident tab (see notificationsPage.tsx, contactChat.tsx). Without
+    // it, repeatedly bouncing between News and the map would pile up duplicate stack entries.
     if (router.canDismiss()) {
       router.dismissAll();
     }
@@ -150,6 +157,9 @@ export default function NewsScreen() {
         lat: hotspot.latitude.toString(),
         lng: hotspot.longitude.toString(),
         hotspotId: hotspot.id,
+        hotspotName: hotspot.name,
+        hotspotRiskLevel: hotspot.risk_level ?? "",
+        hotspotRadiusMeters: hotspot.radius_meters?.toString() ?? "",
       },
     });
   };
@@ -268,7 +278,7 @@ export default function NewsScreen() {
                   <View key={hotspot.id} style={{ marginRight: 12 }}>
                     <HotspotZoneCard
                       hotspot={hotspot}
-                      onPress={() => handleHotspotPress(hotspot)}
+                      onPress={() => setSelectedHotspot(hotspot)}
                     />
                   </View>
                 ))}
@@ -430,6 +440,14 @@ export default function NewsScreen() {
         article={selectedArticle}
         visible={!!selectedArticle}
         onClose={() => setSelectedArticle(null)}
+      />
+
+      {/* Hotspot Detail Modal View */}
+      <HotspotDetailModal
+        hotspot={selectedHotspot}
+        visible={!!selectedHotspot}
+        onClose={() => setSelectedHotspot(null)}
+        onNavigate={handleHotspotNavigate}
       />
 
       {/* Filter Picker Modal */}

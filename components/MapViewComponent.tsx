@@ -8,7 +8,7 @@ import * as Location from "expo-location";
 import { AlertTriangle, BriefcaseMedical, Flame, LocateFixed, MapPinOff, Shield, ShieldAlert } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, AppState, Linking, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Polyline } from "react-native-maps";
+import { Circle, Polyline } from "react-native-maps";
 import ClusteredMapView from "react-native-map-clustering";
 import { SafeMarker as Marker, isValidCoordinate } from "@/components/SafeMarker";
 
@@ -37,6 +37,22 @@ const getIncidentType = (person: Person): "medical" | "fire" | "security" => {
   }
   return "medical";
 };
+
+// Mirrors HotspotZoneCard's risk color mapping so the map pin/circle matches the News screen.
+function getHotspotRiskColor(riskLevel?: string | null): string {
+  switch ((riskLevel || "").toLowerCase()) {
+    case "critical":
+      return Colors.URGENCY_COLORS.critical;
+    case "high":
+      return Colors.URGENCY_COLORS.high;
+    case "medium":
+      return Colors.URGENCY_COLORS.medium;
+    case "low":
+      return ResQColors.greenText;
+    default:
+      return ResQColors.badgeGrayText;
+  }
+}
 
 // Helper to resolve icon and color based on severity (urgency) using brand Colors constants
 const getIncidentIconInfo = (person: Person) => {
@@ -353,11 +369,23 @@ export interface ActiveSosMonitoringPin {
   alertStatus?: "active" | "cancelled" | "resolved" | "expired";
 }
 
+// A danger-zone hotspot the resident tapped from the News screen — just enough to focus the
+// camera on it and drop a marker/radius circle. Not a Person: hotspots aren't respondable.
+export interface FocusedHotspotPin {
+  id: string;
+  latitude: number;
+  longitude: number;
+  name?: string;
+  riskLevel?: string | null;
+  radiusMeters?: number | null;
+}
+
 interface MapViewComponentProps {
   selectedPerson: Person | null;
   activeEmergency: Person | null;
   activeSharedLocation?: SharedLocationPin | null;
   activeSosMonitoring?: ActiveSosMonitoringPin | null;
+  focusedHotspot?: FocusedHotspotPin | null;
   realEmergencies?: Person[];
   onSelectPerson: (p: Person) => void;
   onSelectSharedPin?: (pin: SharedLocationPin) => void;
@@ -375,6 +403,7 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
   activeEmergency,
   activeSharedLocation,
   activeSosMonitoring,
+  focusedHotspot,
   realEmergencies,
   onSelectPerson,
   onSelectSharedPin,
@@ -1085,6 +1114,30 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
     }
   }, [recenterNonce]);
 
+  // Focus the camera on a hotspot tapped from the News screen. Keyed on the hotspot's id (not
+  // the whole object) so re-tapping the same hotspot doesn't need a fresh coordinate to refire.
+  useEffect(() => {
+    if (
+      !focusedHotspot ||
+      !mapRef.current ||
+      !isValidCoordinate(focusedHotspot.latitude, focusedHotspot.longitude)
+    ) {
+      return;
+    }
+
+    markProgrammaticMove(1000);
+    mapRef.current.animateToRegion(
+      {
+        latitude: focusedHotspot.latitude - 0.0025,
+        longitude: focusedHotspot.longitude,
+        latitudeDelta: 0.01,
+        longitudeDelta: 0.01,
+      },
+      1000,
+    );
+    hasCentered.current = false;
+  }, [focusedHotspot?.id]);
+
   // Track device compass heading while actively navigating, so the map can rotate to match
   // the direction of travel (heading-up navigation) instead of staying locked north-up.
   useEffect(() => {
@@ -1335,6 +1388,61 @@ const MapViewComponent: React.FC<MapViewComponentProps> = ({
               </View>
             </View>
           </Marker>
+        );
+      })()}
+
+      {/* Focused Hotspot (danger zone tapped from the News screen) */}
+      {focusedHotspot && isValidCoordinate(focusedHotspot.latitude, focusedHotspot.longitude) && (() => {
+        const riskColor = getHotspotRiskColor(focusedHotspot.riskLevel);
+        return (
+          <React.Fragment key={`hotspot-focus-${focusedHotspot.id}`}>
+            {!!focusedHotspot.radiusMeters && (
+              <Circle
+                center={{
+                  latitude: focusedHotspot.latitude,
+                  longitude: focusedHotspot.longitude,
+                }}
+                radius={focusedHotspot.radiusMeters}
+                strokeColor={riskColor}
+                strokeWidth={1.5}
+                fillColor={`${riskColor}26`}
+              />
+            )}
+            <Marker
+              coordinate={{
+                latitude: focusedHotspot.latitude,
+                longitude: focusedHotspot.longitude,
+              }}
+              anchor={{ x: 0.5, y: 0.5 }}
+              cluster={false}
+            >
+              <View style={mapStyles.victimWrapper}>
+                <View
+                  style={[
+                    mapStyles.customMarkerCircle,
+                    { backgroundColor: riskColor, borderColor: "#FFFFFF", borderWidth: 2.5 },
+                  ]}
+                >
+                  <AlertTriangle size={18} color="#FFFFFF" />
+                </View>
+                {!!focusedHotspot.name && (
+                  <View
+                    style={[
+                      mapStyles.markerLabelContainer,
+                      { borderColor: riskColor, backgroundColor: "#FFFFFF" },
+                    ]}
+                  >
+                    <Text
+                      style={[mapStyles.markerLabelText, { color: riskColor }]}
+                      numberOfLines={1}
+                    >
+                      ⚠️ {focusedHotspot.name}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            </Marker>
+          </React.Fragment>
         );
       })()}
 

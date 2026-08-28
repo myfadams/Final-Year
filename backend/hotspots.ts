@@ -7,11 +7,13 @@ export interface HotspotRecord {
   description: string | null;
   latitude: number;
   longitude: number;
+  location_geom?: any;
   radius_meters: number | null;
   risk_level: string | null;
   incident_count: number | null;
   created_at: string | null;
   updated_at: string | null;
+  images: string | null;
 }
 
 const RISK_RANK: Record<string, number> = {
@@ -35,7 +37,7 @@ export async function fetchHotspots(): Promise<{ data: HotspotRecord[]; error: s
     const { data, error } = await supabase
       .from("hotspots")
       .select(
-        "id, name, description, latitude, longitude, radius_meters, risk_level, incident_count, created_at, updated_at"
+        "id, name, description, latitude, longitude, location_geom, radius_meters, risk_level, incident_count, created_at, updated_at, images"
       )
       .not("latitude", "is", null)
       .not("longitude", "is", null);
