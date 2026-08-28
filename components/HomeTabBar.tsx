@@ -21,7 +21,7 @@ interface HomeTabBarProp {
   userInfo?: {
     name?: string;
     avatarUrl?: string;
-    profile_image_url?: string;
+    profile_img_url?: string;
   };
   pageTitle: string;
   avatarUrl?: string;
@@ -73,10 +73,10 @@ const HomeTabBar: React.FC<HomeTabBarProp> = ({
 
   const effectiveAvatarUrl =
     avatarUrl ||
-    userProfile?.profile_image_url ||
-    profile?.profile_image_url ||
+    userProfile?.profile_img_url ||
+    profile?.profile_img_url ||
     userInfo?.avatarUrl ||
-    userInfo?.profile_image_url ||
+    userInfo?.profile_img_url ||
     null;
 
   const effectiveName =

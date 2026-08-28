@@ -274,7 +274,7 @@ export async function fetchNearbyAndTrustedSos(
     const senderIds = [...new Set(combined.map((s) => s.user_id))];
     const { data: userProfiles } = await supabase
       .from("users")
-      .select("id, name, profile_img_url, profile_image_url, phone, role, program_of_study")
+      .select("id, name, profile_img_url, phone, role, program_of_study")
       .in("id", senderIds);
 
     const profileMap = new Map(
@@ -283,7 +283,7 @@ export async function fetchNearbyAndTrustedSos(
         {
           id: u.id,
           name: u.name || u.full_name || "ResQ Resident",
-          avatar_url: u.profile_img_url || u.profile_image_url || null,
+          avatar_url: u.profile_img_url || null,
           phone: u.phone || null,
           role: u.role || null,
           program_of_study: u.program_of_study || null,
@@ -505,7 +505,7 @@ export async function fetchSosResponders(
     const responderIds = [...new Set(rows.map((r: any) => r.responder_id))];
     const { data: profiles } = await supabase
       .from("users")
-      .select("id, name, profile_img_url, profile_image_url, phone")
+      .select("id, name, profile_img_url, phone")
       .in("id", responderIds);
 
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
@@ -515,7 +515,7 @@ export async function fetchSosResponders(
       return {
         ...r,
         name: p?.name ?? (p as any)?.full_name ?? "Verified Responder",
-        avatar_url: p?.profile_img_url ?? (p as any)?.profile_image_url ?? null,
+        avatar_url: p?.profile_img_url ?? null,
         phone: p?.phone ?? null,
       };
     });
@@ -713,7 +713,7 @@ export async function fetchSosAlertById(
     // Fetch sender profile details
     const { data: userProfile } = await supabase
       .from("users")
-      .select("id, name, profile_img_url, profile_image_url, phone, role, program_of_study")
+      .select("id, name, profile_img_url, phone, role, program_of_study")
       .eq("id", alert.user_id)
       .maybeSingle();
 
@@ -721,7 +721,7 @@ export async function fetchSosAlertById(
       ? {
         id: userProfile.id,
         name: userProfile.name || (userProfile as any).full_name || "ResQ Resident",
-        avatar_url: userProfile.profile_img_url || (userProfile as any).profile_image_url || null,
+        avatar_url: userProfile.profile_img_url || null,
         phone: userProfile.phone || null,
         role: userProfile.role || null,
         program_of_study: userProfile.program_of_study || null,

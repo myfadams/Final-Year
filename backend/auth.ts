@@ -1,6 +1,8 @@
 import { createSafeRealtimeChannel, supabase } from "./supabaseConfig";
 import { safeSupabaseRequest } from "./safeRequest";
 import { getVerifyRedirectUrl } from "../externalFunctions/expoFunctions";
+import { decode } from "base64-arraybuffer";
+import * as FileSystem from "expo-file-system/legacy";
 
 
 
@@ -29,7 +31,7 @@ export interface UserProfile {
   phone: string | null;
   role: "student" | "staff" | "responder" | "admin";
   is_verified: boolean;
-  profile_image_url: string | null;
+  profile_img_url: string | null;
   student_id_number: string | null;
   student_reference_number: string | null;
   student_card_image_url: string | null;
@@ -671,6 +673,96 @@ export async function uploadStudentIdCard(
   } catch (error: any) {
     console.error("ID Card Upload Error:", error.message);
     return { publicUrl: null, error: error.message };
+  }
+}
+
+/**
+ * Uploads a user's profile picture to Supabase Storage under `profileImages/{userId}/avatar.{ext}`.
+ * The userId-as-folder shape mirrors the existing `schoolID/{userId}/...` convention (see
+ * uploadStudentIdCard below) so it lines up with per-user storage RLS policies scoped by
+ * folder — see supabase/migrations/20260828_06_profile_image_storage_rls.sql. The filename
+ * within that folder is stable (no timestamp) so a re-upload always overwrites the previous
+ * picture at the same key. If the new file has a different extension than a prior upload, the
+ * stale file is explicitly removed first so it doesn't linger as an orphan.
+ */
+export async function uploadProfileImage(
+  userId: string,
+  fileUri: string,
+): Promise<{ publicUrl: string | null; error: string | null }> {
+  try {
+    // fetch(uri).blob() is unreliable on Hermes/RN (Response.blob is not implemented in this
+    // environment) — read as base64 via expo-file-system and decode to an ArrayBuffer instead,
+    // same approach already used for emergency media uploads (see backend/emergencies.ts).
+    const base64 = await FileSystem.readAsStringAsync(fileUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const arrayBuffer = decode(base64);
+
+    const fileExt = (fileUri.split(".").pop() || "jpg").toLowerCase();
+    const folderPath = `profileImages/${userId}`;
+    const filePath = `${folderPath}/avatar.${fileExt}`;
+
+    const { data: existingFiles } = await supabase.storage
+      .from("images")
+      .list(folderPath);
+
+    const staleFiles = (existingFiles || [])
+      .filter((f) => f.name !== `avatar.${fileExt}`)
+      .map((f) => `${folderPath}/${f.name}`);
+
+    if (staleFiles.length > 0) {
+      await supabase.storage.from("images").remove(staleFiles);
+    }
+
+    const { error: uploadError } = await supabase.storage
+      .from("images")
+      .upload(filePath, arrayBuffer, {
+        contentType: `image/${fileExt === "png" ? "png" : "jpeg"}`,
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { data: publicUrlData } = supabase.storage
+      .from("images")
+      .getPublicUrl(filePath);
+
+    // Same path every time means the URL never changes on its own — cache-bust it so the app
+    // (and any RN Image cache) doesn't keep serving the previous picture from that same URL.
+    const publicUrl = `${publicUrlData.publicUrl}?updated=${Date.now()}`;
+
+    return { publicUrl, error: null };
+  } catch (error: any) {
+    console.error("Profile Image Upload Error:", error.message || error);
+    return { publicUrl: null, error: error.message || String(error) };
+  }
+}
+
+/**
+ * Persists the uploaded profile picture URL to the user's row and refreshes the cached profile.
+ */
+export async function updateProfileImage(
+  userId: string,
+  imageUrl: string,
+): Promise<{ data: UserProfile | null; error: string | null }> {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .update({ profile_img_url: imageUrl, updated_at: new Date().toISOString() })
+      .eq("id", userId)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (data) {
+      await setCachedUserProfile(data as UserProfile);
+    }
+
+    return { data: (data as UserProfile) || null, error: null };
+  } catch (error: any) {
+    console.error("Update Profile Image Error:", error.message || error);
+    return { data: null, error: error.message || String(error) };
   }
 }
 

@@ -349,7 +349,7 @@ export default function EmergencyChatScreen() {
         if (profile && isSubscribed) {
           setCurrentUserName(profile.name || user?.email || "Responder");
           setCurrentUserRole((profile.role || "Responder").toUpperCase());
-          setCurrentUserAvatar(profile.profile_image_url || undefined);
+          setCurrentUserAvatar(profile.profile_img_url || undefined);
         }
       }
 

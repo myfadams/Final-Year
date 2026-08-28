@@ -63,8 +63,8 @@ export const AnotherNavBarHeader: React.FC<AnotherNavBarHeaderProps> = ({
 
   const effectiveAvatarUrl =
     avatarUrl ||
-    userProfile?.profile_image_url ||
-    profile?.profile_image_url ||
+    userProfile?.profile_img_url ||
+    profile?.profile_img_url ||
     null;
 
   const effectiveName =

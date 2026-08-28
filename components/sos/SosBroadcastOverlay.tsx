@@ -132,9 +132,9 @@ export default function SosBroadcastOverlay({
 
               {/* Rich Caller Profile Card */}
               <View style={styles.senderProfileRow}>
-                {userProfile?.profile_image_url ? (
+                {userProfile?.profile_img_url ? (
                   <Image
-                    source={{ uri: userProfile.profile_image_url }}
+                    source={{ uri: userProfile.profile_img_url }}
                     style={styles.senderProfileAvatar}
                   />
                 ) : (

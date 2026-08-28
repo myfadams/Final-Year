@@ -177,7 +177,7 @@ export default function ContactChatScreen() {
         if (profile && isSubscribed) {
           setCurrentUserName(profile.name || currentUser.email || "Me");
           setCurrentUserRole(profile.role || "Resident");
-          setCurrentUserAvatar(profile.profile_image_url || undefined);
+          setCurrentUserAvatar(profile.profile_img_url || undefined);
         }
 
         let resolvedChatId = initialChatId;

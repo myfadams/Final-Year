@@ -1,4 +1,11 @@
-import { getCurrentUser, getUserProfile, signOutUser, UserProfile } from "@/backend/auth";
+import {
+  getCurrentUser,
+  getUserProfile,
+  signOutUser,
+  updateProfileImage,
+  uploadProfileImage,
+  UserProfile,
+} from "@/backend/auth";
 import NavHeader from "@/components/NavHeader";
 import Colors from "@/constants/Colors";
 import { globalState } from "@/constants/globalState";
@@ -19,6 +26,7 @@ import {
 import { showPopupAlert } from "@/components/popupAlert";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -46,15 +54,15 @@ export default function ProfileScreen() {
   );
 
   const [avatar, setAvatar] = useState<string | null>(
-    globalState.userProfile?.profile_image_url || null
+    globalState.userProfile?.profile_img_url || null
   );
 
   useEffect(() => {
     async function loadProfile() {
       if (globalState.userProfile) {
         setUserProfile(globalState.userProfile);
-        if (globalState.userProfile.profile_image_url) {
-          setAvatar(globalState.userProfile.profile_image_url);
+        if (globalState.userProfile.profile_img_url) {
+          setAvatar(globalState.userProfile.profile_img_url);
         }
       } else {
         try {
@@ -64,8 +72,8 @@ export default function ProfileScreen() {
             if (profile) {
               globalState.userProfile = profile;
               setUserProfile(profile);
-              if (profile.profile_image_url) {
-                setAvatar(profile.profile_image_url);
+              if (profile.profile_img_url) {
+                setAvatar(profile.profile_img_url);
               }
             }
           }
@@ -76,6 +84,8 @@ export default function ProfileScreen() {
     }
     loadProfile();
   }, []);
+
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
   const handlePickImage = async () => {
     // Request media library permissions
@@ -91,19 +101,70 @@ export default function ProfileScreen() {
       return;
     }
 
+    let result: ImagePicker.ImagePickerResult;
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
+      result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ["images"],
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setAvatar(result.assets[0].uri);
-      }
     } catch (error) {
       showPopupAlert("Error", "Something went wrong while choosing the image.", undefined, undefined, "error");
+      return;
+    }
+
+    if (result.canceled || !result.assets || result.assets.length === 0) {
+      return;
+    }
+
+    const localUri = result.assets[0].uri;
+    const previousAvatar = avatar;
+    setAvatar(localUri); // Optimistic preview while the upload/save happens in the background
+
+    const userId = userProfile?.id;
+    if (!userId) {
+      showPopupAlert(
+        "Not Signed In",
+        "Could not determine your account. Please sign in again and retry.",
+        undefined,
+        undefined,
+        "error"
+      );
+      setAvatar(previousAvatar);
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const { publicUrl, error: uploadError } = await uploadProfileImage(userId, localUri);
+      if (uploadError || !publicUrl) {
+        throw new Error(uploadError || "Upload failed.");
+      }
+
+      const { data: updatedProfile, error: saveError } = await updateProfileImage(
+        userId,
+        publicUrl
+      );
+      if (saveError) {
+        throw new Error(saveError);
+      }
+
+      setAvatar(publicUrl);
+      if (updatedProfile) {
+        setUserProfile(updatedProfile);
+      }
+    } catch (error: any) {
+      setAvatar(previousAvatar);
+      showPopupAlert(
+        "Upload Failed",
+        error?.message || "Could not update your profile picture. Please try again.",
+        undefined,
+        undefined,
+        "error"
+      );
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -171,9 +232,9 @@ export default function ProfileScreen() {
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
             <View style={styles.avatarShadow}>
-              {avatar || userProfile?.profile_image_url ? (
+              {avatar || userProfile?.profile_img_url ? (
                 <Image
-                  source={{ uri: avatar || userProfile?.profile_image_url || "" }}
+                  source={{ uri: avatar || userProfile?.profile_img_url || "" }}
                   style={styles.avatarImage}
                   contentFit="cover"
                   transition={200}
@@ -185,12 +246,18 @@ export default function ProfileScreen() {
                   </Text>
                 </View>
               )}
+              {isUploadingAvatar && (
+                <View style={styles.avatarLoadingOverlay}>
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                </View>
+              )}
             </View>
             {/* Red Floating Action Button for Edit */}
             <TouchableOpacity
               onPress={handlePickImage}
               style={styles.editButton}
               activeOpacity={0.85}
+              disabled={isUploadingAvatar}
             >
               <Pen size={12} color="#FFFFFF" strokeWidth={3} />
             </TouchableOpacity>
@@ -428,6 +495,17 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 34,
     fontFamily: typography.bold,
+  },
+  avatarLoadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 50,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   editButton: {
     position: "absolute",

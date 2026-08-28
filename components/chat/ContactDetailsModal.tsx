@@ -89,7 +89,7 @@ export default function ContactDetailsModal({
   }, [visible, contactId]);
 
   const displayName = profile?.name || name || "Contact Info";
-  const displayAvatar = profile?.profile_image_url || avatarUrl;
+  const displayAvatar = profile?.profile_img_url || avatarUrl;
   const displayPhone = profile?.phone || phone;
   const displayRole = profile?.role
     ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
