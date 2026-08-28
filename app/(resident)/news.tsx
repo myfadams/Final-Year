@@ -1,21 +1,23 @@
-import { showPopupAlert } from "@/components/popupAlert";
 import Colors, { ResQColors } from "@/constants/Colors";
 import { typography } from "@/constants/typograyph";
 import { useRouter } from "expo-router";
 import {
+  Check,
   Newspaper,
+  RefreshCw,
   Search,
   SearchX,
   SlidersHorizontal,
-  TriangleAlert
+  TriangleAlert,
 } from "lucide-react-native";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 
 import {
@@ -34,7 +36,13 @@ import NewsCard from "@/components/NewsCard";
 import NewsDetailModal from "@/components/NewsDetailModal";
 import { Article } from "@/constants/interfaces";
 
-const FILTERS = ["All", "Campus Safety Alert", "Security Notice", "Emergency Update", "General Safety News"];
+const FILTERS = [
+  "All",
+  "Campus Safety Alert",
+  "Security Notice",
+  "Emergency Update",
+  "General Safety News",
+];
 
 export default function NewsScreen() {
   const router = useRouter();
@@ -47,58 +55,71 @@ export default function NewsScreen() {
   const [knustUpdates, setKnustUpdates] = useState<Article[]>([]);
   const [hotspotZones, setHotspotZones] = useState<HotspotRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+
+  const loadNews = useCallback(async (silent = false) => {
+    if (silent) setIsRefreshing(true);
+    else setIsLoading(true);
+
+    try {
+      const [data, externalData, { data: hotspotData }] = await Promise.all([
+        fetchPublishedNews(),
+        fetchKnustUpdates(),
+        fetchHotspots(),
+      ]);
+
+      setKnustUpdates(externalData);
+      setHotspotZones(hotspotData);
+      const mapped: Article[] = data.map((item) => {
+        let catColor = "#3B82F6"; // Default Blue
+        let catBg = "#DBEAFE";
+
+        if (item.category === "Campus Safety Alert") {
+          catColor = "#EF4444";
+          catBg = "#FEE2E2";
+        } else if (item.category === "Security Notice") {
+          catColor = "#F59E0B";
+          catBg = "#FEF3C7";
+        } else if (item.category === "Emergency Update") {
+          catColor = "#B91C1C";
+          catBg = "#FECACA";
+        } else if (item.category === "Road Closure") {
+          catColor = "#6B7280";
+          catBg = "#F3F4F6";
+        }
+
+        return {
+          id: item.id,
+          title: item.title,
+          category: item.category,
+          categoryColor: catColor,
+          categoryBg: catBg,
+          publisher: item.users?.name ? item.users.name : "System Admin",
+          time: item.published_at
+            ? new Date(item.published_at).toLocaleDateString()
+            : "Just now",
+          image:
+            item.image_url ||
+            "https://images.unsplash.com/photo-1541888075782-b7e3e9d8995a",
+          content: item.content,
+          isFeatured:
+            item.category === "Emergency Update" ||
+            item.category === "Campus Safety Alert",
+        };
+      });
+      setNewsList(mapped);
+    } catch (err) {
+      console.error("Failed to load news", err);
+    } finally {
+      if (silent) setIsRefreshing(false);
+      else setIsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    async function loadNews() {
-      try {
-        const [data, externalData, { data: hotspotData }] = await Promise.all([
-          fetchPublishedNews(),
-          fetchKnustUpdates(),
-          fetchHotspots(),
-        ]);
-
-        setKnustUpdates(externalData);
-        setHotspotZones(hotspotData);
-        const mapped: Article[] = data.map((item) => {
-          let catColor = "#3B82F6"; // Default Blue
-          let catBg = "#DBEAFE";
-
-          if (item.category === "Campus Safety Alert") {
-            catColor = "#EF4444";
-            catBg = "#FEE2E2";
-          } else if (item.category === "Security Notice") {
-            catColor = "#F59E0B";
-            catBg = "#FEF3C7";
-          } else if (item.category === "Emergency Update") {
-            catColor = "#B91C1C";
-            catBg = "#FECACA";
-          } else if (item.category === "Road Closure") {
-            catColor = "#6B7280";
-            catBg = "#F3F4F6";
-          }
-
-          return {
-            id: item.id,
-            title: item.title,
-            category: item.category,
-            categoryColor: catColor,
-            categoryBg: catBg,
-            publisher: item.users?.name ? item.users.name : "System Admin",
-            time: item.published_at ? new Date(item.published_at).toLocaleDateString() : "Just now",
-            image: item.image_url || "https://images.unsplash.com/photo-1541888075782-b7e3e9d8995a",
-            content: item.content,
-            isFeatured: item.category === "Emergency Update" || item.category === "Campus Safety Alert"
-          };
-        });
-        setNewsList(mapped);
-      } catch (err) {
-        console.error("Failed to load news", err);
-      } finally {
-        setIsLoading(false);
-      }
-    }
     loadNews();
-  }, []);
+  }, [loadNews]);
 
   // Filtering logic
   const filteredArticles = newsList.filter((article) => {
@@ -147,19 +168,26 @@ export default function NewsScreen() {
             Icon={<Search size={20} color="#9CA3AF" />}
           />
         </View>
+
         <TouchableOpacity
-          onPress={() =>
-            showPopupAlert("Filter Settings", "Configure your feed preferences.", undefined, undefined, "info")
-          }
-          style={styles.filterButton}
+          onPress={() => setShowFilterModal(true)}
+          style={[
+            styles.filterButton,
+            activeFilter !== "All" && styles.filterButtonActive,
+          ]}
           activeOpacity={0.8}
         >
-          <SlidersHorizontal size={20} color={Colors.light.text} />
+          <SlidersHorizontal
+            size={20}
+            color={
+              activeFilter !== "All" ? Colors.light.primary : Colors.light.text
+            }
+          />
         </TouchableOpacity>
       </View>
 
       {/* Filter Categories Horizontal Bar */}
-      <View style={{ height: 40, marginBottom: 16 }}>
+      {/* <View style={{ height: 40, marginBottom: 16 }}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -191,7 +219,7 @@ export default function NewsScreen() {
             },
           )}
         </ScrollView>
-      </View>
+      </View> */}
 
       {/* News List */}
       {isLoading ? (
@@ -203,7 +231,9 @@ export default function NewsScreen() {
             thickness={7}
             style={{ marginBottom: 8 }}
           />
-          <Text style={[styles.emptyText, { marginTop: 16 }]}>Loading news...</Text>
+          <Text style={[styles.emptyText, { marginTop: 16 }]}>
+            Loading news...
+          </Text>
         </View>
       ) : (
         <ScrollView
@@ -217,10 +247,16 @@ export default function NewsScreen() {
           {activeFilter === "All" && hotspotZones.length > 0 && (
             <View style={{ marginBottom: 24 }}>
               <View style={styles.hotspotsHeaderRow}>
-                <TriangleAlert size={16} color={ResQColors.primaryRedText} strokeWidth={2.4} />
+                <TriangleAlert
+                  size={16}
+                  color={ResQColors.primaryRedText}
+                  strokeWidth={2.4}
+                />
                 <View>
                   <Text style={styles.hotspotsTitle}>Hotspots</Text>
-                  <Text style={styles.hotspotsSubtitle}>Areas reported as unsafe — avoid or take extra care</Text>
+                  <Text style={styles.hotspotsSubtitle}>
+                    Areas reported as unsafe — avoid or take extra care
+                  </Text>
                 </View>
               </View>
               <ScrollView
@@ -250,7 +286,10 @@ export default function NewsScreen() {
                 contentContainerStyle={{ paddingRight: 20 }}
               >
                 {featuredArticles.map((article) => (
-                  <View key={article.id} style={{ width: 300, marginRight: 16 }}>
+                  <View
+                    key={article.id}
+                    style={{ width: 300, marginRight: 16 }}
+                  >
                     <NewsCard
                       article={article}
                       variant="featured"
@@ -265,14 +304,39 @@ export default function NewsScreen() {
           {/* KNUST Updates Section */}
           {activeFilter === "All" && knustUpdates.length > 0 && (
             <View style={{ marginBottom: 24 }}>
-              <Text style={styles.hotspotsTitle}>KNUST Updates</Text>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
+                }}
+              >
+                <Text style={styles.hotspotsTitle}>KNUST Updates</Text>
+                <TouchableOpacity
+                  onPress={() => loadNews(true)}
+                  style={styles.refreshIconBtn}
+                  activeOpacity={0.8}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCw
+                    size={15}
+                    color={
+                      isRefreshing ? Colors.light.textMuted : Colors.light.text
+                    }
+                  />
+                </TouchableOpacity>
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingRight: 20 }}
               >
                 {knustUpdates.map((article) => (
-                  <View key={article.id} style={{ width: 300, marginRight: 16 }}>
+                  <View
+                    key={article.id}
+                    style={{ width: 300, marginRight: 16 }}
+                  >
                     <NewsCard
                       article={article}
                       variant="featured"
@@ -301,23 +365,58 @@ export default function NewsScreen() {
                   <View style={styles.emptyIconContainer}>
                     <Newspaper size={32} color={Colors.light.accent} />
                   </View>
-                  <Text style={[styles.emptyText, { fontSize: 16, color: Colors.light.text, fontFamily: typography.semibold }]}>
+                  <Text
+                    style={[
+                      styles.emptyText,
+                      {
+                        fontSize: 16,
+                        color: Colors.light.text,
+                        fontFamily: typography.semibold,
+                      },
+                    ]}
+                  >
                     You're all caught up!
                   </Text>
-                  <Text style={[styles.emptyText, { marginTop: 6, textAlign: 'center', lineHeight: 20 }]}>
-                    There are no recent safety alerts or news items at the moment.
+                  <Text
+                    style={[
+                      styles.emptyText,
+                      { marginTop: 6, textAlign: "center", lineHeight: 20 },
+                    ]}
+                  >
+                    There are no recent safety alerts or news items at the
+                    moment.
                   </Text>
                 </>
               ) : (
                 <>
-                  <View style={[styles.emptyIconContainer, { backgroundColor: '#F3F4F6' }]}>
+                  <View
+                    style={[
+                      styles.emptyIconContainer,
+                      { backgroundColor: "#F3F4F6" },
+                    ]}
+                  >
                     <SearchX size={32} color="#6B7280" />
                   </View>
-                  <Text style={[styles.emptyText, { fontSize: 16, color: Colors.light.text, fontFamily: typography.semibold }]}>
+                  <Text
+                    style={[
+                      styles.emptyText,
+                      {
+                        fontSize: 16,
+                        color: Colors.light.text,
+                        fontFamily: typography.semibold,
+                      },
+                    ]}
+                  >
                     No matches found
                   </Text>
-                  <Text style={[styles.emptyText, { marginTop: 6, textAlign: 'center', lineHeight: 20 }]}>
-                    We couldn't find any news matching your search or active filter.
+                  <Text
+                    style={[
+                      styles.emptyText,
+                      { marginTop: 6, textAlign: "center", lineHeight: 20 },
+                    ]}
+                  >
+                    We couldn't find any news matching your search or active
+                    filter.
                   </Text>
                 </>
               )}
@@ -332,6 +431,51 @@ export default function NewsScreen() {
         visible={!!selectedArticle}
         onClose={() => setSelectedArticle(null)}
       />
+
+      {/* Filter Picker Modal */}
+      <Modal
+        visible={showFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowFilterModal(false)}
+      >
+        <View style={styles.filterModalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setShowFilterModal(false)}
+          />
+          <View style={styles.filterModalSheet}>
+            <Text style={styles.filterModalTitle}>Filter by Category</Text>
+            {FILTERS.map((filter) => {
+              const isSelected = activeFilter === filter;
+              return (
+                <TouchableOpacity
+                  key={filter}
+                  style={styles.filterOptionRow}
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    setActiveFilter(filter);
+                    setShowFilterModal(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.filterOptionText,
+                      isSelected && styles.filterOptionTextActive,
+                    ]}
+                  >
+                    {filter}
+                  </Text>
+                  {isSelected && (
+                    <Check size={18} color={Colors.light.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -402,6 +546,46 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 6, // alignment adjustment to match CustomInput label gaps
   },
+  filterButtonActive: {
+    backgroundColor: "#EEF2FF",
+    borderColor: Colors.light.primary,
+  },
+  filterModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.45)",
+    justifyContent: "flex-end",
+  },
+  filterModalSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  filterModalTitle: {
+    fontSize: 16,
+    fontFamily: typography.bold,
+    color: Colors.light.text,
+    marginBottom: 12,
+  },
+  filterOptionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  filterOptionText: {
+    fontSize: 14.5,
+    fontFamily: typography.medium,
+    color: Colors.light.text,
+  },
+  filterOptionTextActive: {
+    fontFamily: typography.semibold,
+    color: Colors.light.primary,
+  },
   filterScrollView: {
     paddingHorizontal: 20,
     gap: 8,
@@ -441,9 +625,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#EEF2FF",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: 16,
   },
   emptyText: {
@@ -461,6 +645,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: typography.bold,
     color: Colors.light.text,
+    // marginVertical: 4,
+    marginBottom: 10,
+  },
+  refreshIconBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    alignItems: "center",
+    justifyContent: "center",
   },
   hotspotsSubtitle: {
     fontSize: 12,

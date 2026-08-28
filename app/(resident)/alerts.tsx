@@ -53,8 +53,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 /** Haversine formula — returns distance in metres between two GPS coordinates. */
 function haversineMeters(
-  lat1: number, lon1: number,
-  lat2: number, lon2: number,
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
 ): number {
   const R = 6371e3;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -74,12 +76,13 @@ function mapEmergencyToCaseProp(
   r: EmergencyRecord,
   userLocation?: { latitude: number; longitude: number } | null,
 ): caseProp {
-  const createdMs = r.created_at ? new Date(r.created_at).getTime() : Date.now();
+  const createdMs = r.created_at
+    ? new Date(r.created_at).getTime()
+    : Date.now();
   const nowMs = Date.now();
   const ageSeconds = Math.max(0, Math.floor((nowMs - createdMs) / 1000));
 
-  const resolvedMs =
-    r.resolved_at ? new Date(r.resolved_at).getTime() : nowMs;
+  const resolvedMs = r.resolved_at ? new Date(r.resolved_at).getTime() : nowMs;
   const responseTimeSec = r.response_time_seconds
     ? r.response_time_seconds
     : Math.max(0, Math.floor((resolvedMs - createdMs) / 1000));
@@ -93,8 +96,17 @@ function mapEmergencyToCaseProp(
 
   // Calculate distance from device to emergency (metres), or 0 if location unavailable
   const distance =
-    userLocation && typeof r.latitude === "number" && typeof r.longitude === "number"
-      ? Math.round(haversineMeters(userLocation.latitude, userLocation.longitude, r.latitude, r.longitude))
+    userLocation &&
+    typeof r.latitude === "number" &&
+    typeof r.longitude === "number"
+      ? Math.round(
+          haversineMeters(
+            userLocation.latitude,
+            userLocation.longitude,
+            r.latitude,
+            r.longitude,
+          ),
+        )
       : 0;
 
   return {
@@ -127,15 +139,23 @@ export default function AlertsScreen() {
   const [moderate, setModerate] = useState<caseProp[]>([]);
   const [activeCases, setActiveCases] = useState<caseProp[]>([]);
   const [low, setLow] = useState<caseProp[]>([]);
-  const [activeEmergencyId, setActiveEmergencyId] = useState<string | null>(null);
+  const [activeEmergencyId, setActiveEmergencyId] = useState<string | null>(
+    null,
+  );
 
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [realtimeConnected, setRealtimeConnected] = useState(false);
   const [locationText, setLocationText] = useState("Locating...");
   // Device GPS location — used to compute real distances to each emergency
-  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
-  const userLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const userLocationRef = useRef<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const channelRef = useRef<any>(null);
@@ -146,8 +166,16 @@ export default function AlertsScreen() {
     if (!realtimeConnected) return;
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.3, duration: 900, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.3,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
       ]),
     );
     loop.start();
@@ -159,7 +187,7 @@ export default function AlertsScreen() {
   async function applyData(
     records: EmergencyRecord[],
     loc?: { latitude: number; longitude: number } | null,
-    userId?: string
+    userId?: string,
   ) {
     const location = loc ?? userLocationRef.current;
     let historyMap: Record<string, any> = {};
@@ -173,20 +201,16 @@ export default function AlertsScreen() {
     }));
 
     setAll(mapped);
+    const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
     setResolved(
       mapped.filter((m, i) => {
         if (!m.isResolved) return false;
         const resolvedAt = records[i].resolved_at;
         if (!resolvedAt) return true;
-        
-        const rDate = new Date(resolvedAt);
-        const today = new Date();
-        return (
-          rDate.getDate() === today.getDate() &&
-          rDate.getMonth() === today.getMonth() &&
-          rDate.getFullYear() === today.getFullYear()
-        );
-      })
+
+        const resolvedMs = new Date(resolvedAt).getTime();
+        return Date.now() - resolvedMs <= TWENTY_FOUR_HOURS_MS;
+      }),
     );
     setCritical(filterByProperty(mapped, "severity", "Critical"));
     setModerate(filterByProperty(mapped, "severity", "Moderate"));
@@ -201,13 +225,19 @@ export default function AlertsScreen() {
     setFetchError(null);
 
     // Request GPS location (non-blocking — if denied, distance stays 0)
-    let loc: { latitude: number; longitude: number } | null = userLocationRef.current;
+    let loc: { latitude: number; longitude: number } | null =
+      userLocationRef.current;
     if (!loc) {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status === "granted") {
-          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          loc = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          const pos = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          loc = {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          };
           userLocationRef.current = loc;
           setUserLocation(loc);
 
@@ -215,7 +245,7 @@ export default function AlertsScreen() {
             const geocode = await Location.reverseGeocodeAsync(loc);
             if (geocode && geocode.length > 0) {
               const address = geocode[0];
-              console.log(address)
+              console.log(address);
               // const textParts = [address.street || address.name, address.city || address.district, address.region].filter(Boolean);
               // const textParts = address.name || "";
               const textParts = address.region + ", " + address.city || "";
@@ -224,7 +254,7 @@ export default function AlertsScreen() {
               // } else {
               //   setLocationText("Location found");
               // }
-              setLocationText(textParts)
+              setLocationText(textParts);
             } else {
               setLocationText("Location found");
             }
@@ -253,7 +283,7 @@ export default function AlertsScreen() {
       if (channelRef.current) {
         try {
           supabase.removeChannel(channelRef.current);
-        } catch (_) { }
+        } catch (_) {}
         channelRef.current = null;
       }
       setRealtimeConnected(false);
@@ -266,8 +296,9 @@ export default function AlertsScreen() {
           },
           (status: string) => {
             if (status === "SUBSCRIBED") setRealtimeConnected(true);
-            else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setRealtimeConnected(false);
-          }
+            else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT")
+              setRealtimeConnected(false);
+          },
         );
 
         channelRef.current = channel;
@@ -302,7 +333,7 @@ export default function AlertsScreen() {
         if (channelRef.current) {
           try {
             supabase.removeChannel(channelRef.current);
-          } catch (_) { }
+          } catch (_) {}
           channelRef.current = null;
         }
         setRealtimeConnected(false);
@@ -335,7 +366,9 @@ export default function AlertsScreen() {
 
     if (filter === "nearby") {
       return {
-        displayedActiveCases: [...activeCases].sort((a, b) => a.distance - b.distance),
+        displayedActiveCases: [...activeCases].sort(
+          (a, b) => a.distance - b.distance,
+        ),
         displayedResolvedCases: [],
       };
     }
@@ -357,7 +390,10 @@ export default function AlertsScreen() {
       return { displayedActiveCases: [], displayedResolvedCases: resolved };
     }
 
-    return { displayedActiveCases: activeCases, displayedResolvedCases: resolved };
+    return {
+      displayedActiveCases: activeCases,
+      displayedResolvedCases: resolved,
+    };
   }, [isActive, activeCases, resolved]);
 
   const isEmpty =
@@ -379,7 +415,9 @@ export default function AlertsScreen() {
         <View style={styles.locationSubtitleRow}>
           <View style={styles.locationHeaderBox}>
             <MapPin size={14} color="#AF101A" style={{ marginRight: 4 }} />
-            <Text style={styles.locationSubtitleText} numberOfLines={1}>{locationText}</Text>
+            <Text style={styles.locationSubtitleText} numberOfLines={1}>
+              {locationText}
+            </Text>
           </View>
 
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -394,7 +432,9 @@ export default function AlertsScreen() {
             <View style={styles.realtimeBadge}>
               {realtimeConnected && !isOffline ? (
                 <>
-                  <Animated.View style={[styles.liveDot, { opacity: pulseAnim }]} />
+                  <Animated.View
+                    style={[styles.liveDot, { opacity: pulseAnim }]}
+                  />
                   <Text style={styles.liveText}>Live Sync</Text>
                 </>
               ) : (
@@ -421,7 +461,7 @@ export default function AlertsScreen() {
           />
           <AlertCasesComponent
             caseNumber={resolved.length}
-            text="Resolved today"
+            text="Resolved (24h)"
             color={Colors.light.success}
           />
         </View>
@@ -432,11 +472,37 @@ export default function AlertsScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterScrollContainer}
         >
-          <ScrollViewButton pageName="all" text="All" setIsActive={setActive} isActive={isActive} numberOfCases={all.length} />
-          <ScrollViewButton pageName="critical" text="Critical" setIsActive={setActive} isActive={isActive} />
-          <ScrollViewButton pageName="nearby" text="Nearby" setIsActive={setActive} isActive={isActive} />
-          <ScrollViewButton pageName="medical" text="Medical" setIsActive={setActive} isActive={isActive} />
-          <ScrollViewButton pageName="resolved" text="Resolved" setIsActive={setActive} isActive={isActive} />
+          <ScrollViewButton
+            pageName="all"
+            text="All"
+            setIsActive={setActive}
+            isActive={isActive}
+            numberOfCases={all.length}
+          />
+          <ScrollViewButton
+            pageName="critical"
+            text="Critical"
+            setIsActive={setActive}
+            isActive={isActive}
+          />
+          <ScrollViewButton
+            pageName="nearby"
+            text="Nearby"
+            setIsActive={setActive}
+            isActive={isActive}
+          />
+          <ScrollViewButton
+            pageName="medical"
+            text="Medical"
+            setIsActive={setActive}
+            isActive={isActive}
+          />
+          <ScrollViewButton
+            pageName="resolved"
+            text="Resolved"
+            setIsActive={setActive}
+            isActive={isActive}
+          />
         </ScrollView>
 
         {/* Loading */}
@@ -449,7 +515,9 @@ export default function AlertsScreen() {
               style={{ marginBottom: 8 }}
             />
             <Text style={styles.stateTitle}>Fetching alerts…</Text>
-            <Text style={styles.stateSubtitle}>Checking for active emergencies nearby</Text>
+            <Text style={styles.stateSubtitle}>
+              Checking for active emergencies nearby
+            </Text>
           </View>
         )}
 
@@ -459,7 +527,9 @@ export default function AlertsScreen() {
             <View style={styles.stateIconWrapper}>
               <AlertTriangle size={32} color="#FF6B6B" />
             </View>
-            <Text style={[styles.stateTitle, { color: "#FF6B6B" }]}>Couldn't load alerts</Text>
+            <Text style={[styles.stateTitle, { color: "#FF6B6B" }]}>
+              Couldn't load alerts
+            </Text>
             <Text style={styles.stateSubtitle}>{fetchError}</Text>
             <TouchableOpacity
               style={styles.retryButton}
@@ -499,7 +569,8 @@ export default function AlertsScreen() {
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitleText}>ACTIVE NOW</Text>
               <Text style={styles.sectionCountText}>
-                {displayedActiveCases.length} incident{displayedActiveCases.length > 1 ? "s" : ""}
+                {displayedActiveCases.length} incident
+                {displayedActiveCases.length > 1 ? "s" : ""}
               </Text>
             </View>
             <View>
@@ -531,7 +602,7 @@ export default function AlertsScreen() {
                         "The creator of this emergency flagged it as false information. You cannot respond to it.",
                         undefined,
                         undefined,
-                        "warning"
+                        "warning",
                       );
                       return;
                     }
@@ -549,10 +620,11 @@ export default function AlertsScreen() {
                       if (error) {
                         showPopupAlert(
                           "Response Error",
-                          error.message || "Failed to record your response. Please try again.",
+                          error.message ||
+                            "Failed to record your response. Please try again.",
                           undefined,
                           undefined,
-                          "error"
+                          "error",
                         );
                         return;
                       }
@@ -584,8 +656,10 @@ export default function AlertsScreen() {
         {!loading && !fetchError && displayedResolvedCases.length > 0 && (
           <>
             <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionTitleText}>RESOLVED TODAY</Text>
-              <Text style={styles.sectionCountText}>{displayedResolvedCases.length} closed</Text>
+              <Text style={styles.sectionTitleText}>RESOLVED (LAST 24H)</Text>
+              <Text style={styles.sectionCountText}>
+                {displayedResolvedCases.length} closed
+              </Text>
             </View>
             <View>
               {displayedResolvedCases.map((item) => (
